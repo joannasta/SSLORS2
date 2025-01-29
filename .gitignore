@@ -1,0 +1,39 @@
+# Ignore image files (e.g., PNG, JPG, TIFF, etc.)
+*.png
+*.jpg
+*.jpeg
+*.tiff
+*.bmp
+*.gif
+*.webp
+*.svg
+*.json
+*yaml
+*pycache
+*err
+*out
+*pyc
+*prettierrc
+*ipynb
+
+# Ignore event files (e.g., TensorBoard event files)
+events.out*
+
+# Ignore checkpoint files (e.g., model checkpoints)
+*.ckpt
+
+# Ignore directories containing image, event, or checkpoint files (if any)
+*/bathymetry_results
+*/images
+*/__pycache__
+*/hydro_images
+*/lightning_logs/
+*/lightly/
+*/logs/
+*/results/
+*/runs
+*/pycache/
+*/checkpoints/
+
+# You can also add any other files/folders you want to ignore below
+*.tif
