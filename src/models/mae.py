@@ -255,3 +255,9 @@ class MAE(pl.LightningModule):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
         print(f"Starting epoch - Current learning rate: {current_lr}")
+
+
+    def get_embeddings_from_image(self,image):
+        #Bild laden
+        #
+        self.forward_encoder(image)

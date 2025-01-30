@@ -60,6 +60,18 @@ def main(args):
         batch_size=args.train_batch_size,
         shuffle=True,
         num_workers=args.num_workers,
+        transform =  T.Compose([
+            T.RandomResizedCrop(
+                    256,
+                    scale=(0.67, 1.0),
+                    ratio=(3.0 / 4.0, 4.0 / 3.0),
+                ),
+                T.RandomVerticalFlip(),
+                T.RandomHorizontalFlip(),
+                #T.Lambda(lambda x: x / 10000.0),
+                #T.Normalize(mean=self.band_means, std=self.band_stds)
+            ]
+        ) 
     )
 
     datamodule.setup()

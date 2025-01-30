@@ -14,6 +14,7 @@ from torchvision import transforms
 
 #from src.utils.finetuning_utils import write_geotiff, read_geotiff 
 from src.models.finetuning.mbn.mae_finetuning_mbn import MAEFineTuning
+from src.models.mae import MAE
 from src.data.magicbathynet.mbn_dataloader import MagicBathyNetDataModule
 
 
@@ -24,42 +25,30 @@ class BathymetryPredictor:
         data_dir: str, 
         output_dir: str = "./inference_results/bathymetry",
         batch_size: int = 32,
-        modality: str = "s2",
         resize_to: Tuple[int, int] = (3, 256, 256)
     ):
-
-        # Validate input paths
-        self._validate_paths(pretrained_weights_path, data_dir)
-        
         # Determine computational device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+
+        # Load pre-trained model
+        self.pretrained_model = MAE.load_from_checkpoint(
+            pretrained_weights_path, 
+            strict=False
+        )
+
         # Initialize data module with transformations
         self.data_module = MagicBathyNetDataModule(
             root_dir=data_dir,
             batch_size=batch_size,
-            modality=modality,
             transform=transforms.Compose([  
                 transforms.ToTensor(),
-            ])
+            ]),
+            pretrained_model=self.pretrained_model,
         )
-        
-        # Load pre-trained model
-        self.model = MAEFineTuning.load_from_checkpoint(
-            pretrained_weights_path, 
-            strict=False
-        ).to(self.device)
-        
-        
+        self.model = MAEFineTuning()
         # Create output directory
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-
-    def _validate_paths(self, weights_path: str, data_dir: str):
-        if not os.path.exists(weights_path):
-            raise FileNotFoundError(f"Model weights not found at {weights_path}")
-        if not os.path.exists(data_dir):
-            raise FileNotFoundError(f"Data directory not found at {data_dir}")
     
     def train(self, max_epochs: int = 100) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
@@ -82,60 +71,6 @@ class BathymetryPredictor:
         trainer.fit(self.model, datamodule=self.data_module)
         trainer.test(self.model, datamodule=self.data_module)
         return trainer
-    
-    def evaluate(self) -> float:
-        self.model.eval()
-        all_preds, all_gts = [], []
-        
-        with torch.no_grad():
-            for batch in self.data_module.test_dataloader():
-                images, depth = batch
-                preds = self.model([images, depth])
-                all_preds.append(preds.cpu().numpy())
-                all_gts.append(depth.cpu().numpy())
-        
-        # Calculate Root Mean Square Error
-        all_preds, all_gts = np.concatenate(all_preds), np.concatenate(all_gts)
-        return np.sqrt(np.mean((all_preds - all_gts) ** 2))
-    
-    def predict_and_save(self, norm_param_depth: float = -30.443, reference_geotiff: Optional[str] = None):
-        self.model.eval()
-        crop_size = 256
-        WINDOW_SIZE = (18, 18)
-        norm_param_depth = -30.443   #-30.443 FOR AGIA NAPA, -11 FOR PUCK LAGOON
-        ratio = crop_size / WINDOW_SIZE[0]
-        
-        for batch_idx, batch in enumerate(self.data_module.test_dataloader()):
-            inputs, target = batch
-            test_ids = self.data_module.test_images
-            
-            with torch.no_grad():
-                preds = self.model([inputs, target])
-                
-            
-            # Save predictions as images
-            for idx, pred in enumerate(preds):                
-                # Denormalize image
-                img = pred.cpu().numpy() * norm_param_depth
-                img = scipy.ndimage.zoom(img, (1/ratio, 1/ratio), order=1)
-                #img = np.squeeze(img)
-                
-                plt.figure(figsize=(10, 8))
-                plt.imshow(img, cmap='viridis')
-                plt.title(f"Predicted Depth for Image {test_ids[idx]}")
-                plt.colorbar(label='Depth')
-                plt.savefig(os.path.join(self.output_dir, f'prediction_{test_ids[idx]}.png'))
-                print("IMAGE HAS BEEN SAVED")
-                plt.close()
-
-                # Commented out geotiff writing for now
-                # if reference_geotiff:
-                #     _, ref_dataset = read_geotiff(reference_geotiff, 3)
-                #     write_geotiff(
-                #         os.path.join(self.output_dir, f'inference_tile_{test_ids[idx]}.tif'), 
-                #         pred_img, 
-                #         ref_dataset
-                #     )
 
 
 def main():
@@ -166,9 +101,6 @@ def main():
 
     # Run prediction workflow
     predictor.train()
-    #print(f"Test RMSE: {predictor.evaluate()}")
-    #predictor.predict_and_save()
-
 
 if __name__ == "__main__":
     main()

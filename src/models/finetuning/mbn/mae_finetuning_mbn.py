@@ -36,7 +36,7 @@ from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=3, mask_ratio=0.5, pretrained_weights=None):
+    def __init__(self, src_channels=3, mask_ratio=0.5):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -55,31 +55,6 @@ class MAEFineTuning(pl.LightningModule):
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
 
-
-        # Create Vision Transformer backbone
-        vit = timm.create_model('vit_base_patch32_224', in_chans=self.src_channels, img_size=256, patch_size=16)
-        self.patch_size = vit.patch_embed.patch_size[0]
-        self.backbone = MaskedVisionTransformerTIMM(vit=vit)
-        self.sequence_length = self.backbone.sequence_length
-
-        # Define the MAE decoder
-        self.decoder = MAEDecoderTIMM(
-            in_chans=self.src_channels,
-            num_patches=vit.patch_embed.num_patches,
-            patch_size=self.patch_size,
-            embed_dim=vit.embed_dim,
-            decoder_embed_dim=512,
-            decoder_depth=1,
-            decoder_num_heads=16,
-            mlp_ratio=4.0,
-            proj_drop_rate=0.0,
-            attn_drop_rate=0.0,
-        )
-
-        if pretrained_weights:
-            self.mask_ratio = 0
-            self.load_pretrained_weights(pretrained_weights)
-
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
         self.projection_head = UNet_bathy(in_channels=3, out_channels=1)
         self.cache = True
@@ -90,26 +65,6 @@ class MAEFineTuning(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
-    @classmethod
-    def load_from_checkpoint(cls, checkpoint_path, strict=False, **kwargs):
-        model = cls(**kwargs)
-        
-        checkpoint = torch.load(checkpoint_path, map_location=torch.device('cpu'))
-        state_dict = checkpoint['state_dict']
-        
-        if 'backbone.vit.patch_embed.proj.weight' in state_dict:
-            original_weights = state_dict['backbone.vit.patch_embed.proj.weight']
-            state_dict['backbone.vit.patch_embed.proj.weight'] = original_weights
-            print("Adjusted patch embedding weights for BGR channels.")
-        
-        keys_to_remove = [k for k in state_dict.keys() if k.startswith('decoder')]
-        for key in keys_to_remove:
-            del state_dict[key]
-        print("Removed decoder weights from checkpoint.")
-        
-        model.load_state_dict(state_dict, strict=strict)
-        print("Model loaded successfully with adjusted weights.")
-        return model
 
     def _generate_mask(self, tensor, batch_size, device, average_channels=False):
         """
@@ -121,38 +76,12 @@ class MAEFineTuning(pl.LightningModule):
         mask = torch.from_numpy(mask)
         mask = mask.view(batch_size, 1, self.crop_size, self.crop_size)
         return mask.to(device)
-    
-    def forward_encoder(self, images, idx_keep=None):
-        if self.adapter_layer:
-            images = images.float() # (7,3,256,256)
-            #images = self.adapter_layer(images) 
-        return self.backbone.encode(images=images, idx_keep=idx_keep)
-    
-    def forward_decoder(self, x_encoded, idx_keep, idx_mask):
-        batch_size = x_encoded.shape[0]
-        x_decode = self.decoder.embed(x_encoded)
-
-        x_masked = utils.repeat_token(self.decoder.mask_token, (batch_size, self.sequence_length))
-        x_masked = utils.set_at_index(x_masked, idx_keep, x_decode.type_as(x_masked))
-
-        x_decoded = self.decoder.decode(x_masked)
-
-        x_pred = utils.get_at_index(x_decoded, idx_mask)
-        x_pred = self.decoder.predict(x_pred)
-        
-        return x_pred
 
     def forward(self, batch):
-        images = batch
-        batch_size = images.shape[0]
-        idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
-        
-        x_encoded = self.forward_encoder(images=images, idx_keep=idx_keep)
-
-        x_pred = self.forward_decoder(
-            x_encoded=x_encoded, idx_keep=idx_keep, idx_mask=idx_mask)
-        
-        return self.projection_head(x_pred,images)
+        images,embedding = batch
+        #batch_size = images.shape[0]
+        #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
+        return self.projection_head(embedding,images)
     
     
     #TODO sein code mit richtiger datensatzlänge
@@ -161,46 +90,44 @@ class MAEFineTuning(pl.LightningModule):
     #TODO gradients printen
     #TODO Unet variieren
     def training_step(self, batch,batch_idx):
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        data,target =batch
-        data, target = Variable(data.to(device)), Variable(target.to(device))
+        train_dir = "/training_results"
+        data,target,embedding =batch
+        data, target = Variable(data.to(self.device)), Variable(target.to(self.device))
         size=(256, 256)
         # Resizing data_p and label_p
         data = F.interpolate(data, size=size, mode='nearest')
-        target = F.interpolate(target.unsqueeze(0), size=size, mode='nearest')
-            
-        #target = target.unsqueeze(0) #needed for aerial
+        target = F.interpolate(target.unsqueeze(1), size=size, mode='nearest')
             
         data_size = data.size()[2:]  # Get the original data size
 
         if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
-                    # Use RandomCrop transformation for data and target
+                # Use RandomCrop transformation for data and target
                 data_transform = RandomCrop(size=self.crop_size)
                 target_transform = RandomCrop(size=self.crop_size)
     
-                    # Apply RandomCrop transformation to data and target
+                # Apply RandomCrop transformation to data and target
                 data = data_transform(data)
                 target = target_transform(target)
         
         # Generate mask for non-annotated pixels in depth data
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)  
-        target_mask = torch.from_numpy(target_mask).squeeze(0)  
+        target_mask = torch.from_numpy(target_mask).squeeze(1)  
         #target_mask = target_mask.reshape(self.crop_size, self.crop_size)
-        target_mask = target_mask.to(device)  
+        target_mask = target_mask.to(self.device)  
             
         data_mask = (data.cpu().numpy() != 0).astype(np.float32)  
         data_mask = np.mean(data_mask, axis=1)
         data_mask = torch.from_numpy(data_mask) 
         #data_mask = data_mask.reshape(crop_size, crop_size)
-        data_mask = data_mask.to(device) 
+        data_mask = data_mask.to(self.device) 
             
         # Combine the masks
         combined_mask = target_mask * data_mask
         combined_mask = (combined_mask >= 0.5).float()
         data = torch.clamp(data, min=0, max=1)
-        data = data.to(device)
-        output = self(data.float())
-        output = output.to(device)
+        data = data.to(self.device)
+        output = self(data.float(),embedding.float())
+        output = output.to(self.device)
 
         loss = self.criterion(output, target, combined_mask)
 
@@ -215,7 +142,8 @@ class MAEFineTuning(pl.LightningModule):
             self.log_images(
                 data[0].cpu(),   
                 masked_pred[0],    
-                gt[0]#.cpu()    
+                gt[0],
+                train_dir   
             )
 
         rmse, mae, std_dev = calculate_metrics(masked_pred[0].ravel(), masked_gt[0].ravel())
@@ -233,6 +161,7 @@ class MAEFineTuning(pl.LightningModule):
         return loss
     
     def validation_step(self, batch, batch_idx):
+        val_dir = "/validation_results"
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         data,target = batch
         data, target = Variable(data.to(device)), Variable(target.to(device))
@@ -290,7 +219,8 @@ class MAEFineTuning(pl.LightningModule):
             self.log_images(
                 data[0].cpu(),  
                 masked_pred[0], 
-                gt[0]#cpu(), 
+                gt[0],
+                val_dir 
             )
 
         rmse, mae, std_dev = calculate_metrics(masked_pred[0].ravel(), masked_gt[0].ravel())
@@ -313,8 +243,6 @@ class MAEFineTuning(pl.LightningModule):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
         print(f"Starting epoch - Current learning rate: {current_lr}")
-
-
     
     def on_validation_epoch_end(self):
         avg_val_loss = self.total_val_loss / self.val_batch_count
@@ -334,15 +262,12 @@ class MAEFineTuning(pl.LightningModule):
         self.writer.close()
         
     
-    def log_images(self, data: torch.Tensor, reconstructed_images: torch.Tensor, depth: torch.Tensor) -> None:
+    def log_images(self, data: torch.Tensor, reconstructed_images: torch.Tensor, depth: torch.Tensor,dir) -> None:
         self.log_results()
-        #orig = data.cpu().numpy()
         bgr = np.asarray(np.transpose(data.cpu().numpy(),(1,2,0)), dtype='float32')
         #orig = (orig * (self.norm_param[1][:, np.newaxis, np.newaxis] - self.norm_param[0][:, np.newaxis, np.newaxis])) + self.norm_param[0][:, np.newaxis, np.newaxis]
-        #bgr = np.transpose(orig, (1, 2, 0))  
         rgb = bgr[:, :, [2, 1, 0]] 
         
-        #depth = depth.detach().cpu().numpy()
         depth_denorm = depth * self.norm_param_depth
         
         ratio = self.crop_size / self.window_size[0]
@@ -369,7 +294,7 @@ class MAEFineTuning(pl.LightningModule):
         plt.axis("off")
 
 
-        plt.savefig(os.path.join(self.run_dir, f"depth_comparison_epoch_{self.current_epoch}.png"))
+        plt.savefig(os.path.join(self.run_dir, f"{dir}/depth_comparison_epoch_{self.current_epoch}.png"))
         plt.close()
 
     def log_results(self):
@@ -401,6 +326,7 @@ class CustomLoss(nn.Module):
         super(CustomLoss, self).__init__()
 
     def forward(self, output, depth, mask):
+        mask.unsqueeze(1)
         # Mask out areas with no annotations
         mse_loss = nn.MSELoss(reduction='none')
 

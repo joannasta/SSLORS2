@@ -25,6 +25,7 @@ class HydroDataModule(LightningDataModule):
         num_workers: int = 2,
         val_split: float = 0.1,
         test_split: float = 0.1,
+        transform = None
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -34,6 +35,42 @@ class HydroDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.val_split = val_split
         self.test_split = test_split
+        self.transform = transform
+
+def setup(self, stage=None):
+    # Use stage to load data depending on the task
+    if stage == 'fit' or stage is None:
+        self.train_dataset = HydroDataset(
+            path_dataset=self.data_dir,
+            bands=self.bands,
+            compute_stats=False,
+            transforms=self.transform
+        )
+        
+        self.val_dataset = HydroDataset(
+            path_dataset=self.data_dir,
+            bands=self.bands,
+            compute_stats=False,
+            transforms=self.transform
+        )
+
+    if stage == 'test' or stage is None:
+        # Initialize test dataset for evaluation
+        self.test_dataset = HydroDataset(
+            path_dataset=self.data_dir,
+            bands=self.bands,
+            compute_stats=False,
+            transforms=self.transform
+        )
+
+    if stage == 'predict':
+        # You can set up a different dataset for prediction if needed
+        self.predict_dataset = HydroDataset(
+            path_dataset=self.data_dir,
+            bands=self.bands,
+            compute_stats=False,
+            transforms=self.transform
+        )
 
     def setup(self, stage: str = None):
         """
@@ -46,19 +83,6 @@ class HydroDataModule(LightningDataModule):
             compute_stats=False
         )
 
-        # Create transforms for pretraining
-        train_transform = T.Compose([
-            T.RandomResizedCrop(
-                    256,
-                    scale=(0.67, 1.0),
-                    ratio=(3.0 / 4.0, 4.0 / 3.0),
-                ),
-                T.RandomVerticalFlip(),
-                T.RandomHorizontalFlip(),
-                #T.Lambda(lambda x: x / 10000.0),
-                #T.Normalize(mean=self.band_means, std=self.band_stds)
-            ]
-        ) 
 
         # Apply the transformation to the entire dataset for pretraining
         full_dataset.transforms = train_transform

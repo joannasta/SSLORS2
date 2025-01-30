@@ -9,17 +9,13 @@ class UNet_bathy(nn.Module):
         super(UNet_bathy, self).__init__()
         self.n_channels = in_channels
         self.n_outputs = out_channels
-        self.latent_channels = latent_channels  # Latent channels
-        self.latent_size = latent_size  # Spatial size of the latent feature map
-        self._device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        # Fully connected layer, dynamically computed
+        self.latent_channels = latent_channels  
+        self.latent_size = latent_size  
         self.fc = nn.Linear(
             in_features=3072,
-            out_features=self.latent_channels * self.latent_size * self.latent_size,
-        )
-
-        # Channel projection for latent feature adjustment
+            out_features=self.latent_channels * self.latent_size * self.latent_size,)  
         self.channel_projection = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=1)
+        self.linear_projection = nn.Linear(in_features=3072, out_features=3072)
 
         self.encoder = nn.Sequential(
             DoubleConv(in_channels, 32),
@@ -35,29 +31,31 @@ class UNet_bathy(nn.Module):
             nn.Conv2d(32, out_channels, kernel_size=1)
         )
 
-
-    def forward(self,x, images):
-        images = images.float()  # Already normalized by dataset
-        batch_size, channels, features = x.shape  # (7, 13, 768)
+    def forward(self, x, images):
+        images = images.float()
+        batch_size, channels, features = x.shape
         target_height = 32
-        target_width = features // target_height  # Ensure compatibilitys
-        x = x.view(batch_size, channels, target_height, target_width)  # (7, 13, 32, 24)
-        # Interpolate to (32, 32) for U-Net compatibility
+        target_width = features // target_height
+        print("x.shape:", x.shape)
+        x = x.view(batch_size, channels, target_height, target_width)
         x = F.interpolate(x, size=(32, 32), mode="nearest")
-        # Project channels to match encoder
         x = self.channel_projection(x)
-        images = images.to(self._device)
+
         x1 = self.encoder[0](images)
         x2 = self.encoder[1](x1)
         x3 = self.encoder[2](x2)
         x4 = self.encoder[3](x3)
-        x4 = x
-        x = self.decoder[0](x4, x3)
+
+        combined = torch.cat([x, x4], dim=-1)  # Concatenate along the feature dimension
+        x = self.linear(combined)
+
+        x = self.decoder[0](x, x3)
         x = self.decoder[1](x, x2)
         x = self.decoder[2](x, x1)
         output = self.decoder[3](x)
-        
-        return output    
+        return output
+
+   
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
