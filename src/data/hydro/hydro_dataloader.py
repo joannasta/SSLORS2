@@ -85,7 +85,7 @@ def setup(self, stage=None):
 
 
         # Apply the transformation to the entire dataset for pretraining
-        full_dataset.transforms = train_transform
+        full_dataset.transforms = self.transform
 
         # Split dataset if needed
         total_size = len(full_dataset)

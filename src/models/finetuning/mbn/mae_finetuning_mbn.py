@@ -77,8 +77,7 @@ class MAEFineTuning(pl.LightningModule):
         mask = mask.view(batch_size, 1, self.crop_size, self.crop_size)
         return mask.to(device)
 
-    def forward(self, batch):
-        images,embedding = batch
+    def forward(self, images,embedding):
         #batch_size = images.shape[0]
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
         return self.projection_head(embedding,images)
@@ -90,7 +89,7 @@ class MAEFineTuning(pl.LightningModule):
     #TODO gradients printen
     #TODO Unet variieren
     def training_step(self, batch,batch_idx):
-        train_dir = "/training_results"
+        train_dir = "training_results"
         data,target,embedding =batch
         data, target = Variable(data.to(self.device)), Variable(target.to(self.device))
         size=(256, 256)
@@ -161,9 +160,9 @@ class MAEFineTuning(pl.LightningModule):
         return loss
     
     def validation_step(self, batch, batch_idx):
-        val_dir = "/validation_results"
+        val_dir = "validation_results"
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        data,target = batch
+        data,target,embedding = batch
         data, target = Variable(data.to(device)), Variable(target.to(device))
         size=(256, 256)
         
@@ -202,7 +201,7 @@ class MAEFineTuning(pl.LightningModule):
         data = torch.clamp(data, min=0, max=1)
         data = data.to(self.device)
         target = target.to(self.device)
-        output = self(data.float())
+        output = self(data.float(),embedding.float())
         output = output.to(self.device)
         combined_mask = combined_mask.to(self.device)
 
@@ -293,8 +292,16 @@ class MAEFineTuning(pl.LightningModule):
         plt.colorbar()
         plt.axis("off")
 
+        dir_rel = os.path.join(self.run_dir, dir)  # Relative path
+        dir_abs = os.path.abspath(dir_rel)  # Absolute path
 
-        plt.savefig(os.path.join(self.run_dir, f"{dir}/depth_comparison_epoch_{self.current_epoch}.png"))
+        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
+
+        filename = os.path.join(dir_abs, f"depth_comparison_epoch_{self.current_epoch}.png")
+        print("filename",filename)
+        plt.savefig(filename)  # Save using absolute path
+        print(f"Saving to: {filename}") # Print to check where you are saving
+
         plt.close()
 
     def log_results(self):

@@ -62,16 +62,19 @@ class MagicBathyNetDataset(Dataset):
         # Default epoch size is 10 000 samples
         return 10000
     
-    def _create_embeddings(self):  # This method is now called only once
+    def _create_embeddings(self):
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
         self.embeddings = []
-        for idx in range(0,len(hydro_dataset)):
-            img = hydro_dataset[idx]
-            img = img.unsqueeze(0).to(self.pretrained_model.device)
-            img = F.interpolate(img, size=(256,256), mode='nearest')
-            self.embeddings.append(self.pretrained_model.forward_encoder(img))
 
-        self.embeddings = torch.stack(self.embeddings)
+        for idx in range(len(hydro_dataset)):  # Use len(hydro_dataset) directly
+            img = hydro_dataset[idx]
+
+            img = img.unsqueeze(0).to(self.pretrained_model.device) # img on correct device
+            img = F.interpolate(img, size=(256,256), mode='nearest')
+            embedding = self.pretrained_model.forward_encoder(img) # Embedding on correct device
+            self.embeddings.append(embedding.cpu())  # Move to CPU *immediately*
+
+        self.embeddings = torch.stack(self.embeddings).cpu()  # Stack and ensure on CPU
     
     @classmethod
     def data_augmentation(cls, *arrays, flip=True, mirror=True):
@@ -116,12 +119,12 @@ class MagicBathyNetDataset(Dataset):
             label = self.label_cache_[random_idx]
         else: 
             # Labels are converted from RGB to their numeric values
-            label = 1/self.norm_param_depth * np.asarray(io.imread(self.label_files[random_idx]), dtype='float32')
+            label =np.asarray(io.imread(self.label_files[random_idx]), dtype='float32')
+            label = 1/self.norm_param_depth * label
+
             if self.cache:
                 self.label_cache_[random_idx] = label
-        
-        embedding = np.asarray(self.embeddings[random_idx], dtype='float32')
-        img = img.unsqueeze(0)
+        embedding = self.embeddings[random_idx].cpu()
         x1, x2, y1, y2 = get_random_pos(data, self.window_size)
         data_p = data[:, x1:x2,y1:y2]
         label_p = label[x1:x2,y1:y2]
@@ -129,5 +132,5 @@ class MagicBathyNetDataset(Dataset):
 
         data_p, label_p = self.data_augmentation(data_p, label_p)
 
-        return (torch.from_numpy(data_p),
-                torch.from_numpy(label_p),torch.from_numpy(embedding))
+        return (torch.from_numpy(data_p).detach(),
+                torch.from_numpy(label_p).detach(),embedding.detach())
