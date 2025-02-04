@@ -61,16 +61,33 @@ class UNet_bathy(nn.Module):
         )
 
     def forward(self, x):
+        print(f"Input shape: {x.shape}")  # Print input shape
+
         x1 = self.encoder[0](x)
+        print(f"Encoder 0 output shape: {x1.shape}")
+
         x2 = self.encoder[1](x1)
+        print(f"Encoder 1 output shape: {x2.shape}")
+
         x3 = self.encoder[2](x2)
+        print(f"Encoder 2 output shape: {x3.shape}")
+
         x4 = self.encoder[3](x3)
+        print(f"Encoder 3 output shape: {x4.shape}")
 
         x = self.decoder[0](x4, x3)
+        print(f"Decoder 0 output shape: {x.shape}")
+
         x = self.decoder[1](x, x2)
+        print(f"Decoder 1 output shape: {x.shape}")
+
         x = self.decoder[2](x, x1)
+        print(f"Decoder 2 output shape: {x.shape}")
+
         output = self.decoder[3](x)
-        
+        print(f"Decoder 3 output shape: {output.shape}")
+        print(f"Final output shape: {output.shape}") # Print the final output shape
+
         return output
         #return output.squeeze()  # Squeeze to remove channel dimension for regression
 

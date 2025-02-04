@@ -55,10 +55,10 @@ class BathymetryPredictor:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference", name="finetuning_logs")
 
-        print(torch.cuda.is_available())  # Sollte True ausgeben
-        print(torch.cuda.device_count())  # Sollte mindestens 1 sein
-        print(torch.cuda.current_device())  # Sollte eine Nummer ausgeben
-        print(torch.cuda.get_device_name(0))  # Sollte den GPU-Namen ausgeben
+        #print(torch.cuda.is_available())  # Sollte True ausgeben
+        #print(torch.cuda.device_count())  # Sollte mindestens 1 sein
+        #print(torch.cuda.current_device())  # Sollte eine Nummer ausgeben
+        #print(torch.cuda.get_device_name(0))  # Sollte den GPU-Namen ausgeben
 
         # Initialize trainer with specific configurations
         trainer = Trainer(

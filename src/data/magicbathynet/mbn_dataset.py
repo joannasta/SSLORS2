@@ -73,18 +73,31 @@ class MagicBathyNetDataset(Dataset):
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
         self.embeddings = []
 
-        for idx in range(len(hydro_dataset)):  
+        # Freeze the encoder
+        for param in self.pretrained_model.encoder.parameters():
+            param.requires_grad = False
+        print("Encoder frozen.")  # Confirmation message
+
+        for idx in range(len(hydro_dataset)):
             img = hydro_dataset[idx]
             print(f"Embedding creation: Processing image {idx+1}/{len(hydro_dataset)}. Image shape before interpolation: {img.shape}")
 
-            img = img.unsqueeze(0).to(self.pretrained_model.device) 
+            img = img.unsqueeze(0).to(self.pretrained_model.device)
             img = F.interpolate(img, size=(256,256), mode='nearest')
             print(f"Image shape after interpolation: {img.shape}")
-            embedding = self.pretrained_model.forward_encoder(img) 
-            self.embeddings.append(embedding.cpu())  
 
-        self.embeddings = torch.stack(self.embeddings).cpu() 
+            with torch.no_grad():  # Ensure no gradients are calculated for the encoder
+                embedding = self.pretrained_model.forward_encoder(img)
+
+            self.embeddings.append(embedding.cpu())
+
+        self.embeddings = torch.stack(self.embeddings).cpu()
         print("Finished creating embeddings.")
+
+        # Optionally, unfreeze the encoder after embedding creation if needed elsewhere
+        # for param in self.pretrained_model.encoder.parameters():
+        #     param.requires_grad = True
+        # print("Encoder unfrozen.")
     
     @classmethod
     def data_augmentation(cls, *arrays, flip=True, mirror=True):

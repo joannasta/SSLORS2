@@ -47,19 +47,20 @@ class UNet_bathy(nn.Module):
         x4 = self.encoder[3](x3)
         print(f"x4 shape: {x4.shape}")
 
-        x_resized = F.interpolate(x, size=x4.shape[2:], mode='bilinear')
-        print(f"Resized x shape: {x_resized.shape}")
+        #x_resized = F.interpolate(x, size=x4.shape[2:], mode='bilinear')
+        #print(f"Resized x shape: {x_resized.shape}")
 
-        combined = torch.cat([x_resized, x4], dim=1)  # Concatenate along channel dimension
-        print(f"Combined shape: {combined.shape}")
+        #combined = torch.cat([x_resized, x4], dim=1)  # Concatenate along channel dimension
+        #print(f"Combined shape: {combined.shape}")
 
-        batch_size, channels, height, width = combined.shape
-        combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
-        print(f"Combined reshaped shape: {combined_reshaped.shape}")
-        combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
-        print(f"Combined projected shape: {combined_projected.shape}")
+        #batch_size, channels, height, width = combined.shape
+        #combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+        #print(f"Combined reshaped shape: {combined_reshaped.shape}")
+        #combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
+        #print(f"Combined projected shape: {combined_projected.shape}")
 
-        x = self.decoder[0](combined_projected, x3)
+        #x = self.decoder[0](combined_projected, x3)
+        x = self.decoder[0](x4, x3)
         print(f"Decoder output 1 shape: {x.shape}")
         x = self.decoder[1](x, x2)
         print(f"Decoder output 2 shape: {x.shape}")
