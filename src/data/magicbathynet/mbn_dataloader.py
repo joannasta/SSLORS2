@@ -1,9 +1,7 @@
 import pytorch_lightning as pl
-import numpy as np
-import scipy
 from torch.utils.data import DataLoader
 from .mbn_dataset import MagicBathyNetDataset
-from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
+
 
 class MagicBathyNetDataModule(pl.LightningDataModule):
     def __init__(self, root_dir, batch_size=32, transform=None, cache=False,pretrained_model=None):
@@ -12,8 +10,6 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         self.batch_size = batch_size
         self.transform = transform
         self.cache = cache
-        self.norm_param_depth = NORM_PARAM_DEPTH["agia_napa"]
-        self.norm_param = np.load(NORM_PARAM_PATHS["agia_napa"])
         self.pretrained_model = pretrained_model
 
     def setup(self, stage=None):

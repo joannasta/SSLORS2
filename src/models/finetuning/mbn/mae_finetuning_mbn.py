@@ -24,17 +24,6 @@ from .magicbathynet_unet import UNet_bathy
 from src.utils.finetuning_utils import calculate_metrics
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 
-# TODOs and planned experiments
-# - Perform ablation studies to test input combinations.
-# - Add auxiliary losses for decoded data.
-# - Implement attention mechanisms.
-# - Experiment with freezing and unfreezing encoder/decoder.
-# - Preprocess and verify decoded data quality.
-# - Experiment with learnable contributions for input balance.
-
-
-
-
 class MAEFineTuning(pl.LightningModule):
     def __init__(self, src_channels=3, mask_ratio=0.5):
         super().__init__()
@@ -82,19 +71,13 @@ class MAEFineTuning(pl.LightningModule):
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
         return self.projection_head(embedding,images)
     
-    
-    #TODO sein code mit richtiger datensatzlänge
-    #TODO alle files statt 21 ??
-    #TODO oVerfitten an einem batch
-    #TODO gradients printen
-    #TODO Unet variieren
     def training_step(self, batch,batch_idx):
-        print("TRAINING STEP START")
+
         train_dir = "training_results"
-        data,target,embedding =batch
-        data, target,embedding = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
-        size=(256, 256)
-        # Resizing data_p and label_p
+        data, target, embedding = batch
+        data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
+        size = (256, 256)
+            
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(1), size=size, mode='nearest')
             
@@ -105,49 +88,40 @@ class MAEFineTuning(pl.LightningModule):
                 target_transform = RandomCrop(size=self.crop_size)
                 data = data_transform(data)
                 target = target_transform(target)
-
-        print("Shape of data after RandomCrop:", data.shape)
-        print("Shape of target after RandomCrop:", target.shape)
-
+                
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)  
         target_mask = torch.from_numpy(target_mask).to(self.device)  
-        print("target mask shape before reshape",target_mask.shape)
-        print("self crop size",self.crop_size)
+        
         for i in range(target_mask.shape[0]):
             target_mask[i] = target_mask[i].reshape(self.crop_size, self.crop_size)
-        print("target mask shape after reshape",target_mask.shape)
+        
         target_mask = target_mask.squeeze(1)
             
         data_mask = (data.cpu().numpy() != 0).astype(np.float32)
         data_mask = np.mean(data_mask, axis=1)
         data_mask = torch.from_numpy(data_mask).to(self.device)
-        print("Shape of data_mask:", data_mask.shape)
+        
         # Combine the masks
         combined_mask = target_mask * data_mask
-        print("combined mask shape before threshold",combined_mask.shape)
         combined_mask = (combined_mask >= 0.5).float()
+        
         if torch.sum(combined_mask) == 0:
             return None
-
-        print("Shape of combined_mask:", combined_mask.shape)
+        
         data = torch.clamp(data, min=0, max=1)
+        
         output = self(data.float(),embedding.float())
         output = output.to(self.device)
 
         loss = self.criterion(output, target, combined_mask)
 
         pred = output.data.cpu().numpy()[0]
-        print("pred shape",pred.shape)
         gt = target.data.cpu().numpy()[0]
-        print("combined mask shape",combined_mask.shape)
+        
         # Apply the mask to the predictions and ground truth
         masked_pred = pred * combined_mask.cpu().numpy()
-        print("masked_pred shape",masked_pred.shape)
         masked_gt = gt * combined_mask.cpu().numpy()
-        print("before image logging")
-        print("masked_pred shape",masked_pred.shape)
-        print("data shape",data.shape)
-        print("gt shape",gt.shape)
+        
         if batch_idx % 100 == 0:
             self.log_images(
                 data[0].cpu(),   
@@ -156,8 +130,8 @@ class MAEFineTuning(pl.LightningModule):
                 train_dir   
             )
 
-        rmse, mae, std_dev = calculate_metrics(masked_pred[0].ravel(), masked_gt[0].ravel())
-        rmse = -self.norm_param_depth * rmse
+        rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt.ravel())
+        #rmse = -self.norm_param_depth * rmse
 
         self.log('train_loss', loss)
         self.log('train_rmse', rmse, on_step=True, on_epoch=True, prog_bar=True)
@@ -167,16 +141,16 @@ class MAEFineTuning(pl.LightningModule):
             self.train_batch_count = 0
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
-        print("TRAINING STEP END")
         return loss
     
     def validation_step(self, batch, batch_idx):
         print("VALIDATION STEP START")
+        
         val_dir = "validation_results"
-        data,target,embedding =batch
-        data, target,embedding = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
-        size=(256, 256)
-        # Resizing data_p and label_p
+        data, target, embedding = batch
+        data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
+        size = (256, 256)
+            
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(1), size=size, mode='nearest')
             
@@ -187,54 +161,50 @@ class MAEFineTuning(pl.LightningModule):
                 target_transform = RandomCrop(size=self.crop_size)
                 data = data_transform(data)
                 target = target_transform(target)
-
-        print("Shape of data after RandomCrop:", data.shape)
-        print("Shape of target after RandomCrop:", target.shape)
-
+                
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)  
         target_mask = torch.from_numpy(target_mask).to(self.device)  
-        print("target mask shape before reshape",target_mask.shape)
-        print("self crop size",self.crop_size)
+        
         for i in range(target_mask.shape[0]):
             target_mask[i] = target_mask[i].reshape(self.crop_size, self.crop_size)
-        print("target mask shape after reshape",target_mask.shape)
+        
         target_mask = target_mask.squeeze(1)
             
         data_mask = (data.cpu().numpy() != 0).astype(np.float32)
         data_mask = np.mean(data_mask, axis=1)
         data_mask = torch.from_numpy(data_mask).to(self.device)
-        print("Shape of data_mask:", data_mask.shape)
+        
         # Combine the masks
-
         combined_mask = target_mask * data_mask
-        print("combined mask shape before threshold",combined_mask.shape)
         combined_mask = (combined_mask >= 0.5).float()
+        
         if torch.sum(combined_mask) == 0:
             return None
-
-        print("Shape of combined_mask:", combined_mask.shape)
+        
         data = torch.clamp(data, min=0, max=1)
+        
         output = self(data.float(),embedding.float())
         output = output.to(self.device)
+
         val_loss = self.criterion(output, target, combined_mask)
 
         pred = output.data.cpu().numpy()[0]
         gt = target.data.cpu().numpy()[0]
-            
+        
         # Apply the mask to the predictions and ground truth
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
-
+        
         if batch_idx % 100 == 0:
             self.log_images(
-                data[0].cpu(),  
-                masked_pred[0], 
+                data[0].cpu(),   
+                masked_pred[0],    
                 gt[0],
-                val_dir 
+                val_dir   
             )
 
-        rmse, mae, std_dev = calculate_metrics(masked_pred[0].ravel(), masked_gt[0].ravel())
-        rmse = -self.norm_param_depth * rmse
+        rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt.ravel())
+        #rmse = -self.norm_param_depth * rmse
 
         self.log('val_loss', val_loss)
         self.log('val_rmse', rmse)
@@ -243,7 +213,6 @@ class MAEFineTuning(pl.LightningModule):
 
         self.total_val_loss += val_loss.item()
         self.val_batch_count += 1
-        print("VALIDATION STEP END")
         return val_loss
     
     def on_train_start(self):
@@ -274,21 +243,14 @@ class MAEFineTuning(pl.LightningModule):
 
     def log_images(self, data: torch.Tensor, reconstructed_images: torch.Tensor, depth: torch.Tensor,dir) -> None:
         self.log_results()
-        print("logging images")
-        #print(f"Data shape: {data.shape}, Reconstructed images shape: {reconstructed_images.shape}, Depth shape: {depth.shape}")
 
         bgr = np.asarray(np.transpose(data.cpu().numpy(),(1,2,0)), dtype='float32')
-        #orig = (orig * (self.norm_param[1][:, np.newaxis, np.newaxis] - self.norm_param[0][:, np.newaxis, np.newaxis])) + self.norm_param[0][:, np.newaxis, np.newaxis]
         rgb = bgr[:, :, [2, 1, 0]] 
-        #print("RGB shape",rgb.shape)
         depth_denorm = depth * self.norm_param_depth
-        #print("depth shape",depth.shape)
         ratio = self.crop_size / self.window_size[0]
         pred_normalized = reconstructed_images#.squeeze(0)
         pred_denormalized = pred_normalized * self.norm_param_depth 
-        #print("prediction shape",pred_denormalized.shape)
         pred_processed = scipy.ndimage.zoom(pred_normalized, (1/ratio, 1/ratio), order=1)
-        #print("prediction shape",pred_processed.shape)
 
         plt.figure(figsize=(15, 5))
         plt.subplot(131)
@@ -314,9 +276,8 @@ class MAEFineTuning(pl.LightningModule):
         os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
 
         filename = os.path.join(dir_abs, f"depth_comparison_epoch_{self.current_epoch}.png")
-        #print("filename",filename)
         plt.savefig(filename)  # Save using absolute path
-        #print(f"Saving to: {filename}") # Print to check where you are saving
+        print(f"Saving to: {filename}") # Print to check where you are saving
 
         plt.close()
 
@@ -332,29 +293,18 @@ class MAEFineTuning(pl.LightningModule):
             os.makedirs(self.run_dir, exist_ok=True)
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=1e-4)
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [10], gamma=0.1)
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "interval": "epoch",
-                "frequency": 1,
-            },
-        }
-    
-    def configure_optimizers(self):
         # 1. Parameter-specific learning rates (if needed):
         params_dict = dict(self.projection_head.named_parameters())
         params = []
+        lr = 0.0001
         for key, value in params_dict.items():
-            lr = 0.0001 # Default learning rate
-            if '_D' in key: # Example condition to apply different LR to some parameters
-                lr = 0.0001 # Or some other value if needed
-            params.append({'params': [value], 'lr': lr})
+            if '_D' in key: 
+                params+= [{'params': [value], 'lr': lr}]
+            else:
+                params += [{'params':[value],'lr': lr}] 
 
-        optimizer = optim.Adam(params, lr=0.0001) # Pass the list of parameter dicts
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10], gamma=0.1)
+        optimizer = optim.Adam(params, lr=lr) # Pass the list of parameter dicts
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [10], gamma=0.1)
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}  # Return a dictionary
 
@@ -363,10 +313,8 @@ class MAEFineTuning(pl.LightningModule):
 class CustomLoss(nn.Module):
     def __init__(self):
         super(CustomLoss, self).__init__()
-        #print("Initializing CustomLoss...")  # Print initialization message
 
     def forward(self, output, depth, mask):
-        mask.unsqueeze(1)
         mse_loss = nn.MSELoss(reduction='none')
         loss = mse_loss(output, depth)
         loss = (loss * mask.float()).sum() # gives \sigma_euclidean over unmasked elements

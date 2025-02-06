@@ -44,12 +44,9 @@ class MagicBathyNetDataset(Dataset):
         self.paired_files = self.processor.paired_files  # Use the paired files from the processor
         self.data_files = [pair[0] for pair in self.paired_files]
         self.label_files =[pair[1] for pair in self.paired_files] 
-
-        for f in self.data_files + self.label_files:
-            print(f"Found file: {f}")
-            if not os.path.isfile(f):
-                raise KeyError(f"File {f} not found.")
-        print(f"Found {len(self.data_files)} data files and {len(self.label_files)} label files.")
+        #print("Data files: ", self.data_files)
+        #print("Label files: ", self.label_files)
+        #print(f"Found {len(self.data_files)} data files and {len(self.label_files)} label files.")
 
         self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
         self.embeddings = []
@@ -73,7 +70,6 @@ class MagicBathyNetDataset(Dataset):
         return 10000
     
     def _create_embeddings(self):
-        #print("Creating embeddings...")
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
         self.embeddings = []
         for idx in range(len(hydro_dataset)):
@@ -142,6 +138,9 @@ class MagicBathyNetDataset(Dataset):
         label_p = label[x1:x2,y1:y2]
 
         data_p, label_p = self.data_augmentation(data_p, label_p)
+        
+        data_p_tensor = torch.from_numpy(data_p)
+        label_p_tensor = torch.from_numpy(label_p)
 
-        return (torch.from_numpy(data_p),
-                torch.from_numpy(label_p),embedding)
+        return (data_p_tensor,
+                label_p_tensor,embedding)
