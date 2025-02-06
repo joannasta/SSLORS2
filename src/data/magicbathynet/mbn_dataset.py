@@ -38,15 +38,13 @@ class MagicBathyNetDataset(Dataset):
             depth_dir=Path(self.root_dir) / 'agia_napa' / 'depth' / 's2',
             output_dir=Path(self.root_dir) / 'processed_data' ,
             img_only_dir=Path(self.root_dir) / 'processed_img',
-            depth_only_dir=Path(self.root_dir) / 'processed_depth' 
+            depth_only_dir=Path(self.root_dir) / 'processed_depth',
+            split_type=self.split_type
         )
 
         self.paired_files = self.processor.paired_files  # Use the paired files from the processor
         self.data_files = [pair[0] for pair in self.paired_files]
         self.label_files =[pair[1] for pair in self.paired_files] 
-        #print("Data files: ", self.data_files)
-        #print("Label files: ", self.label_files)
-        #print(f"Found {len(self.data_files)} data files and {len(self.label_files)} label files.")
 
         self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
         self.embeddings = []

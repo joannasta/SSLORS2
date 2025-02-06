@@ -215,6 +215,81 @@ class MAEFineTuning(pl.LightningModule):
         self.val_batch_count += 1
         return val_loss
     
+    def test_step(self,batch,batch_idx):
+        print("TEST STEP START")
+        pad_size = 32
+        crop_size =256
+        ratio = crop_size / self.window_size[0]
+        
+        test_dir = "test_results"
+        data, target, embedding = batch
+        data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
+        size = (256, 256)
+        target_e = target.copy()
+        
+        data = scipy.ndimage.zoom(data, (ratio, ratio, 1), order=1)
+        target = scipy.ndimage.zoom(target, (ratio, ratio), order=1)
+        target_e = scipy.ndimage.zoom(target_e, (ratio, ratio), order=1)
+        
+        #Pad the image, ground truth, and eroded ground truth with reflection
+        data = np.pad(data, ((pad_size, pad_size), (pad_size, pad_size), (0, 0)), mode='reflect')
+        target = np.pad(target, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
+        target_e = np.pad(target_e, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
+
+        # Convert image to tensor
+        data_tensor = np.copy(data).transpose((2, 0, 1))
+        data_tensor = np.expand_dims(data_tensor, axis=0)
+        data_tensor = torch.from_numpy(data_tensor).cuda()
+        
+        # Do the inference on the whole image
+        with torch.no_grad():
+            outs = self(data_tensor.float(),embedding.float())
+            pred = outs.data.cpu().numpy().squeeze()
+
+        
+        # Remove padding from prediction
+        pred = pred[pad_size:-pad_size, pad_size:-pad_size]
+        data = data[pad_size:-pad_size, pad_size:-pad_size]
+        target = target[pad_size:-pad_size, pad_size:-pad_size]
+        target_e = target_e[pad_size:-pad_size, pad_size:-pad_size]
+        
+        # Generate mask for non-annotated pixels in depth data 
+        target_mask = (target_e != 0).astype(np.float32) 
+        target_mask = torch.from_numpy(target_mask) 
+        target_mask = target_mask.unsqueeze(0)
+        target_mask = target_mask.reshape(crop_size, crop_size)
+        target_mask = target_mask.to(self.device) 
+
+        data_mask = (data != 0).astype(np.float32) 
+        data_mask = np.mean(data_mask, axis=2)
+        data_mask = torch.from_numpy(data_mask)  
+        #img_mask = img_mask.reshape(crop_size, crop_size)
+        data_mask = data_mask.to(self.device) 
+        
+        print(target_mask.shape)
+        print(data_mask.shape)
+        
+        combined_mask = data_mask*target_mask
+      
+        masked_pred = pred * combined_mask.cpu().numpy()
+        masked_gt_e = target_e * combined_mask.cpu().numpy()
+        
+        if batch_idx % 100 == 0:
+            self.log_images(
+                data[0].cpu(),   
+                masked_pred[0],    
+                masked_gt_e[0], # or just gt ?
+                test_dir   
+            )
+
+        rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt_e.ravel())
+        
+        self.log('test_rmse', rmse)
+        self.log('test_mae', mae * -self.norm_param_depth)
+        self.log('test_std_dev', std_dev * -self.norm_param_depth)
+        
+        
+        
     def on_train_start(self):
         self.log_results()
 

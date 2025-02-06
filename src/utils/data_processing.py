@@ -60,9 +60,11 @@ class DatasetProcessor:
     def match_files(self):
         """Matches image and depth files based on extracted indices."""
         depth_dict = {}
+        indices_to_use = self.train_idx if self.split_type == 'train' else self.test_idx # Use correct indices
+
         for depth_file in self.all_depth_files:
             depth_idx = self.extract_index(depth_file)
-            if depth_idx is not None and str(depth_idx) in self.train_idx:
+            if depth_idx is not None and (str(depth_idx) in indices_to_use):
                 depth_dict[depth_idx] = depth_file
 
         paired_files = []
