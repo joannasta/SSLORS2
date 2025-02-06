@@ -12,12 +12,15 @@ NORM_PARAM_PATHS = {
     "puck_lagoon": "/faststorage/joanna/magicbathynet/MagicBathyNet/puck_lagoon/norm_param_s2_pl.npy"
 }
 
+
 # Common Model Parameters
 MODEL_CONFIG = {
     "crop_size": 256,
     "window_size": (18, 18),
     "stride": 2
 }
+train_images = ['409', '418', '350', '399', '361', '430', '380', '359', '371', '377', '379', '360', '368', '419', '389', '420', '401', '408', '352', '388', '362', '421', '412', '351', '349', '390', '400', '378']
+test_images = ['411', '387', '410', '398', '370', '369', '397']
 
 ###MARIDA DATASET MAPPING
 cat_mapping_marida = { 'Marine Debris': 1,

@@ -32,20 +32,20 @@ class UNet_bathy(nn.Module):
     def forward(self, x, images):
         print("Forward pass of UNet_bathy...")
 
-        print(f"Input images shape: {images.shape}")
-        print(f"Input x shape: {x.shape}")
+        #print(f"Input images shape: {images.shape}")
+        #print(f"Input x shape: {x.shape}")
 
 
         images = images.float()  # Ensure images are float type
 
         x1 = self.encoder[0](images)
-        print(f"x1 shape: {x1.shape}")
+        #print(f"x1 shape: {x1.shape}")
         x2 = self.encoder[1](x1)
-        print(f"x2 shape: {x2.shape}")
+        #print(f"x2 shape: {x2.shape}")
         x3 = self.encoder[2](x2)
-        print(f"x3 shape: {x3.shape}")
+        #print(f"x3 shape: {x3.shape}")
         x4 = self.encoder[3](x3)
-        print(f"x4 shape: {x4.shape}")
+        #print(f"x4 shape: {x4.shape}")
 
         #x_resized = F.interpolate(x, size=x4.shape[2:], mode='bilinear')
         #print(f"Resized x shape: {x_resized.shape}")
@@ -61,13 +61,13 @@ class UNet_bathy(nn.Module):
 
         #x = self.decoder[0](combined_projected, x3)
         x = self.decoder[0](x4, x3)
-        print(f"Decoder output 1 shape: {x.shape}")
+        #print(f"Decoder output 1 shape: {x.shape}")
         x = self.decoder[1](x, x2)
-        print(f"Decoder output 2 shape: {x.shape}")
+        #print(f"Decoder output 2 shape: {x.shape}")
         x = self.decoder[2](x, x1)
-        print(f"Decoder output 3 shape: {x.shape}")
+        #print(f"Decoder output 3 shape: {x.shape}")
         output = self.decoder[3](x)
-        print(f"Final output shape: {output.shape}")
+        #print(f"Final output shape: {output.shape}")
         return output
 
 class DoubleConv(nn.Module):
@@ -80,12 +80,12 @@ class DoubleConv(nn.Module):
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.ReLU(inplace=True)
         )
-        print("DoubleConv initialized.")
+        #print("DoubleConv initialized.")
 
     def forward(self, x):
-        print(f"DoubleConv forward pass, input shape: {x.shape}")
+        #print(f"DoubleConv forward pass, input shape: {x.shape}")
         output = self.double_conv(x)
-        print(f"DoubleConv forward pass, output shape: {output.shape}")
+        #print(f"DoubleConv forward pass, output shape: {output.shape}")
         return output
 
 class Down(nn.Module):
@@ -97,38 +97,38 @@ class Down(nn.Module):
             nn.MaxPool2d(2),
             DoubleConv(in_channels, out_channels)
         )
-        print("Down initialized.")
+        #print("Down initialized.")
 
     def forward(self, x):
-        print(f"Down forward pass, input shape: {x.shape}")
+        #print(f"Down forward pass, input shape: {x.shape}")
         output = self.maxpool_conv(x)
-        print(f"Down forward pass, output shape: {output.shape}")
+        #print(f"Down forward pass, output shape: {output.shape}")
 
         return output
 
 class Up(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Up, self).__init__()
-        print(f"Initializing Up ({in_channels} -> {out_channels})...")  # Print initialization info
+        #print(f"Initializing Up ({in_channels} -> {out_channels})...")  # Print initialization info
         self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
         self.conv = DoubleConv(in_channels, out_channels)
-        print("Up initialized.")
+        #print("Up initialized.")
 
     def forward(self, x1, x2):
-        print(f"Up forward pass, x1 shape: {x1.shape}, x2 shape: {x2.shape}")
+        #print(f"Up forward pass, x1 shape: {x1.shape}, x2 shape: {x2.shape}")
 
         x1 = self.up(x1)
-        print(f"Up output shape (after transpose conv): {x1.shape}")
+        #print(f"Up output shape (after transpose conv): {x1.shape}")
 
         # Calculate the difference in shape and pad x1 if needed
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
         x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
-        print(f"Up output shape (after padding): {x1.shape}")
+        #print(f"Up output shape (after padding): {x1.shape}")
 
         x = torch.cat([x2, x1], dim=1)
-        print(f"Concatenated shape: {x.shape}")
+        #print(f"Concatenated shape: {x.shape}")
         output = self.conv(x)
-        print(f"Up forward pass, final output shape: {output.shape}")
+        #print(f"Up forward pass, final output shape: {output.shape}")
 
         return output

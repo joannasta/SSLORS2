@@ -19,10 +19,10 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 DEVICES=1                                 # Number of devices for training
 NUM_WORKERS=32                             # Number of data loader workers
 MODEL=mae                                 # Model name
-TRAIN_BATCH_SIZE=4                    # Training batch size
-VAL_BATCH_SIZE=4                     # Validation batch size
+TRAIN_BATCH_SIZE=1                  # Training batch size
+VAL_BATCH_SIZE=1                     # Validation batch size
 LEARNING_RATE=1e-4 #1e-5                  # Learning rate
-EPOCHS=50                              # Number of epochs
+EPOCHS=10                              # Number of epochs
 PRETRAINED_MODEL="./results/trains/training_logs/3-channels/checkpoints/epoch=99-step=132700.ckpt" # Path to pretrained model
 DATASET_PATH="/faststorage/joanna/magicbathynet/MagicBathyNet"  # Dataset path
 SEED=42                                   # Seed for reproducibility

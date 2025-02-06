@@ -51,14 +51,9 @@ class BathymetryPredictor:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
     
-    def train(self, max_epochs: int = 100) -> pl.Trainer:
+    def train(self, max_epochs: int = 56) -> pl.Trainer: # 2x len(train images)
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference", name="finetuning_logs")
-
-        #print(torch.cuda.is_available())  # Sollte True ausgeben
-        #print(torch.cuda.device_count())  # Sollte mindestens 1 sein
-        #print(torch.cuda.current_device())  # Sollte eine Nummer ausgeben
-        #print(torch.cuda.get_device_name(0))  # Sollte den GPU-Namen ausgeben
 
         # Initialize trainer with specific configurations
         trainer = Trainer(
@@ -68,9 +63,9 @@ class BathymetryPredictor:
             logger=logger,
             gradient_clip_val=1.0,
             enable_progress_bar=True,
-            val_check_interval=1.0,
-            limit_train_batches=1, 
-            limit_val_batches=1,  # Skip validation
+            #val_check_interval=1.0
+            #limit_train_batches=1, 
+            #limit_val_batches=1,  # Skip validation
         )
 
         # Perform model training
