@@ -6,7 +6,7 @@ import os
 import re
 from config import train_images, test_images
 class DatasetProcessor:
-    def __init__(self, img_dir, depth_dir, output_dir,img_only_dir=None,depth_only_dir=None):
+    def __init__(self, img_dir, depth_dir, output_dir,img_only_dir=None,depth_only_dir=None,split_type="train"):
         self.img_dir = Path(img_dir)
         self.depth_dir = Path(depth_dir)
         self.output_dir = Path(output_dir)
@@ -14,6 +14,7 @@ class DatasetProcessor:
         self.depth_only_dir = depth_only_dir
         self.train_idx = train_images
         self.test_idx = test_images
+        self.split_type = split_type
 
         self.all_img_files = self.collect_files(self.img_dir)
         self.all_depth_files = self.collect_files(self.depth_dir)
@@ -64,7 +65,7 @@ class DatasetProcessor:
 
         for depth_file in self.all_depth_files:
             depth_idx = self.extract_index(depth_file)
-            if depth_idx is not None and (str(depth_idx) in indices_to_use):
+            if depth_idx is not None and (str(depth_idx) in self.train_idx or str(depth_idx) in self.test_idx): # Check if index is in correct set
                 depth_dict[depth_idx] = depth_file
 
         paired_files = []

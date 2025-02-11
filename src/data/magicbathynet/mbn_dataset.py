@@ -44,7 +44,22 @@ class MagicBathyNetDataset(Dataset):
 
         self.paired_files = self.processor.paired_files  # Use the paired files from the processor
         self.data_files = [pair[0] for pair in self.paired_files]
-        self.label_files =[pair[1] for pair in self.paired_files] 
+        self.label_files = [pair[1] for pair in self.paired_files]
+
+        indices_to_use = self.train_images if split_type == 'train' else self.test_images
+
+        filtered_data_files = []
+        filtered_label_files = []
+        for data_file, label_file in zip(self.data_files, self.label_files):
+            file_number = self.processor.extract_index((data_file))  # Use the extract_last_number function
+            if file_number is not None and str(file_number) in indices_to_use:
+                filtered_data_files.append(data_file)
+                filtered_label_files.append(label_file)
+
+        self.data_files = filtered_data_files
+        self.label_files = filtered_label_files
+        
+        print("Data files: ", self.data_files[0],type(self.data_files[0]))
 
         self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
         self.embeddings = []
@@ -65,7 +80,7 @@ class MagicBathyNetDataset(Dataset):
         
     def __len__(self):
         # Default epoch size is 10 000 samples
-        return 10000
+        return 100#10000
     
     def _create_embeddings(self):
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])

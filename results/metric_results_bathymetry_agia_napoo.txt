@@ -1,0 +1,45 @@
+Just unet: (cm)
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃        Test metric        ┃       DataLoader 0        ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│         test_mae          │    0.5775513648986816     │
+│         test_rmse         │   0.023601682856678963    │
+│       test_std_dev        │    0.5374355316162109     │
+└───────────────────────────┴───────────────────────────┘
+
+
+with ssl : (cm)
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃        Test metric        ┃       DataLoader 0        ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│         test_mae          │    0.5250955820083618     │
+│         test_rmse         │   0.021960487589240074    │
+│       test_std_dev        │    0.6509047746658325     │
+└───────────────────────────┴───────────────────────────┘
+
+
+Just UNet (meters):
+
+Test metric    | DataLoader 0
+----------------|--------------
+test_mae       | 0.00578
+test_rmse      | 0.00024
+test_std_dev   | 0.00537
+
+With SSL (meters):
+
+Test metric    | DataLoader 0
+----------------|--------------
+test_mae       | 0.00525
+test_rmse      | 0.00022
+test_std_dev   | 0.00651
+
+
+results of the paper:
+
+Results obtained by modified U-Net (in meters).
+Modality        Agia Napa             Puck Lagoon
+RMSE MAE		1.068		           0.907 
+Std. RMSE.      0.694                  0.493
+MAE Std.        0.940                  0.874
+S2  
