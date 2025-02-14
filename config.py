@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 # Normalization Parameters
 NORM_PARAM_DEPTH = {
@@ -139,3 +140,13 @@ def get_means_and_stds():
     ], dtype=torch.float)
     
     return means, stds
+
+def get_marida_means_and_stds():
+    means =  np.array([0.05197577, 0.04783991, 0.04056812, 0.03163572, 0.02972606, 0.03457443,
+                    0.03875053, 0.03436435, 0.0392113,  0.02358126, 0.01588816]).astype('float32')
+    stds = np.array([0.04725893, 0.04743808, 0.04699043, 0.04967381, 0.04946782, 0.06458357,
+                    0.07594915, 0.07120246, 0.08251058, 0.05111466, 0.03524419]).astype('float32')
+    pos_weight = torch.Tensor([ 2.65263158, 27.91666667, 11.39285714, 18.82857143,  6.79775281,
+                    6.46236559,  0.60648148, 27.91666667, 22.13333333,  5.03478261,
+                    17.26315789, 29.17391304, 16.79487179, 12.88      ,  9.05797101])
+    return means, stds, pos_weight

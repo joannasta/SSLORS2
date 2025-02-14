@@ -17,7 +17,7 @@ import random
 #from src.utils.finetuning_utils import write_geotiff, read_geotiff 
 from src.models.finetuning.marida.marida_mae import MAEFineTuning
 from src.data.marida import marida_dataloader
-
+from src.models.mae import MAE
     
 class MarineDebrisPredictor:
     def __init__(
@@ -34,11 +34,16 @@ class MarineDebrisPredictor:
         
         # Determine computational device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        
+        # Load pre-trained model
+        self.pretrained_model = MAE.load_from_checkpoint(
+            pretrained_weights_path, 
+            strict=False
+        )
         # Initialize data module with transformations
         self.data_module = marida_dataloader.MaridaDataModule(
             root_dir=data_dir,
-            batch_size=batch_size
+            batch_size=batch_size,
+            pretrained_model=self.pretrained_model,
         )
         
         # Load pre-trained model
@@ -62,7 +67,7 @@ class MarineDebrisPredictor:
 
         # Initialize trainer with specific configurations
         trainer = Trainer(
-            accelerator="gpu",
+            accelerator="cpu", #gpu
             devices=1,
             max_epochs=max_epochs,
             logger=logger,
