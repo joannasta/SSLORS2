@@ -33,9 +33,10 @@ class MagicBathyNetDataset(Dataset):
         self.test_images = test_images
 
         # Use DatasetProcessor to handle file organization
+        #'agia_napa','puck_lagoon'
         self.processor = DatasetProcessor(
-            img_dir=Path(self.root_dir) / 'agia_napa' / 'img' / 's2',
-            depth_dir=Path(self.root_dir) / 'agia_napa' / 'depth' / 's2',
+            img_dir=Path(self.root_dir) / 'puck_lagoon'/ 'img' / 's2',
+            depth_dir=Path(self.root_dir) /'puck_lagoon' / 'depth' / 's2',
             output_dir=Path(self.root_dir) / 'processed_data' ,
             img_only_dir=Path(self.root_dir) / 'processed_img',
             depth_only_dir=Path(self.root_dir) / 'processed_depth',
@@ -66,8 +67,8 @@ class MagicBathyNetDataset(Dataset):
         self._create_embeddings()
 
         # Normalisierungsparameter laden
-        self.norm_param_depth = NORM_PARAM_DEPTH["agia_napa"]
-        self.norm_param = np.load(NORM_PARAM_PATHS["agia_napa"])
+        self.norm_param_depth = NORM_PARAM_DEPTH['puck_lagoon']#NORM_PARAM_DEPTH["agia_napa"]
+        self.norm_param = np.load(NORM_PARAM_PATHS['puck_lagoon'])#np.load(NORM_PARAM_PATHS["agia_napa"])
 
         # Modellparameter laden
         self.crop_size = MODEL_CONFIG["crop_size"]
@@ -80,7 +81,7 @@ class MagicBathyNetDataset(Dataset):
         
     def __len__(self):
         # Default epoch size is 10 000 samples
-        return 100#10000
+        return 10000
     
     def _create_embeddings(self):
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
@@ -133,6 +134,7 @@ class MagicBathyNetDataset(Dataset):
             # Data is normalized in [0, 1]
             data = np.asarray(io.imread(self.data_files[random_idx]).transpose((2,0,1)), dtype='float32')
             data = (data - self.norm_param[0][:, np.newaxis, np.newaxis]) / (self.norm_param[1][:, np.newaxis, np.newaxis] - self.norm_param[0][:, np.newaxis, np.newaxis]) 
+
 
             if self.cache:
                 self.data_cache_[random_idx] = data

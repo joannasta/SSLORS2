@@ -15,7 +15,7 @@ class HydroDataset(Dataset):
     def __init__(self, path_dataset: Path, bands: List[str] = None, transforms=None,compute_stats: bool = False,):
         self.path_dataset = Path(path_dataset)
         self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
-        self.bands = bands or ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"]
+        self.bands = bands or ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"]#, "B12"]
 
         self.band_means, self.band_stds = config.get_means_and_stds()
         self.transforms = transforms
@@ -36,13 +36,15 @@ class HydroDataset(Dataset):
             ]
 
         sample = torch.cat(bands, dim=0) 
-        if len(self.bands) == 12:
-            sample = (sample - means[:,None,None]) /stds[:,None,None]
+        print("bands",len(self.bands))
+        if len(self.bands) == 11:
+            sample = (sample - means[:11,None,None]) /stds[:11,None,None]
+            print("sample",sample.shape)
         else:
             sample = (sample - means[1:4,None,None]) /stds[1:4,None,None]
 
         if self.transforms is not None:
             sample = self.transforms(sample)
-        if len(self.bands) == 12:    
-            sample = sample[1:4,:,:] 
+        if len(self.bands) ==12:    
+            sample = sample[:11,:,:] 
         return sample.float()

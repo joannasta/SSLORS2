@@ -1,0 +1,62 @@
+UNET:
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃             Test metric              ┃             DataLoader 0             ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│             avg_test_mae             │          1.1439486742019653          │
+│            avg_test_rmse             │          2.243788003921509           │
+│           avg_test_std_dev           │          1.9816265106201172          │
+│   test_mae_step for image 1 _epoch   │          1.157962441444397           │
+│   test_mae_step for image 2 _epoch   │          1.0152682065963745          │
+│   test_mae_step for image 3 _epoch   │          1.2028478384017944          │
+│   test_mae_step for image 4 _epoch   │          1.0975992679595947          │
+│   test_mae_step for image 5 _epoch   │          1.1667457818984985          │
+│   test_mae_step for image 6 _epoch   │          1.1502822637557983          │
+│   test_mae_step for image 7 _epoch   │          1.2165557146072388          │
+│  test_rmse_step for image 1 _epoch   │          2.2764484882354736          │
+│  test_rmse_step for image 2 _epoch   │          1.9557126760482788          │
+│  test_rmse_step for image 3 _epoch   │          2.370694637298584           │
+│  test_rmse_step for image 4 _epoch   │          2.143864870071411           │
+│  test_rmse_step for image 5 _epoch   │          2.2924022674560547          │
+│  test_rmse_step for image 6 _epoch   │          2.2564852237701416          │
+│  test_rmse_step for image 7 _epoch   │          2.409862995147705           │
+│ test_std_dev_step for image 1 _epoch │          2.0115153789520264          │
+│ test_std_dev_step for image 2 _epoch │          1.7208212614059448          │
+│ test_std_dev_step for image 3 _epoch │          2.0950610637664795          │
+│ test_std_dev_step for image 4 _epoch │          1.8917181491851807          │
+│ test_std_dev_step for image 5 _epoch │          2.026980400085449           │
+│ test_std_dev_step for image 6 _epoch │          1.9918667078018188          │
+│ test_std_dev_step for image 7 _epoch │          2.1325299739837646          │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+
+
+SSL:
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃             Test metric              ┃             DataLoader 0             ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│             avg_test_mae             │          2.050741672515869           │
+│            avg_test_rmse             │          3.1572206020355225          │
+│           avg_test_std_dev           │          2.7171061038970947          │
+│   test_mae_step for image 1 _epoch   │          2.046682119369507           │
+│   test_mae_step for image 2 _epoch   │          2.042160749435425           │
+│   test_mae_step for image 3 _epoch   │          2.0213377475738525          │
+│   test_mae_step for image 4 _epoch   │          2.119243621826172           │
+│   test_mae_step for image 5 _epoch   │          2.1035287380218506          │
+│   test_mae_step for image 6 _epoch   │          2.067289113998413           │
+│   test_mae_step for image 7 _epoch   │          1.9562809467315674          │
+│  test_rmse_step for image 1 _epoch   │          3.1417651176452637          │
+│  test_rmse_step for image 2 _epoch   │          3.152560234069824           │
+│  test_rmse_step for image 3 _epoch   │          3.103713274002075           │
+│  test_rmse_step for image 4 _epoch   │          3.2820703983306885          │
+│  test_rmse_step for image 5 _epoch   │          3.2527875900268555          │
+│  test_rmse_step for image 6 _epoch   │           3.17893385887146           │
+│  test_rmse_step for image 7 _epoch   │          2.991100788116455           │
+│ test_std_dev_step for image 1 _epoch │          2.6994707584381104          │
+│ test_std_dev_step for image 2 _epoch │          2.7046570777893066          │
+│ test_std_dev_step for image 3 _epoch │          2.6684274673461914          │
+│ test_std_dev_step for image 4 _epoch │          2.8336362838745117          │
+│ test_std_dev_step for image 5 _epoch │          2.808907985687256           │
+│ test_std_dev_step for image 6 _epoch │          2.7494049072265625          │
+│ test_std_dev_step for image 7 _epoch │          2.557785749435425           │
+└──────────────────────────────────────┴──────────────────────────────────────┘

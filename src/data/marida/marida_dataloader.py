@@ -9,18 +9,19 @@ from .marida_dataset import MaridaDataset # Update the path as per your project 
 import numpy as np
 
 class MaridaDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size=32, root_dir="/faststorage/joanna/marida/MARIDA", transform=None, standardization=None):
+    def __init__(self, batch_size=32, root_dir="/faststorage/joanna/marida/MARIDA", transform=None, standardization=None,pretrained_model=None):
         super().__init__()
         self.batch_size = batch_size
         self.root_dir = root_dir
         self.transform = transform
         self.standardization = standardization
+        self.pretrained_model = pretrained_model
 
     def setup(self, stage=None):
         """Setup dataset for training, validation, or test."""
-        self.train_dataset = MaridaDataset(mode='train', transform=self.transform, standardization=self.standardization, path=self.root_dir)
-        self.val_dataset = MaridaDataset(mode='val', transform=self.transform, standardization=self.standardization, path=self.root_dir)
-        self.test_dataset = MaridaDataset(mode='test', transform=self.transform, standardization=self.standardization, path=self.root_dir)
+        self.train_dataset = MaridaDataset(root_dir=self.root_dir,mode='train', transform=self.transform, standardization=self.standardization, path=self.root_dir,pretrained_model = self.pretrained_model)
+        self.val_dataset = MaridaDataset(root_dir=self.root_dir,mode='val', transform=self.transform, standardization=self.standardization, path=self.root_dir,pretrained_model = self.pretrained_model)
+        self.test_dataset = MaridaDataset(root_dir=self.root_dir,mode='test', transform=self.transform, standardization=self.standardization, path=self.root_dir,pretrained_model = self.pretrained_model)
 
     def train_dataloader(self):
         """Return train dataloader."""
@@ -34,7 +35,7 @@ class MaridaDataModule(pl.LightningDataModule):
         """Return test dataloader."""
         return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
 
-
+"""
 # Example transformation (e.g., resize, normalize)
 transform = transforms.Compose([
     transforms.ToPILImage(),
@@ -83,3 +84,4 @@ for batch in data_module.train_dataloader():
     plt.savefig('image_sample.png', bbox_inches='tight')  # Save the image as a PNG file
     plt.close()  # Close the plot to free memory
     break  # Only load one batch for testing
+"""

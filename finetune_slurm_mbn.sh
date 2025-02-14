@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=11:00:00                   # Time limit
-#SBATCH --output=logs/finetune_slurm.out  # Standard output log
+#SBATCH --output=logs/finetune_slurm_agia_napa_UNET.out  # Standard output log
 #SBATCH --error=logs/finetune_slurm.err   # Error log
 
 # --- Setup Environment ---
@@ -45,4 +45,4 @@ srun python -u finetune_mbn.py \
 #tensorboard --logdir ./results/trains --port 8009 &
 
 # Completion message
-echo "Fine-tuning completed." >> logs/finetune_slurm_mbn.out
+echo "Fine-tuning completed." >> logs/finetune_slurm_mbn_unet_pl.out

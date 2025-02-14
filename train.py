@@ -10,9 +10,8 @@ from src.models.moco import MoCo
 from src.models.dino import DINO_LIT
 from src.models.mae import MAE
 from src.data.hydro.hydro_dataloader import HydroDataModule  # Correct import
-from src.losses import cross_entropy, infonce
 from pytorch_lightning.callbacks import ProgressBar
-
+from torchvision import transforms as T
 
 
 
@@ -45,12 +44,12 @@ def main(args):
     
     if args.model == "mae":
         model = model_class(
-            src_channels=3,
+            src_channels=11,
             mask_ratio=0.9,
             decoder_dim=args.decoder_dim,
         )
     else:
-        model = model_class(src_channels=12) 
+        model = model_class(src_channels=11) 
     
     
 
@@ -74,7 +73,7 @@ def main(args):
         ) 
     )
 
-    datamodule.setup()
+    datamodule.setup("fit")
     train_dataloader = datamodule.train_dataloader()
     val_dataloader = datamodule.val_dataloader()
     # Setup TensorBoard logger

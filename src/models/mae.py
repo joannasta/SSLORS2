@@ -11,7 +11,7 @@ from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 from lightly.transforms import MAETransform
 
 class MAE(pl.LightningModule):
-    def __init__(self, src_channels=3, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None):
+    def __init__(self, src_channels=11, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None):
         super().__init__()
         print(f"Initializing MAE with {src_channels} source channels")
         self.src_channels = src_channels
@@ -209,9 +209,9 @@ class MAE(pl.LightningModule):
         stds = stds.to(device)
         
         # Denormalize the images
-        original_images = (original_images  * stds[1:4,None,None]) + means[1:4,None,None]  # #(max_value - min_value + 1e-7) + min_value
-        reconstructed_images = (reconstructed_images  * stds[1:4,None,None]) + means[1:4,None,None] # #(max_value - min_value + 1e-7) + min_value
-        masked_images = (masked_images  * stds[1:4,None,None]) + means[1:4,None,None] #(max_value - min_value + 1e-7) + min_value
+        print("original images channels",stds[:11,None,None].shape)
+        original_images = (original_images  * stds[:11,None,None]) + means[:11,None,None]  # #(max_value - min_value + 1e-7) + min_value
+        reconstructed_images = (reconstructed_images  * stds[:11,None,None]) + means[:11,None,None] # #(max_value - min_value + 1e-7) + min_value
 
         # Select RGB channels and permute dimensions
         original_images = original_images[ [2, 1, 0], :, :].permute(1, 2, 0).detach().cpu().numpy()

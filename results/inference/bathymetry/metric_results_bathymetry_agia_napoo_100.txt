@@ -1,0 +1,73 @@
+
+
+Just UNet :
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃             Test metric              ┃             DataLoader 0             ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│             avg_test_mae             │         0.45699062943458557          │
+│            avg_test_rmse             │          0.5892638564109802          │
+│           avg_test_std_dev           │          0.520379364490509           │
+│   test_mae_step for image 1 _epoch   │         0.49188554286956787          │
+│   test_mae_step for image 2 _epoch   │         0.45396938920021057          │
+│   test_mae_step for image 3 _epoch   │          0.4536569118499756          │
+│   test_mae_step for image 4 _epoch   │         0.47014015913009644          │
+│   test_mae_step for image 5 _epoch   │          0.4538554847240448          │
+│   test_mae_step for image 6 _epoch   │         0.49049633741378784          │
+│   test_mae_step for image 7 _epoch   │         0.38056740164756775          │
+│  test_rmse_step for image 1 _epoch   │          0.6385293006896973          │
+│  test_rmse_step for image 2 _epoch   │          0.5980364084243774          │
+│  test_rmse_step for image 3 _epoch   │          0.5699965953826904          │
+│  test_rmse_step for image 4 _epoch   │          0.6200212240219116          │
+│  test_rmse_step for image 5 _epoch   │          0.5734728574752808          │
+│  test_rmse_step for image 6 _epoch   │          0.6197694540023804          │
+│  test_rmse_step for image 7 _epoch   │          0.5004028677940369          │
+│ test_std_dev_step for image 1 _epoch │          0.5438994765281677          │
+│ test_std_dev_step for image 2 _epoch │          0.5089143514633179          │
+│ test_std_dev_step for image 3 _epoch │          0.5009622573852539          │
+│ test_std_dev_step for image 4 _epoch │          0.5626460313796997          │
+│ test_std_dev_step for image 5 _epoch │          0.5077256560325623          │
+│ test_std_dev_step for image 6 _epoch │          0.5520740151405334          │
+│ test_std_dev_step for image 7 _epoch │          0.4580014646053314          │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+
+
+With SSL:
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃             Test metric              ┃             DataLoader 0             ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│             avg_test_mae             │          0.5761991739273071          │
+│            avg_test_rmse             │          0.7366578578948975          │
+│           avg_test_std_dev           │          0.5781302452087402          │
+│   test_mae_step for image 1 _epoch   │         0.48426973819732666          │
+│   test_mae_step for image 2 _epoch   │          0.643034815788269           │
+│   test_mae_step for image 3 _epoch   │          0.6007200479507446          │
+│   test_mae_step for image 4 _epoch   │         0.47059643268585205          │
+│   test_mae_step for image 5 _epoch   │          0.4037812352180481          │
+│   test_mae_step for image 6 _epoch   │          0.7395744919776917          │
+│   test_mae_step for image 7 _epoch   │          0.6507829427719116          │
+│  test_rmse_step for image 1 _epoch   │          0.622160792350769           │
+│  test_rmse_step for image 2 _epoch   │          0.8262684345245361          │
+│  test_rmse_step for image 3 _epoch   │          0.7666020393371582          │
+│  test_rmse_step for image 4 _epoch   │          0.6026613116264343          │
+│  test_rmse_step for image 5 _epoch   │          0.525515079498291           │
+│  test_rmse_step for image 6 _epoch   │          0.9364999532699585          │
+│  test_rmse_step for image 7 _epoch   │          0.8278010487556458          │
+│ test_std_dev_step for image 1 _epoch │          0.5296239852905273          │
+│ test_std_dev_step for image 2 _epoch │          0.6479946970939636          │
+│ test_std_dev_step for image 3 _epoch │          0.5713852047920227          │
+│ test_std_dev_step for image 4 _epoch │          0.4856586158275604          │
+│ test_std_dev_step for image 5 _epoch │         0.47291478514671326          │
+│ test_std_dev_step for image 6 _epoch │          0.6859146356582642          │
+│ test_std_dev_step for image 7 _epoch │          0.6314011216163635          │
+└──────────────────────────────────────┴──────────────────────────────────────┘
+
+
+results of the paper:
+
+Results obtained by modified U-Net (in meters).
+Modality        Agia Napa             Puck Lagoon
+RMSE MAE		1.068		           0.907 
+Std. RMSE.      0.694                  0.493
+MAE Std.        0.940                  0.874
+S2  

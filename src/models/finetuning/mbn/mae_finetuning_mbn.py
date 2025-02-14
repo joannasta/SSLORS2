@@ -276,10 +276,6 @@ class MAEFineTuning(pl.LightningModule):
             target_e = target.clone()
             data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
 
-            print("data",data.shape)
-            print("target",target.shape)
-            print("target_e",target_e.shape)
-            print("embedding",embedding.shape)
             data = scipy.ndimage.zoom(data.cpu().numpy(), (1,1,ratio, ratio), order=1)
             target = scipy.ndimage.zoom(target.cpu(), (1, ratio, ratio), order=1)
             target_e = scipy.ndimage.zoom(target_e.cpu(), (1, ratio, ratio), order=1)
@@ -408,14 +404,13 @@ class MAEFineTuning(pl.LightningModule):
         self.log('avg_val_mae', avg_mae)
         self.log('avg_val_std_dev', avg_std_dev)
 
-        # Clear the lists - CRUCIAL
         self.val_rmse_list = []
         self.val_mae_list = []
         self.val_std_dev_list = []
         
     
-    def on_test_epoch_end(self): # PyTorch Lightning renames it to on_test_epoch_end
-        # Calculate and log epoch-level test metrics (if needed)
+    def on_test_epoch_end(self): 
+        
         avg_rmse = torch.tensor(self.test_rmse_list).mean()
         avg_mae = torch.tensor(self.test_mae_list).mean()
         avg_std_dev = torch.tensor(self.test_std_dev_list).mean()
@@ -424,7 +419,6 @@ class MAEFineTuning(pl.LightningModule):
         self.log('avg_test_mae', avg_mae)
         self.log('avg_test_std_dev', avg_std_dev)
 
-        # Clear the lists - CRUCIAL if you're doing multiple test epochs
         self.test_rmse_list = []
         self.test_mae_list = []
         self.test_std_dev_list = []
@@ -467,7 +461,7 @@ class MAEFineTuning(pl.LightningModule):
         dir_abs = os.path.abspath(dir_rel)  # Absolute path
 
         os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
-        if filename == "test_results":
+        if dir == "test_results":
             filename = os.path.join(dir_abs, f"depth_comparison_epoch_{self.current_epoch}_image_{self.test_image_count}.png")
             self.test_image_count += 1
         else:

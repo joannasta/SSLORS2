@@ -37,45 +37,45 @@ class HydroDataModule(LightningDataModule):
         self.test_split = test_split
         self.transform = transform
 
-def setup(self, stage=None):
-    # Use stage to load data depending on the task
-    if stage == 'fit' or stage is None:
-        self.train_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
-        
-        self.val_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
+    def setup(self, stage=None):
+        # Use stage to load data depending on the task
+        if stage == 'fit' or stage is None:
+            self.train_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
+            
+            self.val_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
 
-    if stage == 'test' or stage is None:
-        # Initialize test dataset for evaluation
-        self.test_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
+        if stage == 'test' or stage is None:
+            # Initialize test dataset for evaluation
+            self.test_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
 
-    if stage == 'predict':
-        # You can set up a different dataset for prediction if needed
-        self.predict_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
+        if stage == 'predict':
+            # You can set up a different dataset for prediction if needed
+            self.predict_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
 
-    def setup(self, stage: str = None):
-        """
-        Prepare dataset for pretraining (no need for validation/test splits).
-        """
+    """def setup(self, stage: str = None):
+
+       #Prepare dataset for pretraining (no need for validation/test splits).
+
         # Load the entire dataset
         full_dataset = HydroDataset(
             path_dataset=self.data_dir,
@@ -96,7 +96,7 @@ def setup(self, stage=None):
         self.train_dataset, self.val_dataset, self.test_dataset = random_split(
             full_dataset, [train_size, val_size, test_size]
         )
-
+"""
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
