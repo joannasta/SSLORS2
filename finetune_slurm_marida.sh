@@ -23,7 +23,7 @@ TRAIN_BATCH_SIZE=16                     # Training batch size
 VAL_BATCH_SIZE=16                     # Validation batch size
 LEARNING_RATE=1e-5   #1e-6                  # Learning rate
 EPOCHS=200                               # Number of epochs
-PRETRAINED_MODEL="./results/trains/training_logs/3-channels/checkpoints/epoch=99-step=132700.ckpt" # Path to pretrained model
+PRETRAINED_MODEL="./results/trains/training_logs/11-channels/checkpoints/epoch=32-step=54747.ckpt" # Path to pretrained model
 DATASET_PATH="/faststorage/joanna/marida/MARIDA" # Dataset path
 SEED=42                                   # Seed for reproducibility
 
@@ -42,7 +42,7 @@ srun python -u finetune_marida.py \
   --epochs ${EPOCHS} \
   --seed ${SEED}
 # --- Launch TensorBoard (optional) ---
-tensorboard --logdir ./results/finetuning_marida_mae --port 8009 &
+#tensorboard --logdir ./results/finetuning_marida_mae --port 8009 &
 
 # Completion message
 echo "Fine-tuning completed." >> logs/finetune_slurm_marida.out

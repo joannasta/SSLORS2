@@ -92,6 +92,9 @@ class UNet_Marida(nn.Module):
 
     def forward(self, x,image):
         # Initial Convolution Layer
+        print("image",image.shape)
+        image = image.permute(0, 3, 1, 2)
+        print("image",image.shape)
         x1 = self.inc(image)
         
         # Contracting Path

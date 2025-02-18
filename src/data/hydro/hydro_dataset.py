@@ -36,10 +36,8 @@ class HydroDataset(Dataset):
             ]
 
         sample = torch.cat(bands, dim=0) 
-        print("bands",len(self.bands))
         if len(self.bands) == 11:
             sample = (sample - means[:11,None,None]) /stds[:11,None,None]
-            print("sample",sample.shape)
         else:
             sample = (sample - means[1:4,None,None]) /stds[1:4,None,None]
 

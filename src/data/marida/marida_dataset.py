@@ -8,7 +8,8 @@ import rasterio
 from torch.utils.data import Dataset
 from pathlib import Path
 import torchvision.transforms as transforms
-import torchvision.transforms.functional as F
+import torch.nn.functional as F  # Import for interpolation
+
 
 # Handle potential import errors gracefully
 
@@ -67,7 +68,6 @@ class MaridaDataset(Dataset):
 
         if self.save_data:
             self._save_data_to_tiff()
-        print("pretrained_model",pretrained_model)
         if pretrained_model:
             self._create_embeddings()
 
@@ -162,47 +162,33 @@ class MaridaDataset(Dataset):
         for idx in range(len(hydro_dataset)):
             img = hydro_dataset[idx]
             img = img.unsqueeze(0).to(self.pretrained_model.device)
-            img = F.interpolate(img, size=(256, 256), mode='nearest') # Interpolation before passing through the model
+            # To pass images through hydro interpolate to 256,256
+            img = F.interpolate(img, size=(256,256), mode='nearest')
+            #self.embeddings.append(img)
 
-        with torch.no_grad():
-            embedding = self.pretrained_model.forward_encoder(img)
-            self.embeddings.append(embedding.cpu())
+            with torch.no_grad():
+                embedding = self.pretrained_model.forward_encoder(img)
+                self.embeddings.append(embedding.cpu())
         self.embeddings = torch.stack(self.embeddings).cpu()
 
     def __getitem__(self, index):
         img = self.X[index]
         target = self.y[index]
-        print("self.embeddings",self.embeddings)
         embedding = self.embeddings[index]
-
-        print("beginning")
-        print(f"Image shape: {img.shape}, Target shape: {target.shape},embedding{embedding.shape}")
-        print("self.transform",self.transform)
-        print("self.standardization",self.standardization)
-        print("self.impute_nan",self.impute_nan)
-        print("1")
         img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')  # CxWxH to WxHxC
-        print("2")
         if self.impute_nan is not None:
             nan_mask = np.isnan(img)
             img[nan_mask] = self.impute_nan[nan_mask]
         else:
             print("Warning: self.impute_nan is not initialized. NaN values might remain.")
-        print("3")
         if self.transform is not None:
             target = np.transpose(target, (1, 2, 0))  # Correct transpose for target
-            print("During")
-            print(f"Image shape: {img.shape}, Target shape: {target.shape}")
             stack = np.concatenate([img, target], axis=-1).astype('float32')
             stack = self.transform(stack)
 
             img = stack[:-1, :, :]
             target = stack[-1, :, :].long()
-        print("4")
         if self.standardization is not None:
             img = self.standardization(img)
-        print("5")
-        print("end of get item")
-        print(f"Image shape: {img.shape}, Target shape: {target.shape}")
 
         return img, target, embedding

@@ -91,10 +91,12 @@ class MagicBathyNetDataset(Dataset):
             img = img.unsqueeze(0).to(self.pretrained_model.device)
             # To pass images through hydro interpolate to 256,256
             img = F.interpolate(img, size=(256,256), mode='nearest')
+            self.embeddings.append(img)
 
-            with torch.no_grad():
-                embedding = self.pretrained_model.forward_encoder(img)
-                self.embeddings.append(embedding.cpu())
+            #with torch.no_grad():
+            #    embedding = self.pretrained_model.forward_encoder(img)
+            #    embedding = torch.randn(embedding.shape)#.to(self.pretrained_model.device)
+            #self.embeddings.append(embedding.cpu())
         self.embeddings = torch.stack(self.embeddings).cpu()
 
 

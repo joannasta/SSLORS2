@@ -28,28 +28,24 @@ class UNet_bathy(nn.Module):
             nn.Conv2d(32, out_channels, kernel_size=1)
         )
         print("UNet_bathy initialized.")
-
     def forward(self, x, images):
         print("Forward pass of UNet_bathy...")
-        
         images = images.float()  # Ensure images are float type
 
         x1 = self.encoder[0](images)
         x2 = self.encoder[1](x1)
         x3 = self.encoder[2](x2)
         x4 = self.encoder[3](x3)
-        print("x4 shape:", x4.shape)
-        print("x shape:", x.shape)
-        #x_resized = F.interpolate(x, size=x4.shape[2:], mode='bilinear')
-        
-        #combined = torch.cat([x_resized, x4], dim=1)  # Concatenate along channel dimension
 
-        #batch_size, channels, height, width = combined.shape
-        #combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
-        #combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
-        
-        #x = self.decoder[0](combined_projected, x3)
-        x = self.decoder[0](x4, x3)
+        x_resized = F.interpolate(x, size=x4.shape[2:], mode='bilinear')
+        combined = torch.cat([x_resized, x4], dim=1)  # Concatenate along channel dimension
+
+        batch_size, channels, height, width = combined.shape
+        combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+        combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
+
+        x = self.decoder[0](combined_projected, x3)
+        #x = self.decoder[0](x4, x3)
         x = self.decoder[1](x, x2)
         x = self.decoder[2](x, x1)
         output = self.decoder[3](x)

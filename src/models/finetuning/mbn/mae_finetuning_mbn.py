@@ -25,7 +25,7 @@ from src.utils.finetuning_utils import calculate_metrics
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=3, mask_ratio=0.5):
+    def __init__(self, src_channels=3, mask_ratio=0.5,pretrained_model=None):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -35,6 +35,7 @@ class MAEFineTuning(pl.LightningModule):
         self.save_hyperparameters()
         self.run_dir = None  
         self.base_dir = "bathymetry_results"
+        self.pretrained_model=pretrained_model
 
         self.src_channels = 3
         self.mask_ratio = mask_ratio
@@ -44,8 +45,8 @@ class MAEFineTuning(pl.LightningModule):
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
 
-        self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
         self.projection_head = UNet_bathy(in_channels=3, out_channels=1)
+        self.projection_head.requires_grad_=True
         self.cache = True
         self.criterion = CustomLoss()
         
@@ -68,6 +69,26 @@ class MAEFineTuning(pl.LightningModule):
         self.test_std_dev_list = []
         self.test_image_count = 0
 
+    def check_gradients(self):
+        # Unfreeze all parameters for fine-tuning
+        for param in self.parameters():
+            param.requires_grad = True  # Ensure all parameters can be updated during training
+        for name,param in self.named_parameters():
+            param.requires_grad = True
+        for param in self.pretrained_model.parameters():
+            param.requires_grad = True  # Ensure all parameters can be updated during training
+
+        # Unfreeze all layers in the backbone and decoder
+        for param in self.pretrained_model.backbone.parameters():
+            param.requires_grad = True
+        for param in self.pretrained_model.decoder.parameters():
+            param.requires_grad = True
+        # Check for gradients
+        for name, param in self.named_parameters():
+            if param.grad is not None:
+                print(f"Layer {name}: Gradient present")
+            else:
+                print(f"Layer {name}: No gradient")
 
 
     def _generate_mask(self, tensor, batch_size, device, average_channels=False):
@@ -84,6 +105,9 @@ class MAEFineTuning(pl.LightningModule):
     def forward(self, images,embedding):
         #batch_size = images.shape[0]
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
+        embedding = embedding.squeeze(0)
+        embedding = self.pretrained_model.forward_encoder(embedding)
+        embedding = embedding.unsqueeze(0)
         return self.projection_head(embedding,images)
     
     def training_step(self, batch,batch_idx):
@@ -168,6 +192,8 @@ class MAEFineTuning(pl.LightningModule):
             self.train_batch_count = 0
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
+
+        self.check_gradients()
         return loss
     
     def validation_step(self, batch, batch_idx):

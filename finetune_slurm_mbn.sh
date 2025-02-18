@@ -5,7 +5,7 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=11:00:00                   # Time limit
-#SBATCH --output=logs/finetune_slurm_agia_napa_UNET.out  # Standard output log
+#SBATCH --output=logs/finetune_slurm_FF_SSL_PUCK_LAGOON.out  # Standard output log
 #SBATCH --error=logs/finetune_slurm.err   # Error log
 
 # --- Setup Environment ---

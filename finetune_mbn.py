@@ -46,7 +46,7 @@ class BathymetryPredictor:
             ]),
             pretrained_model=self.pretrained_model,
         )
-        self.model = MAEFineTuning()
+        self.model = MAEFineTuning(pretrained_model=self.pretrained_model)
         # Create output directory
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)

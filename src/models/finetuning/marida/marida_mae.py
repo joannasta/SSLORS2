@@ -34,7 +34,7 @@ def gen_weights(class_distribution, c = 1.02):
     return 1/torch.log(c + class_distribution)
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=3, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None):
+    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -45,7 +45,7 @@ class MAEFineTuning(pl.LightningModule):
         self.run_dir = None  
         self.base_dir = "bathymetry_results"
 
-        self.src_channels = 3
+        self.src_channels = 11
         self.learning_rate = learning_rate
         self.mask_ratio = mask_ratio
         self.means,self.stds,self.pos_weight = get_marida_means_and_stds()
@@ -76,7 +76,7 @@ class MAEFineTuning(pl.LightningModule):
             self.load_pretrained_weights(pretrained_weights)
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
-        self.projection_head = UNet_Marida(input_channels=3, out_channels=1)
+        self.projection_head = UNet_Marida(input_channels=11, out_channels=1)
         self.criterion = nn.CrossEntropyLoss()
 
         
@@ -103,6 +103,8 @@ class MAEFineTuning(pl.LightningModule):
         data, target,embedding = batch
         batch_size = data.shape[0]
         prediction = self(data,embedding)
+        print("prediction",prediction.shape)
+        print("prediction",prediction)
         loss = self.criterion(prediction, target)
 
         if batch_idx % 100 == 0:
@@ -175,21 +177,34 @@ class MAEFineTuning(pl.LightningModule):
         img= original_images.cpu().numpy()
         target = target.detach().cpu().numpy()
         prediction = prediction.detach().cpu().numpy()
-        
 
+        img = img.transpose(2,0,1)
         img = (img - self.means[:, None, None]) / self.stds[:, None, None]
         img = img[1:4, :, :]  
         img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
         if img.shape[0] == 3:  
             img = np.transpose(img, (1, 2, 0))
 
+        print("prediction",prediction.shape)
+        prediction = prediction.squeeze(0)
+
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
         
-        plt.imshow(img)
-        plt.axis('off')  # Hide axes
-        plt.savefig(f'epoch-{self.current_epoch}-image_sample.png', bbox_inches='tight')  # Save the image as a PNG file
-        plt.close()  
+        fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+
+        # Plot original image
+        axes[0].imshow(img)
+        axes[0].set_title("Original Image")
+        axes[0].axis('off')
+
+        # Plot prediction (as class labels)
+        axes[1].imshow(prediction, cmap='viridis')  # Use a colormap for labels
+        axes[1].set_title("Prediction")
+        axes[1].axis('off')
+
+        plt.savefig(f'epoch-{self.current_epoch}-image_sample.png', bbox_inches='tight')
+        plt.close()
   
     def log_results(self):
         if self.run_dir is None:  
