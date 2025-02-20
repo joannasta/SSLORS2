@@ -3,20 +3,17 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy
-
-# PyTorch and related libraries
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.utils.tensorboard import SummaryWriter
 import pytorch_lightning as pl
-
-# Libraries for models and utilities
 import timm
+
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 from torch.autograd import Variable
+from torch.utils.tensorboard import SummaryWriter
 from torchvision.transforms import RandomCrop, Resize
 
 # Project-specific imports
@@ -28,18 +25,18 @@ class MAEFineTuning(pl.LightningModule):
     def __init__(self, src_channels=3, mask_ratio=0.5,pretrained_model=None,location="agia_napa"):
         super().__init__()
         self.writer = SummaryWriter()
+        self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.train_step_losses = []
         self.total_train_loss = 0.0
         self.train_batch_count = 0
-        self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.save_hyperparameters()
+
         self.run_dir = None  
         self.base_dir = "bathymetry_results"
         self.pretrained_model=pretrained_model
 
         self.src_channels = 3
         self.mask_ratio = mask_ratio
-        self.location = location
         self.norm_param_depth = NORM_PARAM_DEPTH[location]
         self.norm_param = np.load(NORM_PARAM_PATHS[location])
         self.crop_size = MODEL_CONFIG["crop_size"]
@@ -71,42 +68,35 @@ class MAEFineTuning(pl.LightningModule):
         self.test_image_count = 0
 
     def check_gradients(self):
-        # Unfreeze all parameters for fine-tuning
+
         for param in self.parameters():
-            param.requires_grad = True  # Ensure all parameters can be updated during training
+            param.requires_grad = True 
+
         for name,param in self.named_parameters():
             param.requires_grad = True
-        for param in self.pretrained_model.parameters():
-            param.requires_grad = True  # Ensure all parameters can be updated during training
 
-        # Unfreeze all layers in the backbone and decoder
+        for param in self.pretrained_model.parameters():
+            param.requires_grad = True  
+
         for param in self.pretrained_model.backbone.parameters():
             param.requires_grad = True
+
         for param in self.pretrained_model.decoder.parameters():
             param.requires_grad = True
 
-
-    def _generate_mask(self, tensor, batch_size, device, average_channels=False):
-        """
-        Generates a mask for non-annotated pixels in the given tensor.
-        """
-        mask = (tensor.cpu().numpy() != 0).astype(np.float32)
-        if average_channels:
-            mask = np.mean(mask, axis=1) 
-        mask = torch.from_numpy(mask)
-        mask = mask.view(batch_size, 1, self.crop_size, self.crop_size)
-        return mask.to(device)
+        for name, param in self.named_parameters():
+            if param.grad is not None:
+                print(f"Layer {name}: Gradient present")
+            else:
+                print(f"Layer {name}: No gradient")
 
     def forward(self, images,embedding):
-        #batch_size = images.shape[0]
-        #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
         embedding = embedding.squeeze(0)
         embedding = self.pretrained_model.forward_encoder(embedding)
         embedding = embedding.unsqueeze(0)
         return self.projection_head(embedding,images)
     
     def training_step(self, batch,batch_idx):
-
         train_dir = "training_results"
         data, target, embedding = batch
         data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
@@ -116,7 +106,7 @@ class MAEFineTuning(pl.LightningModule):
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(1), size=size, mode='nearest')
             
-        data_size = data.size()[2:]  # Get the original data size
+        data_size = data.size()[2:]  
 
         if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
                 data_transform = RandomCrop(size=self.crop_size)
@@ -131,7 +121,7 @@ class MAEFineTuning(pl.LightningModule):
             target_mask[i] = target_mask[i].reshape(self.crop_size, self.crop_size)
         
         target_mask = target_mask.squeeze(1)
-            
+    
         data_mask = (data.cpu().numpy() != 0).astype(np.float32)
         data_mask = np.mean(data_mask, axis=1)
         data_mask = torch.from_numpy(data_mask).to(self.device)
@@ -180,8 +170,6 @@ class MAEFineTuning(pl.LightningModule):
         print('Mean MAE (per image):', mae * -self.norm_param_depth)
         print('Mean Std Dev (per image):', std_dev * -self.norm_param_depth)
 
-       # self.log('train_loss', loss)
-
         if not hasattr(self, 'total_train_loss'):
             self.total_train_loss = 0.0
             self.train_batch_count = 0
@@ -192,8 +180,6 @@ class MAEFineTuning(pl.LightningModule):
         return loss
     
     def validation_step(self, batch, batch_idx):
-        print("VALIDATION STEP START")
-        
         val_dir = "validation_results"
         data, target, embedding = batch
         data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
@@ -267,16 +253,12 @@ class MAEFineTuning(pl.LightningModule):
         print('Mean MAE (per image):', mae * -self.norm_param_depth)
         print('Mean Std Dev (per image):', std_dev * -self.norm_param_depth)
 
-
-        #self.log('val_loss', val_loss)
-        
         self.total_val_loss += val_loss.item()
         self.val_batch_count += 1
         return val_loss
     
     def test_step(self,batch,batch_idx):
-        
-        print("TEST STEP START")
+
         pad_size = 32
         crop_size = 256
         ratio = crop_size / self.window_size[0]
@@ -308,8 +290,7 @@ class MAEFineTuning(pl.LightningModule):
             data = data.transpose((1, 2, 3, 0)).squeeze(3)
             data = np.expand_dims(data, axis=0)
             data = torch.from_numpy(data).cuda()
-            
-            # Do the inference on the whole image
+        
             with torch.no_grad():
                 outs = self(data.float(),embedding.float())
                 pred = outs.data.cpu().numpy().squeeze()
@@ -352,12 +333,10 @@ class MAEFineTuning(pl.LightningModule):
             self.log(f'test_mae_step for image {idx} ', (mae * -self.norm_param_depth), on_step=True)  
             self.log(f'test_std_dev_step for image {idx} ', (std_dev * -self.norm_param_depth), on_step=True)  
 
-            # Append to lists (if you want to calculate metrics on the entire test set at the end)
             self.test_rmse_list.append(rmse * -self.norm_param_depth)
             self.test_mae_list.append(mae * -self.norm_param_depth)
             self.test_std_dev_list.append(std_dev * -self.norm_param_depth)
                 
-            # Logging (train function example - adjust as needed):
             print(f'Mean RMSE for image {idx} :', rmse * -self.norm_param_depth)
             print(f'Mean MAE for image {idx} :', mae * -self.norm_param_depth)
             print(f'Mean Std Dev for image {idx} :', std_dev * -self.norm_param_depth)
@@ -444,12 +423,9 @@ class MAEFineTuning(pl.LightningModule):
         self.test_mae_list = []
         self.test_std_dev_list = []
 
-
-
     def on_train_end(self):
         self.writer.close()
         
-
     def log_images(self, data: torch.Tensor, reconstructed_images: torch.Tensor, depth: torch.Tensor,dir) -> None:
         self.log_results()
         bgr = np.asarray(np.transpose(data,(1,2,0)), dtype='float32') #data.cpu().numpy()
@@ -467,13 +443,13 @@ class MAEFineTuning(pl.LightningModule):
         plt.axis("off")
 
         plt.subplot(132)
-        plt.imshow(depth)#, cmap="viridis",vmin=0, vmax=1)
+        plt.imshow(depth)
         plt.title("Ground Truth Depth")
         plt.colorbar()
         plt.axis("off")
 
         plt.subplot(133)
-        plt.imshow(pred_processed)#, cmap="viridis", vmin=0, vmax=1)
+        plt.imshow(pred_processed)
         plt.title("Predicted Depth")
         plt.colorbar()
         plt.axis("off")
@@ -489,7 +465,6 @@ class MAEFineTuning(pl.LightningModule):
             filename = os.path.join(dir_abs, f"depth_comparison_epoch_{self.current_epoch}.png")
         plt.savefig(filename)  # Save using absolute path
         print(f"Saving to: {filename}") # Print to check where you are saving
-
         plt.close()
 
     def log_results(self):
@@ -519,7 +494,6 @@ class MAEFineTuning(pl.LightningModule):
 
         return {"optimizer": optimizer, "lr_scheduler": scheduler}  # Return a dictionary
 
-            
 
 class CustomLoss(nn.Module):
     def __init__(self):

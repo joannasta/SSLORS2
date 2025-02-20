@@ -1,10 +1,12 @@
 
-
-from pathlib import Path
 import shutil
 import os
 import re
+
+from pathlib import Path
 from config import train_images, test_images
+from tqdm import tqdm
+
 class DatasetProcessor:
     def __init__(self,mode="train",ROIs=None ,output_dir=None,img_only_dir=None,depth_only_dir=None,split_type="train"):
         self.mode=mode
@@ -34,8 +36,8 @@ class DatasetProcessor:
             else:
                 print("img_only_dir is None. Skipping creation.")
 
-            if target_only_dir:  # Create depth_only_dir AFTER copying
-                self.create_target_folder(target_only_dir)
+            if self.target_only_dir:  # Create depth_only_dir AFTER copying
+                self.create_target_folder(self.target_only_dir)
             else:
                 print("target_only_dir is None. Skipping creation.")
 
@@ -49,7 +51,8 @@ class DatasetProcessor:
 
 
     def match_files(self):
-        for roi in tqdm(self.ROIs, desc='Load ' + mode + ' set to memory'):
+        path = '/home/faststorage/joanna/marida/MARIDA'
+        for roi in tqdm(self.ROIs, desc='Load ' + self.mode + ' set to memory'):
             roi_folder = '_'.join(['S2'] + roi.split('_')[:-1])
             roi_name = '_'.join(['S2'] + roi.split('_'))
             roi_file = os.path.join(path, 'patches', roi_folder, roi_name + '.tif')

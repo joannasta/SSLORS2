@@ -1,10 +1,11 @@
 
-
-from pathlib import Path
 import shutil
 import os
 import re
+
+from pathlib import Path
 from config import train_images, test_images
+
 class DatasetProcessor:
     def __init__(self, img_dir, depth_dir, output_dir,img_only_dir=None,depth_only_dir=None,split_type="train"):
         self.img_dir = Path(img_dir)
@@ -30,18 +31,14 @@ class DatasetProcessor:
 
         if self.copy_files:  # Only copy and create folders if copy_files is True
             self.copy_paired_files()
-
             if img_only_dir:  # Create img_only_dir AFTER copying
                 self.create_img_folder(img_only_dir)
             else:
                 print("img_only_dir is None. Skipping creation.")
-
             if depth_only_dir:  # Create depth_only_dir AFTER copying
                 self.create_depth_folder(depth_only_dir)
             else:
                 print("depth_only_dir is None. Skipping creation.")
-
-
 
         if self.copy_files:
             self.copy_paired_files()

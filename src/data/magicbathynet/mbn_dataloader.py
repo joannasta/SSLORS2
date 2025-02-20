@@ -1,16 +1,18 @@
 import pytorch_lightning as pl
+
 from torch.utils.data import DataLoader
 from .mbn_dataset import MagicBathyNetDataset
 
 
 class MagicBathyNetDataModule(pl.LightningDataModule):
-    def __init__(self, root_dir, batch_size=32, transform=None, cache=False,pretrained_model=None):
+    def __init__(self, root_dir, batch_size=32, transform=None, cache=False,pretrained_model=None,location="agia_napa"):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
         self.transform = transform
         self.cache = cache
         self.pretrained_model = pretrained_model
+        self.location = location
 
     def setup(self, stage=None):
         # Use stage to load data depending on the task
@@ -21,7 +23,8 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='train',
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location
             )
             
             self.val_dataset = MagicBathyNetDataset(
@@ -29,7 +32,8 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='val',
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location
             )
 
         if stage == 'test' or stage is None:
@@ -39,7 +43,8 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='test',
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location
             )
 
         if stage == 'predict':
@@ -49,7 +54,8 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='predict',  # Adjust if there's a different mode
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location
             )
 
 

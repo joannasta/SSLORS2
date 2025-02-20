@@ -34,7 +34,7 @@ def gen_weights(class_distribution, c = 1.02):
     return 1/torch.log(c + class_distribution)
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,**kwargs):
+    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -77,7 +77,7 @@ class MAEFineTuning(pl.LightningModule):
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
         self.projection_head = UNet_Marida(input_channels=11, out_channels=1)
-        self.criterion = nn.CrossEntropyLoss()
+        self. criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean')
 
         
         # Initialize variables to accumulate the loss
@@ -100,18 +100,23 @@ class MAEFineTuning(pl.LightningModule):
     #TODO NO SHUFFLING IN DATALOADER
     #TODO LOKAL TESTING
     def training_step(self, batch, batch_idx):
+
         data, target,embedding = batch
         batch_size = data.shape[0]
         prediction = self(data,embedding)
+        print("target",target.shape)
+        print("target min, max",target.min(),target.max())
+        print("target mean",target.mean())
+        print("target unique",np.unique(target))
+        print("target",target[0])
         print("prediction",prediction.shape)
-        print("prediction",prediction)
+        print("prediction",prediction[0])
         loss = self.criterion(prediction, target)
-
         if batch_idx % 100 == 0:
             self.log_images(
-                data[0].cpu(),     
-                prediction[0],    
-                target[0].cpu(),    
+                data[0].cpu(),
+                prediction[0],
+                target[0].cpu(),
             )
 
         if not hasattr(self, 'total_train_loss'):
@@ -120,7 +125,7 @@ class MAEFineTuning(pl.LightningModule):
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
 
-        return loss
+        return loss 
 
 
     def validation_step(self, batch, batch_idx):
@@ -185,23 +190,25 @@ class MAEFineTuning(pl.LightningModule):
         if img.shape[0] == 3:  
             img = np.transpose(img, (1, 2, 0))
 
-        print("prediction",prediction.shape)
         prediction = prediction.squeeze(0)
+        target = target.squeeze(0)
 
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
         
-        fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
 
         # Plot original image
         axes[0].imshow(img)
         axes[0].set_title("Original Image")
         axes[0].axis('off')
-
-        # Plot prediction (as class labels)
-        axes[1].imshow(prediction, cmap='viridis')  # Use a colormap for labels
-        axes[1].set_title("Prediction")
+        axes[1].imshow(target)
+        axes[1].set_title("Ground Truth")
         axes[1].axis('off')
+        # Plot prediction (as class labels)
+        axes[2].imshow(prediction)  # Use a colormap for labels
+        axes[2].set_title("Prediction")
+        axes[2].axis('off')
 
         plt.savefig(f'epoch-{self.current_epoch}-image_sample.png', bbox_inches='tight')
         plt.close()
@@ -217,6 +224,6 @@ class MAEFineTuning(pl.LightningModule):
                 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1) 
         return [optimizer], [scheduler]
 

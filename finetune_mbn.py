@@ -2,11 +2,11 @@ import os
 import argparse
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy import ndimage
 import scipy
 import torch
 import pytorch_lightning as pl
 
+from scipy import ndimage
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 from typing import Optional, Tuple
@@ -16,8 +16,6 @@ from torchvision import transforms
 from src.models.finetuning.mbn.mae_finetuning_mbn import MAEFineTuning
 from src.models.mae import MAE
 from src.data.magicbathynet.mbn_dataloader import MagicBathyNetDataModule
-import torch
-
 
 class BathymetryPredictor:
     def __init__(
@@ -28,34 +26,29 @@ class BathymetryPredictor:
         batch_size: int = 16,
         resize_to: Tuple[int, int] = (3, 256, 256)
     ):
-        # Determine computational device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        # Load pre-trained model
+        self.location = "puck_lagoon"
         self.pretrained_model = MAE.load_from_checkpoint(
             pretrained_weights_path, 
             strict=False
         )
-
-        # Initialize data module with transformations
+        print(f"RUN TEST FOR LOCATION: {self.location}")
+        self.model = MAEFineTuning(pretrained_model=self.pretrained_model,location=self.location)
         self.data_module = MagicBathyNetDataModule(
             root_dir=data_dir,
             batch_size=batch_size,
             transform=transforms.Compose([  
-                transforms.ToTensor(),
-            ]),
+                transforms.ToTensor()]),
             pretrained_model=self.pretrained_model,
+            location=self.location
         )
-        self.model = MAEFineTuning(pretrained_model=self.pretrained_model)
-        # Create output directory
+
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
     
-    def train(self, max_epochs: int = 56) -> pl.Trainer: # 2x len(train images)
-        # Configure TensorBoard logger for tracking
+    def train(self, max_epochs: int = 10) -> pl.Trainer:
         logger = TensorBoardLogger("results/inference", name="finetuning_logs")
 
-        # Initialize trainer with specific configurations
         trainer = Trainer(
             accelerator=self.device.type,
             devices=1,
@@ -91,7 +84,6 @@ def main():
     parser.add_argument("--output_dir", default="./inference_results", help="Output directory")
     parser.add_argument("--resize-to", type=int, nargs=2, default=(256, 256), help="Resize images")
 
-    # Parse arguments and initialize predictor
     args = parser.parse_args()
     predictor = BathymetryPredictor(
         pretrained_weights_path=args.weights,
@@ -100,7 +92,7 @@ def main():
         resize_to=tuple(args.resize_to),
         batch_size=args.train_batch_size
     )
-        # Run prediction workflow
+
     predictor.train()
 
 

@@ -35,22 +35,19 @@ class MarineDebrisPredictor:
         # Determine computational device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Load pre-trained model
-        self.pretrained_model = MAE.load_from_checkpoint(
-            pretrained_weights_path, 
-            strict=False
-        )
+        #self.pretrained_model = MAE.load_from_checkpoint(
+        #    pretrained_weights_path, 
+        #    strict=False
+        #)
         # Initialize data module with transformations
         self.data_module = marida_dataloader.MaridaDataModule(
             root_dir=data_dir,
             batch_size=batch_size,
-            pretrained_model=self.pretrained_model,
+           # pretrained_model=self.pretrained_model,
         )
         
-        # Load pre-trained model
-        self.model = MAEFineTuning.load_from_checkpoint(
-            pretrained_weights_path, 
-            strict=False).to(self.device)
-        
+
+        self.model = MAEFineTuning()#pretrained_model=self.pretrained_model)
         # Create output directory
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
@@ -76,9 +73,12 @@ class MarineDebrisPredictor:
             val_check_interval=1.0,
             limit_train_batches=1, 
             limit_val_batches=0,  # Skip validation
+            precision=16
         )
 
         # Perform model training
+        print(f"Using device: {torch.device('cuda' if torch.cuda.is_available() else 'cpu')}")  # Should print "cpu"
+
         trainer.fit(self.model, datamodule=self.data_module)
         trainer.test(self.model, datamodule=self.data_module)
         return trainer

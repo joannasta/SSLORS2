@@ -4,6 +4,7 @@ import os
 import rasterio
 import numpy as np
 import config
+
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms as T
 from pathlib import Path
@@ -16,7 +17,6 @@ class HydroDataset(Dataset):
         self.path_dataset = Path(path_dataset)
         self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
         self.bands = bands or ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"]#, "B12"]
-
         self.band_means, self.band_stds = config.get_means_and_stds()
         self.transforms = transforms
 

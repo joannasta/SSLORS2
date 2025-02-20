@@ -174,7 +174,11 @@ class MaridaDataset(Dataset):
     def __getitem__(self, index):
         img = self.X[index]
         target = self.y[index]
-        embedding = self.embeddings[index]
+        if self.pretrained_model:
+            embedding = self.embeddings[index]
+        else:
+            embedding = torch.zeros(32,1,256,256) # Or torch.empty()
+        
         img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')  # CxWxH to WxHxC
         if self.impute_nan is not None:
             nan_mask = np.isnan(img)

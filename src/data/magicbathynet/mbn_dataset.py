@@ -6,22 +6,23 @@ import glob
 import re
 import torch.nn.functional as F  # Import for interpolation
 
+from pathlib import Path
 from skimage import io # For image resizing
 from torch.utils.data import Dataset
 from torchvision.transforms import RandomCrop
+
 from utils.finetuning_utils import get_random_pos
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG, train_images, test_images
 from src.data.hydro.hydro_dataset import HydroDataset
 from src.utils.data_processing import DatasetProcessor
 from src.models.mae import MAE
-from pathlib import Path
 
 random.seed(1)
 
 
 # MagicBathyNetDataset class (modified)
 class MagicBathyNetDataset(Dataset):
-    def __init__(self, root_dir, transform=None, split_type='train', cache=True, augmentation=True, pretrained_model=None):
+    def __init__(self, root_dir, transform=None, split_type='train', cache=True, augmentation=True, pretrained_model=None,location="agia_napa"):
         print("Initializing MagicBathyNetDataset...")
         self.root_dir = root_dir
         self.split_type = split_type
@@ -32,11 +33,9 @@ class MagicBathyNetDataset(Dataset):
         self.train_images = train_images
         self.test_images = test_images
 
-        # Use DatasetProcessor to handle file organization
-        #'agia_napa','puck_lagoon'
         self.processor = DatasetProcessor(
-            img_dir=Path(self.root_dir) / 'puck_lagoon'/ 'img' / 's2',
-            depth_dir=Path(self.root_dir) /'puck_lagoon' / 'depth' / 's2',
+            img_dir=Path(self.root_dir) / location/ 'img' / 's2',
+            depth_dir=Path(self.root_dir) /location / 'depth' / 's2',
             output_dir=Path(self.root_dir) / 'processed_data' ,
             img_only_dir=Path(self.root_dir) / 'processed_img',
             depth_only_dir=Path(self.root_dir) / 'processed_depth',
@@ -59,28 +58,21 @@ class MagicBathyNetDataset(Dataset):
 
         self.data_files = filtered_data_files
         self.label_files = filtered_label_files
-        
-        print("Data files: ", self.data_files[0],type(self.data_files[0]))
 
         self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
         self.embeddings = []
         self._create_embeddings()
 
-        # Normalisierungsparameter laden
-        self.norm_param_depth = NORM_PARAM_DEPTH['puck_lagoon']#NORM_PARAM_DEPTH["agia_napa"]
-        self.norm_param = np.load(NORM_PARAM_PATHS['puck_lagoon'])#np.load(NORM_PARAM_PATHS["agia_napa"])
-
-        # Modellparameter laden
+        self.norm_param_depth = NORM_PARAM_DEPTH[location]
+        self.norm_param = np.load(NORM_PARAM_PATHS[location])
         self.crop_size = MODEL_CONFIG["crop_size"]
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
 
-        # Cache initialisieren
         self.data_cache_ = {}
         self.label_cache_ = {}
         
     def __len__(self):
-        # Default epoch size is 10 000 samples
         return 10000
     
     def _create_embeddings(self):
@@ -89,7 +81,6 @@ class MagicBathyNetDataset(Dataset):
         for idx in range(len(hydro_dataset)):
             img = hydro_dataset[idx]
             img = img.unsqueeze(0).to(self.pretrained_model.device)
-            # To pass images through hydro interpolate to 256,256
             img = F.interpolate(img, size=(256,256), mode='nearest')
             self.embeddings.append(img)
 
@@ -126,18 +117,12 @@ class MagicBathyNetDataset(Dataset):
         return tuple(results)
     
     def __getitem__(self, idx):
-
         random_idx = random.randint(0, len(self.data_files) - 1)
-
-        # If the tile hasn't been loaded yet, put in cache
         if random_idx in self.data_cache_.keys():
             data = self.data_cache_[random_idx]
         else:
-            # Data is normalized in [0, 1]
             data = np.asarray(io.imread(self.data_files[random_idx]).transpose((2,0,1)), dtype='float32')
             data = (data - self.norm_param[0][:, np.newaxis, np.newaxis]) / (self.norm_param[1][:, np.newaxis, np.newaxis] - self.norm_param[0][:, np.newaxis, np.newaxis]) 
-
-
             if self.cache:
                 self.data_cache_[random_idx] = data
 
@@ -148,8 +133,6 @@ class MagicBathyNetDataset(Dataset):
             if self.cache:
                 self.label_cache_[random_idx] = label
 
-        embedding = self.embeddings[random_idx].cpu()
-
         x1, x2, y1, y2 = get_random_pos(data, self.window_size)
         data_p = data[:, x1:x2,y1:y2]
         label_p = label[x1:x2,y1:y2]
@@ -158,6 +141,7 @@ class MagicBathyNetDataset(Dataset):
         
         data_p_tensor = torch.from_numpy(data_p)
         label_p_tensor = torch.from_numpy(label_p)
+        embedding = self.embeddings[random_idx].cpu()
 
         return (data_p_tensor,
                 label_p_tensor,embedding)

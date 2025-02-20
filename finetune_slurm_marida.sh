@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=MAE_FineTune           # Job name
+#SBATCH --job-name=Marida_FineTune           # Job name
 #SBATCH --partition=thesis_student        # Partition name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
@@ -17,12 +17,12 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 
 # --- Define Training Parameters ---
 DEVICES=1                                 # Number of devices for training
-NUM_WORKERS=32                             # Number of data loader workers
+NUM_WORKERS=1                             # Number of data loader workers
 MODEL=mae                                 # Model name
-TRAIN_BATCH_SIZE=16                     # Training batch size
-VAL_BATCH_SIZE=16                     # Validation batch size
+TRAIN_BATCH_SIZE=4                    # Training batch size
+VAL_BATCH_SIZE=4                    # Validation batch size
 LEARNING_RATE=1e-5   #1e-6                  # Learning rate
-EPOCHS=200                               # Number of epochs
+EPOCHS=10                              # Number of epochs
 PRETRAINED_MODEL="./results/trains/training_logs/11-channels/checkpoints/epoch=32-step=54747.ckpt" # Path to pretrained model
 DATASET_PATH="/faststorage/joanna/marida/MARIDA" # Dataset path
 SEED=42                                   # Seed for reproducibility
@@ -44,5 +44,4 @@ srun python -u finetune_marida.py \
 # --- Launch TensorBoard (optional) ---
 #tensorboard --logdir ./results/finetuning_marida_mae --port 8009 &
 
-# Completion message
-echo "Fine-tuning completed." >> logs/finetune_slurm_marida.out
+

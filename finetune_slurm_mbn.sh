@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=11:00:00                   # Time limit
-#SBATCH --output=logs/finetune_slurm_FF_SSL_PUCK_LAGOON.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm.err   # Error log
+#SBATCH --output=logs/finetune_slurm_ff_pucklagoon.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_ff_pucklagoon.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -17,7 +17,7 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 
 # --- Define Training Parameters ---
 DEVICES=1                                 # Number of devices for training
-NUM_WORKERS=32                             # Number of data loader workers
+NUM_WORKERS=1                             # Number of data loader workers
 MODEL=mae                                 # Model name
 TRAIN_BATCH_SIZE=1                  # Training batch size
 VAL_BATCH_SIZE=1                     # Validation batch size
@@ -44,5 +44,3 @@ srun python -u finetune_mbn.py \
 # --- Launch TensorBoard (optional) ---
 #tensorboard --logdir ./results/trains --port 8009 &
 
-# Completion message
-echo "Fine-tuning completed." >> logs/finetune_slurm_mbn_unet_pl.out
