@@ -32,7 +32,8 @@ class MagicBathyNetDataset(Dataset):
         self.pretrained_model = pretrained_model
         self.train_images = train_images
         self.test_images = test_images
-
+        print("split_type:", split_type)
+        print("Initializing DatasetProcessor...")
         self.processor = DatasetProcessor(
             img_dir=Path(self.root_dir) / location/ 'img' / 's2',
             depth_dir=Path(self.root_dir) /location / 'depth' / 's2',
@@ -41,7 +42,7 @@ class MagicBathyNetDataset(Dataset):
             depth_only_dir=Path(self.root_dir) / 'processed_depth',
             split_type=self.split_type
         )
-
+        print("DatasetProcessor initialized.")
         self.paired_files = self.processor.paired_files  # Use the paired files from the processor
         self.data_files = [pair[0] for pair in self.paired_files]
         self.label_files = [pair[1] for pair in self.paired_files]
@@ -55,14 +56,16 @@ class MagicBathyNetDataset(Dataset):
             if file_number is not None and str(file_number) in indices_to_use:
                 filtered_data_files.append(data_file)
                 filtered_label_files.append(label_file)
+        print("filtered_data_files:", len(filtered_data_files))
 
         self.data_files = filtered_data_files
         self.label_files = filtered_label_files
 
         self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
         self.embeddings = []
+        print("creating embeddings...")
         self._create_embeddings()
-
+        print("embeddings created.")
         self.norm_param_depth = NORM_PARAM_DEPTH[location]
         self.norm_param = np.load(NORM_PARAM_PATHS[location])
         self.crop_size = MODEL_CONFIG["crop_size"]
@@ -82,12 +85,15 @@ class MagicBathyNetDataset(Dataset):
             img = hydro_dataset[idx]
             img = img.unsqueeze(0).to(self.pretrained_model.device)
             img = F.interpolate(img, size=(256,256), mode='nearest')
-            self.embeddings.append(img)
+            #self.embeddings.append(img)
 
-            #with torch.no_grad():
-            #    embedding = self.pretrained_model.forward_encoder(img)
+            with torch.no_grad():
+                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+                self.pretrained_model.to(device)  # Move the model to the GPU
+                img = img.to(device)  # Move the input data to the GPU as well
+                embedding = self.pretrained_model.forward_encoder(img).to(self.pretrained_model.device)
             #    embedding = torch.randn(embedding.shape)#.to(self.pretrained_model.device)
-            #self.embeddings.append(embedding.cpu())
+            self.embeddings.append(embedding.cpu())
         self.embeddings = torch.stack(self.embeddings).cpu()
 
 

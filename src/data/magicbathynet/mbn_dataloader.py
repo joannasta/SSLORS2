@@ -47,17 +47,6 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 location=self.location
             )
 
-        if stage == 'predict':
-            # You can set up a different dataset for prediction if needed
-            self.predict_dataset = MagicBathyNetDataset(
-                root_dir=self.root_dir,
-                transform=self.transform,
-                split_type='predict',  # Adjust if there's a different mode
-                cache=self.cache,
-                pretrained_model=self.pretrained_model,
-                location=self.location
-            )
-
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)

@@ -28,7 +28,6 @@ class DatasetProcessor:
         else:
             self.copy_files = False
             print(f"Output directory '{self.output_dir}' already exists. Skipping file copy.")
-
         if self.copy_files:  # Only copy and create folders if copy_files is True
             self.copy_paired_files()
             if img_only_dir:  # Create img_only_dir AFTER copying

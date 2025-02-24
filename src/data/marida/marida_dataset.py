@@ -3,6 +3,7 @@ import json
 import torch
 import numpy as np
 import random
+import os
 from tqdm import tqdm
 import rasterio
 from torch.utils.data import Dataset
@@ -19,74 +20,63 @@ from config import get_marida_means_and_stds
 
 dataset_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
 
-def gen_weights(class_distribution, c=1.02):
-    return 1 / torch.log(c + class_distribution)
-
-class RandomRotationTransform:
-    def __init__(self, angles):
-        self.angles = angles
-
-    def __call__(self, x):
-        angle = random.choice(self.angles)
-        return F.rotate(x, angle)
-
 class MaridaDataset(Dataset):
     def __init__(self, root_dir, mode='train', pretrained_model=None, transform=None, standardization=None, path=dataset_path, img_only_dir=None, agg_to_water=True, save_data=False):
         self.mode = mode
         self.root_dir = Path(root_dir)
         self.X = []
         self.y = []
+
         self.means, self.stds, self.pos_weight = get_marida_means_and_stds()
 
         if mode == 'train':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'train_X.txt'), dtype='str')
+            self.transform = transforms.Compose([
+                                            transforms.ToTensor(),
+                                            RandomRotationTransform([-90, 0, 90, 180]),
+                                            transforms.RandomHorizontalFlip()
+                                        ]) if transform else None
         elif mode == 'test':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'test_X.txt'), dtype='str')
+            self.transform = transforms.Compose([transforms.ToTensor()])
         elif mode == 'val':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'val_X.txt'), dtype='str')
         else:
             raise ValueError(f"Unknown mode {mode}")
+        
 
-        self.embeddings = []
-        self.transform = transform
-        self.standardization = transforms.Normalize(self.means, self.stds) if standardization else None
         self.path = Path(path)
-        self.agg_to_water = agg_to_water
+        self.embeddings = []
         self.pretrained_model = pretrained_model
+        self.mode = mode
+        self.standardization = transforms.Normalize(self.means, self.stds) if standardization else None
+        self.length = len(self.y)
+        self.agg_to_water = agg_to_water
         self.save_data = save_data
-
+        
         with open(os.path.join(path, 'labels_mapping.txt'), 'r') as inputfile:
             self.labels = json.load(inputfile)
 
         self._load_data()
-
-        if self.X:
-            self.impute_nan = np.tile(self.means, (self.X[0].shape[1], self.X[0].shape[2], 1))
-        else:
-            print("Warning: No data loaded. self.impute_nan might not be initialized correctly.")
-            self.impute_nan = None
-
         if self.save_data:
             self._save_data_to_tiff()
         if pretrained_model:
             self._create_embeddings()
 
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            RandomRotationTransform([-90, 0, 90, 180]),
-            transforms.RandomHorizontalFlip()
-        ]) if transform else None
-    
+
+    def getnames(self):
+        return self.ROIs
+
     def _load_data(self):
         for roi in tqdm(self.ROIs, desc=f'Load {self.mode} set to memory'):
             roi_folder = '_'.join(['S2'] + roi.split('_')[:-1])
             roi_name = '_'.join(['S2'] + roi.split('_'))
+            cwd = os.getcwd()
             roi_file = os.path.join(self.path, 'patches', roi_folder, roi_name + '.tif')
             roi_file_cl = os.path.join(self.path, 'patches', roi_folder, roi_name + '_cl.tif')
-
             try:
                 with rasterio.open(roi_file_cl) as ds_y:
-                    temp_y = np.copy(ds_y.read())
+                    temp_y = np.copy(ds_y.read().astype(np.int64))
                     if self.agg_to_water:
                         temp_y[temp_y == 15] = 7
                         temp_y[temp_y == 14] = 7
@@ -98,11 +88,13 @@ class MaridaDataset(Dataset):
                 with rasterio.open(roi_file) as ds_x:
                     temp_x = np.copy(ds_x.read())
                     self.X.append(temp_x)
+                    temp = temp_x
 
             except rasterio.errors.RasterioIOError as e:
                 print(f"Error opening file for ROI {roi}: {e}")
             except Exception as e:
                 print(f"An unexpected error occurred for ROI {roi}: {e}")
+        self.impute_nan = np.tile(self.means, (temp.shape[1],temp.shape[2],1))
 
         self.length = len(self.y)
 
@@ -125,13 +117,11 @@ class MaridaDataset(Dataset):
                 target = target.reshape(256, 256)  
                 roi_name = '_'.join(['S2'] + roi.split('_'))
 
-                # Save image
                 img_filename = os.path.join(output_img_folder, f"X_{i:04d}_{roi_name}.tif")
                 with rasterio.open(img_filename, 'w', driver='GTiff', width=img.shape[2], height=img.shape[1], count=img.shape[0], dtype=img.dtype, crs=None, transform=None) as dst:
                     dst.write(img)
                 print(f"Image saved successfully: {os.path.exists(img_filename)}")  # Debug print
 
-                # Save target
                 target_filename = os.path.join(output_target_folder, f"y__{i:04d}_{roi_name}.tif") # Fixed filename
                 with rasterio.open(target_filename, 'w', driver='GTiff', width=target.shape[1], height=target.shape[0], count=1, dtype=target.dtype, crs=None, transform=None) as dst:
                     dst.write(target, 1)
@@ -180,19 +170,42 @@ class MaridaDataset(Dataset):
             embedding = torch.zeros(32,1,256,256) # Or torch.empty()
         
         img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')  # CxWxH to WxHxC
-        if self.impute_nan is not None:
-            nan_mask = np.isnan(img)
-            img[nan_mask] = self.impute_nan[nan_mask]
-        else:
-            print("Warning: self.impute_nan is not initialized. NaN values might remain.")
+
+        nan_mask = np.isnan(img)
+        img[nan_mask] = self.impute_nan[nan_mask]
+
         if self.transform is not None:
-            target = np.transpose(target, (1, 2, 0))  # Correct transpose for target
-            stack = np.concatenate([img, target], axis=-1).astype('float32')
+            target = target[:,:,np.newaxis]
+            stack = np.concatenate([img, target], axis=-1).astype('float32') # In order to rotate-transform both mask and image
+        
             stack = self.transform(stack)
 
-            img = stack[:-1, :, :]
-            target = stack[-1, :, :].long()
+            img = stack[:-1,:,:]
+            target = stack[-1,:,:].long()                                    # Recast target values back to int64 or torch long dtype
+        
         if self.standardization is not None:
             img = self.standardization(img)
-
+            
         return img, target, embedding
+    
+
+
+
+###############################################################
+# Transformations                                             #
+###############################################################
+class RandomRotationTransform:
+    """Rotate by one of the given angles."""
+
+    def __init__(self, angles):
+        self.angles = angles
+
+    def __call__(self, x):
+        angle = random.choice(self.angles)
+        return F.rotate(x, angle)
+    
+###############################################################
+# Weighting Function for Semantic Segmentation                #
+###############################################################
+def gen_weights(class_distribution, c = 1.02):
+    return 1/torch.log(c + class_distribution)

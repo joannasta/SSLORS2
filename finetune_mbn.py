@@ -63,6 +63,7 @@ class BathymetryPredictor:
 
         # Perform model training
         trainer.fit(self.model, datamodule=self.data_module)
+        print("Testing starts")
         trainer.test(self.model, datamodule=self.data_module)
         return trainer
 

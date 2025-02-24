@@ -85,24 +85,12 @@ class MAEFineTuning(pl.LightningModule):
         for param in self.pretrained_model.decoder.parameters():
             param.requires_grad = True
 
-
-    def _generate_mask(self, tensor, batch_size, device, average_channels=False):
-        """
-        Generates a mask for non-annotated pixels in the given tensor.
-        """
-        mask = (tensor.cpu().numpy() != 0).astype(np.float32)
-        if average_channels:
-            mask = np.mean(mask, axis=1) 
-        mask = torch.from_numpy(mask)
-        mask = mask.view(batch_size, 1, self.crop_size, self.crop_size)
-        return mask.to(device)
-
     def forward(self, images,embedding):
         #batch_size = images.shape[0]
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
-        embedding = embedding.squeeze(0)
-        embedding = self.pretrained_model.forward_encoder(embedding)
-        embedding = embedding.unsqueeze(0)
+        #embedding = embedding.squeeze(0)
+        #embedding = self.pretrained_model.forward_encoder(embedding)
+        #embedding = embedding.unsqueeze(0)
         return self.projection_head(embedding,images)
     
     def training_step(self, batch,batch_idx):
@@ -188,11 +176,10 @@ class MAEFineTuning(pl.LightningModule):
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
 
-        self.check_gradients()
+        #self.check_gradients()
         return loss
     
     def validation_step(self, batch, batch_idx):
-        print("VALIDATION STEP START")
         
         val_dir = "validation_results"
         data, target, embedding = batch

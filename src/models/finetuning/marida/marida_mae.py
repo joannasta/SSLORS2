@@ -18,8 +18,10 @@ from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 
 # Project-specific imports
 from .marida_unet  import UNet_Marida
+from src.data.marida.marida_dataset import gen_weights
 from src.utils.finetuning_utils import calculate_metrics
 from config import get_marida_means_and_stds
+from src.utils.finetuning_utils import metrics_marida as Evaluation
 
 # TODOs and planned experiments
 # - Perform ablation studies to test input combinations.
@@ -77,12 +79,27 @@ class MAEFineTuning(pl.LightningModule):
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
         self.projection_head = UNet_Marida(input_channels=11, out_channels=1)
-        self.criterion = nn.CrossEntropyLoss()
+
+        global class_distr
+        # Aggregate Distribution Mixed Water, Wakes, Cloud Shadows, Waves with Marine Water
+        self.agg_to_water = True
+        self.weight_param = 1.03
+        self.class_distr = torch.Tensor([0.00452, 0.00203, 0.00254, 0.00168, 0.00766, 0.15206, 0.20232,
+                                        0.35941, 0.00109, 0.20218, 0.03226, 0.00693, 0.01322, 0.01158, 0.00052])
+        if self.agg_to_water:
+            agg_distr = sum(self.class_distr[-4:]) # Density of Mixed Water, Wakes, Cloud Shadows, Waves
+            self.class_distr[6] += agg_distr       # To Water
+            self.class_distr = self.class_distr[:-4]    # Drop Mixed Water, Wakes, Cloud Shadows, Waves
+
+        self.weight =  gen_weights(self.class_distr, c = self.weight_param)
+        self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
 
         
         # Initialize variables to accumulate the loss
         self.total_train_loss = 0.0
+        self.total_test_loss = 0.0
         self.train_batch_count = 0
+        self.test_batch_count = 0
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
@@ -103,8 +120,10 @@ class MAEFineTuning(pl.LightningModule):
         data, target,embedding = batch
         batch_size = data.shape[0]
         prediction = self(data,embedding)
+        print("target",target.shape)
+        print("target unique", torch.unique(target))
         print("prediction",prediction.shape)
-        print("prediction",prediction)
+
         loss = self.criterion(prediction, target)
 
         if batch_idx % 100 == 0:
@@ -136,6 +155,9 @@ class MAEFineTuning(pl.LightningModule):
             )
 
         self.log('val_loss', val_loss)
+        if not hasattr(self, 'total_val_loss'):
+            self.total_val_loss = 0.0
+            self.val_batch_count = 0
         self.total_val_loss += val_loss.item()
         self.val_batch_count += 1
 
@@ -144,12 +166,49 @@ class MAEFineTuning(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         data, target,embedding = batch
         batch_size = data.shape[0]
-        prediction = self(data,embedding)
-        loss = self.criterion(prediction, target)
+        logits = self(data,embedding)
+        loss = self.criterion(logits, target)
         self.log("test_loss", loss)
+        self.test_loss = loss
+
+        # Accuracy metrics only on annotated pixels
+        logits = torch.movedim(logits, (0,1,2,3), (0,3,1,2))
+        logits = logits.reshape((-1,11))
+        target = target.reshape(-1)
+        mask = target != -1
+        logits = logits[mask]
+        target = target[mask]
+                        
+        probs = torch.nn.functional.softmax(logits, dim=1).cpu().numpy()
+        target = target.cpu().numpy()
+                        
+        self.test_batches += target.shape[0]
+
+        y_predicted += probs.argmax(1).tolist()
+        y_true += target.tolist()
+                            
+                        
+        y_predicted = np.asarray(y_predicted)
+        y_true = np.asarray(y_true)
+
+        acc = Evaluation(y_predicted, y_true)
+
+        if not hasattr(self, 'total_test_loss'):
+            self.total_test_loss = 0.0
+            self.test_batch_count = 0
+        self.total_test_loss += loss.item()
+        self.test_batch_count += 1
+        print(f"Evaluation: {acc}")
 
     def on_train_start(self):
         self.log_results()
+
+    def on_test_epoch_end(self):
+        avg_test_loss = self.total_test_loss / self.test_batch_count
+        self.log('test_loss', avg_test_loss, on_epoch=True)
+        self.total_test_loss = 0.0
+        self.test_batch_count = 0
+        print(f"Test Loss (Epoch {self.current_epoch}): {avg_test_loss}")
 
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -187,6 +246,7 @@ class MAEFineTuning(pl.LightningModule):
 
         print("prediction",prediction.shape)
         prediction = prediction.squeeze(0)
+        target = target.squeeze(0)
 
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
@@ -196,6 +256,11 @@ class MAEFineTuning(pl.LightningModule):
         # Plot original image
         axes[0].imshow(img)
         axes[0].set_title("Original Image")
+        axes[0].axis('off')
+
+        # Plot original image
+        axes[0].imshow(target)
+        axes[0].set_title("Ground Truth")
         axes[0].axis('off')
 
         # Plot prediction (as class labels)
@@ -216,7 +281,10 @@ class MAEFineTuning(pl.LightningModule):
             os.makedirs(self.run_dir, exist_ok=True)
                 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
+        
+        optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1, verbose=True)
         return [optimizer], [scheduler]
+    
 
+    

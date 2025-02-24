@@ -73,7 +73,6 @@ class MarineDebrisPredictor:
             val_check_interval=1.0,
             limit_train_batches=1, 
             limit_val_batches=0,  # Skip validation
-            precision=16
         )
 
         # Perform model training
