@@ -38,6 +38,9 @@ class MaridaDataset(Dataset):
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'val_X.txt'), dtype='str')
         else:
             raise ValueError(f"Unknown mode {mode}")
+
+        print("mode",mode)
+        #print("self.ROIS",self.ROIs)
         
 
         self.path = Path(path)

@@ -60,6 +60,7 @@ class MAEFineTuning(pl.LightningModule):
         self.backbone = MaskedVisionTransformerTIMM(vit=vit)
         self.sequence_length = self.backbone.sequence_length
         self.y_predicted =[]
+        self.y_true = []
         self.test_image_count = 0
 
         # Define the MAE decoder
@@ -172,7 +173,8 @@ class MAEFineTuning(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         test_dir = "test_results"
-        """data, target,embedding = batch
+        data, target,embedding = batch
+        print("data shape",data.shape)
         batch_size = data.shape[0]
         logits = self(data,embedding)
         target = target.long()
@@ -192,30 +194,31 @@ class MAEFineTuning(pl.LightningModule):
         target = target.cpu().numpy()
 
         self.y_predicted += probs.argmax(1).tolist()
-        y_true += target.tolist()
+        self.y_true += target.tolist()
                             
                         
         self.y_predicted = np.asarray(self.y_predicted)
-        y_true = np.asarray(y_true)
+        self.y_true = np.asarray(self.y_true)
 
-        acc = Evaluation(self.y_predicted, y_true)
-        self.y_predicted=[]
+        acc = Evaluation(self.y_predicted, self.y_true)
+
         if not hasattr(self, 'total_test_loss'):
             self.total_test_loss = 0.0
             self.test_batch_count = 0
         self.total_test_loss += loss.item()
         self.test_batch_count += 1
-        print(f"Evaluation: {acc}")"""
+        print(f"Evaluation: {acc}")
 
     def on_train_start(self):
         self.log_results()
 
-    """def on_test_epoch_end(self):
+    def on_test_epoch_end(self):
         avg_test_loss = self.total_test_loss / self.test_batch_count
         self.log('test_loss', avg_test_loss, on_epoch=True)
         self.total_test_loss = 0.0
         self.test_batch_count = 0
-        print(f"Test Loss (Epoch {self.current_epoch}): {avg_test_loss}")"""
+        print(f"Test Loss (Epoch {self.current_epoch}): {avg_test_loss}")
+        
 
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -258,7 +261,7 @@ class MAEFineTuning(pl.LightningModule):
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
         
-        fig, axes = plt.subplots(1, 2, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
 
         # Plot original image
         axes[0].imshow(img)
@@ -269,9 +272,9 @@ class MAEFineTuning(pl.LightningModule):
         axes[1].imshow(target)
         axes[1].set_title("Ground Truth")
         axes[1].axis('off')
-
+        print("prediction",prediction.shape)
         # Plot prediction (as class labels)
-        axes[2].imshow(prediction, cmap='viridis')  # Use a colormap for labels
+        axes[2].imshow(prediction)  # Use a colormap for labels
         axes[2].set_title("Prediction")
         axes[2].axis('off')
 
