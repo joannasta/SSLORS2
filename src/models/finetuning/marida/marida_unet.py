@@ -57,12 +57,10 @@ class Up(nn.Module):
         
         return self.conv(x)
 
-
 class UNet_Marida(nn.Module):
-    
-    def __init__(self, input_channels = 11, out_channels = 11, hidden_channels=16):
+    def __init__(self, input_channels=11, out_channels=11, hidden_channels=16): # Changed out_channels to 11
         super(UNet_Marida, self).__init__()
-        
+
         # Initial Convolution Layer
         self.inc = nn.Sequential(
             nn.Conv2d(input_channels, hidden_channels, kernel_size=3, padding=1),
@@ -71,52 +69,38 @@ class UNet_Marida(nn.Module):
             nn.Conv2d(hidden_channels, hidden_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(hidden_channels),
             nn.ReLU(inplace=True))
-        
+
         self.combined_projection = nn.Linear(257, 256)  # Linear projection layer, adjusted input channels
 
-        
         # Contracting Path
-        self.down1 = Down(hidden_channels, 2*hidden_channels)
-        self.down2 = Down(2*hidden_channels, 4*hidden_channels)
-        self.down3 = Down(4*hidden_channels, 8*hidden_channels)
-        self.down4 = Down(8*hidden_channels, 8*hidden_channels)
-        
+        self.down1 = Down(hidden_channels, 2 * hidden_channels)
+        self.down2 = Down(2 * hidden_channels, 4 * hidden_channels)
+        self.down3 = Down(4 * hidden_channels, 8 * hidden_channels)
+        self.down4 = Down(8 * hidden_channels, 8 * hidden_channels)
+
         # Expanding Path
-        self.up1 = Up(16*hidden_channels, 4*hidden_channels)
-        self.up2 = Up(8*hidden_channels, 2*hidden_channels)
-        self.up3 = Up(4*hidden_channels, hidden_channels)
-        self.up4 = Up(2*hidden_channels, hidden_channels)
-        
+        self.up1 = Up(16 * hidden_channels, 4 * hidden_channels)
+        self.up2 = Up(8 * hidden_channels, 2 * hidden_channels)
+        self.up3 = Up(4 * hidden_channels, hidden_channels)
+        self.up4 = Up(2 * hidden_channels, hidden_channels)
+
         # Output Convolution Layer
         self.outc = nn.Conv2d(hidden_channels, out_channels, kernel_size=1)
 
-    def forward(self, x,image):
+    def forward(self, x, image):
         # Initial Convolution Layer
-        print("image",image.shape)
-        image = image.permute(0, 3, 1, 2)
-        print("image",image.shape)
         x1 = self.inc(image)
-        
         # Contracting Path
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
 
-        #x_resized = F.interpolate(x, size=x5.shape[2:], mode='bilinear')
-        #combined = torch.cat([x_resized, x5], dim=1)  # Concatenate along channel dimension
-        #batch_size, channels, height, width = combined.shape
-        #combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
-        #combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
-
-        #x = self.up1[0](combined_projected, x4)
-        
         # Expanding Path
         x6 = self.up1(x5, x4)
         x7 = self.up2(x6, x3)
         x8 = self.up3(x7, x2)
         x9 = self.up4(x8, x1)
-        
         # Output Convolution Layer
         logits = self.outc(x9)
         return logits

@@ -18,6 +18,8 @@ import random
 from src.models.finetuning.marida.marida_mae import MAEFineTuning
 from src.data.marida import marida_dataloader
 from src.models.mae import MAE
+from config import get_marida_means_and_stds
+from src.data.marida.marida_dataset import RandomRotationTransform
     
 class MarineDebrisPredictor:
     def __init__(
@@ -39,10 +41,18 @@ class MarineDebrisPredictor:
         #    pretrained_weights_path, 
         #    strict=False
         #)
+
+        bands_mean, bands_std,pos_weight = get_marida_means_and_stds()
+        standardization = transforms.Normalize(bands_mean, bands_std)
         # Initialize data module with transformations
         self.data_module = marida_dataloader.MaridaDataModule(
             root_dir=data_dir,
             batch_size=batch_size,
+            standardization=standardization,
+            transform = transforms.Compose([transforms.ToTensor(),
+                                    RandomRotationTransform([-90, 0, 90, 180]),
+                                    transforms.RandomHorizontalFlip()])
+
            # pretrained_model=self.pretrained_model,
         )
         
@@ -58,7 +68,7 @@ class MarineDebrisPredictor:
         if not os.path.exists(data_dir):
             raise FileNotFoundError(f"Data directory not found at {data_dir}")
     
-    def train(self, max_epochs: int = 5) -> pl.Trainer:
+    def train(self, max_epochs: int = 50) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
@@ -70,9 +80,9 @@ class MarineDebrisPredictor:
             logger=logger,
             gradient_clip_val=1.0,
             enable_progress_bar=True,
-            val_check_interval=1.0,
-            limit_train_batches=1, 
-            limit_val_batches=0,  # Skip validation
+            #val_check_interval=1.0,
+            #limit_train_batches=1, 
+            #limit_val_batches=0,  # Skip validation
         )
 
         # Perform model training

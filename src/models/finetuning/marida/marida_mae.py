@@ -45,7 +45,8 @@ class MAEFineTuning(pl.LightningModule):
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.save_hyperparameters()
         self.run_dir = None  
-        self.base_dir = "bathymetry_results"
+        self.base_dir = "marine_debris_results"
+
 
         self.src_channels = 11
         self.learning_rate = learning_rate
@@ -58,6 +59,8 @@ class MAEFineTuning(pl.LightningModule):
         self.patch_size = vit.patch_embed.patch_size[0]
         self.backbone = MaskedVisionTransformerTIMM(vit=vit)
         self.sequence_length = self.backbone.sequence_length
+        self.y_predicted =[]
+        self.test_image_count = 0
 
         # Define the MAE decoder
         self.decoder = MAEDecoderTIMM(
@@ -78,7 +81,7 @@ class MAEFineTuning(pl.LightningModule):
             self.load_pretrained_weights(pretrained_weights)
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
-        self.projection_head = UNet_Marida(input_channels=11, out_channels=1)
+        self.projection_head = UNet_Marida(input_channels=11, out_channels=11)
 
         global class_distr
         # Aggregate Distribution Mixed Water, Wakes, Cloud Shadows, Waves with Marine Water
@@ -92,6 +95,7 @@ class MAEFineTuning(pl.LightningModule):
             self.class_distr = self.class_distr[:-4]    # Drop Mixed Water, Wakes, Cloud Shadows, Waves
 
         self.weight =  gen_weights(self.class_distr, c = self.weight_param)
+        print("weights",self.weight)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
 
         
@@ -117,20 +121,19 @@ class MAEFineTuning(pl.LightningModule):
     #TODO NO SHUFFLING IN DATALOADER
     #TODO LOKAL TESTING
     def training_step(self, batch, batch_idx):
+        train_dir = "train_results"
         data, target,embedding = batch
         batch_size = data.shape[0]
         prediction = self(data,embedding)
-        print("target",target.shape)
-        print("target unique", torch.unique(target))
-        print("prediction",prediction.shape)
-
+        target = target.long()
         loss = self.criterion(prediction, target)
 
         if batch_idx % 100 == 0:
             self.log_images(
                 data[0].cpu(),     
                 prediction[0],    
-                target[0].cpu(),    
+                target[0].cpu(),   
+                dir = train_dir 
             )
 
         if not hasattr(self, 'total_train_loss'):
@@ -143,30 +146,36 @@ class MAEFineTuning(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
+        val_dir="val_results"
         data, target,embedding = batch
         batch_size = data.shape[0]
         prediction = self(data,embedding)
-        val_loss = self.criterion(prediction, target)
+        target = target.long()
+        loss = self.criterion(prediction, target)
+
         if batch_idx % 100 == 0:
             self.log_images(
-                data[0].cpu(),  
-                prediction[0],  
-                target[0].cpu(),  
+                data[0].cpu(),     
+                prediction[0],    
+                target[0].cpu(),   
+                dir = val_dir 
             )
 
-        self.log('val_loss', val_loss)
+        self.log('val_loss', loss)
         if not hasattr(self, 'total_val_loss'):
             self.total_val_loss = 0.0
             self.val_batch_count = 0
-        self.total_val_loss += val_loss.item()
+        self.total_val_loss += loss.item()
         self.val_batch_count += 1
 
-        return val_loss
+        return loss
     
     def test_step(self, batch, batch_idx):
-        data, target,embedding = batch
+        test_dir = "test_results"
+        """data, target,embedding = batch
         batch_size = data.shape[0]
         logits = self(data,embedding)
+        target = target.long()
         loss = self.criterion(logits, target)
         self.log("test_loss", loss)
         self.test_loss = loss
@@ -181,34 +190,32 @@ class MAEFineTuning(pl.LightningModule):
                         
         probs = torch.nn.functional.softmax(logits, dim=1).cpu().numpy()
         target = target.cpu().numpy()
-                        
-        self.test_batches += target.shape[0]
 
-        y_predicted += probs.argmax(1).tolist()
+        self.y_predicted += probs.argmax(1).tolist()
         y_true += target.tolist()
                             
                         
-        y_predicted = np.asarray(y_predicted)
+        self.y_predicted = np.asarray(self.y_predicted)
         y_true = np.asarray(y_true)
 
-        acc = Evaluation(y_predicted, y_true)
-
+        acc = Evaluation(self.y_predicted, y_true)
+        self.y_predicted=[]
         if not hasattr(self, 'total_test_loss'):
             self.total_test_loss = 0.0
             self.test_batch_count = 0
         self.total_test_loss += loss.item()
         self.test_batch_count += 1
-        print(f"Evaluation: {acc}")
+        print(f"Evaluation: {acc}")"""
 
     def on_train_start(self):
         self.log_results()
 
-    def on_test_epoch_end(self):
+    """def on_test_epoch_end(self):
         avg_test_loss = self.total_test_loss / self.test_batch_count
         self.log('test_loss', avg_test_loss, on_epoch=True)
         self.total_test_loss = 0.0
         self.test_batch_count = 0
-        print(f"Test Loss (Epoch {self.current_epoch}): {avg_test_loss}")
+        print(f"Test Loss (Epoch {self.current_epoch}): {avg_test_loss}")"""
 
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -232,22 +239,22 @@ class MAEFineTuning(pl.LightningModule):
     def on_train_end(self):
         self.writer.close()
     
-    def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor) -> None:
+    def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,dir) -> None:
+        print("log images")
+        self.log_results()
         img= original_images.cpu().numpy()
         target = target.detach().cpu().numpy()
-        prediction = prediction.detach().cpu().numpy()
-
-        img = img.transpose(2,0,1)
+        prediction = torch.argmax(prediction, dim=0).detach().cpu().numpy()
+        print("img",img.shape)
         img = (img - self.means[:, None, None]) / self.stds[:, None, None]
         img = img[1:4, :, :]  
         img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
+        print("image shape",img.shape)
         if img.shape[0] == 3:  
             img = np.transpose(img, (1, 2, 0))
 
         print("prediction",prediction.shape)
-        prediction = prediction.squeeze(0)
-        target = target.squeeze(0)
-
+        print("target",target.shape)
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
         
@@ -259,18 +266,29 @@ class MAEFineTuning(pl.LightningModule):
         axes[0].axis('off')
 
         # Plot original image
-        axes[0].imshow(target)
-        axes[0].set_title("Ground Truth")
-        axes[0].axis('off')
-
-        # Plot prediction (as class labels)
-        axes[1].imshow(prediction, cmap='viridis')  # Use a colormap for labels
-        axes[1].set_title("Prediction")
+        axes[1].imshow(target)
+        axes[1].set_title("Ground Truth")
         axes[1].axis('off')
 
-        plt.savefig(f'epoch-{self.current_epoch}-image_sample.png', bbox_inches='tight')
+        # Plot prediction (as class labels)
+        axes[2].imshow(prediction, cmap='viridis')  # Use a colormap for labels
+        axes[2].set_title("Prediction")
+        axes[2].axis('off')
+
+        dir_rel = os.path.join(self.run_dir, dir)  # Relative path
+        dir_abs = os.path.abspath(dir_rel)  # Absolute path
+
+        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
+        if dir == "test_results":
+            filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
+            self.test_image_count += 1
+        else:
+            filename = os.path.join(dir_abs, f"segmentation_comparison_epoch_{self.current_epoch}.png")
+        plt.savefig(filename)  # Save using absolute path
+        print(f"Saving to: {filename}") # Print to check where you are saving
+
         plt.close()
-  
+
     def log_results(self):
         if self.run_dir is None:  
             run_index = 0

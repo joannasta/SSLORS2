@@ -9,7 +9,7 @@ import rasterio
 from torch.utils.data import Dataset
 from pathlib import Path
 import torchvision.transforms as transforms
-import torch.nn.functional as F  # Import for interpolation
+import torchvision.transforms.functional as F
 
 
 # Handle potential import errors gracefully
@@ -26,16 +26,11 @@ class MaridaDataset(Dataset):
         self.root_dir = Path(root_dir)
         self.X = []
         self.y = []
-
+        self.transform = transform
         self.means, self.stds, self.pos_weight = get_marida_means_and_stds()
 
         if mode == 'train':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'train_X.txt'), dtype='str')
-            self.transform = transforms.Compose([
-                                            transforms.ToTensor(),
-                                            RandomRotationTransform([-90, 0, 90, 180]),
-                                            transforms.RandomHorizontalFlip()
-                                        ]) if transform else None
         elif mode == 'test':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'test_X.txt'), dtype='str')
             self.transform = transforms.Compose([transforms.ToTensor()])
@@ -164,6 +159,7 @@ class MaridaDataset(Dataset):
     def __getitem__(self, index):
         img = self.X[index]
         target = self.y[index]
+
         if self.pretrained_model:
             embedding = self.embeddings[index]
         else:
@@ -175,17 +171,17 @@ class MaridaDataset(Dataset):
         img[nan_mask] = self.impute_nan[nan_mask]
 
         if self.transform is not None:
-            target = target[:,:,np.newaxis]
+            #target = target[:,:,np.newaxis]
+            target = target.transpose(1, 2, 0)
             stack = np.concatenate([img, target], axis=-1).astype('float32') # In order to rotate-transform both mask and image
         
             stack = self.transform(stack)
-
             img = stack[:-1,:,:]
-            target = stack[-1,:,:].long()                                    # Recast target values back to int64 or torch long dtype
-        
+            target = stack[-1,:,:]                                    # Recast target values back to int64 or torch long dtype
+
         if self.standardization is not None:
             img = self.standardization(img)
-            
+
         return img, target, embedding
     
 
