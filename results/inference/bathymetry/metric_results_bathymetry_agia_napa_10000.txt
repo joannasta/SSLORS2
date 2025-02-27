@@ -1,65 +1,96 @@
-UNET:
+Agia_napa
+
+baseline (unet):
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃             Test metric              ┃             DataLoader 0             ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│             avg_test_mae             │          0.5359269976615906          │
-│            avg_test_rmse             │          0.7001913785934448          │
-│           avg_test_std_dev           │          0.5433038473129272          │
-│   test_mae_step for image 1 _epoch   │          0.5493503212928772          │
-│   test_mae_step for image 2 _epoch   │          0.5345543026924133          │
-│   test_mae_step for image 3 _epoch   │          0.5336200594902039          │
-│   test_mae_step for image 4 _epoch   │          0.5199664831161499          │
-│   test_mae_step for image 5 _epoch   │          0.5370267033576965          │
-│   test_mae_step for image 6 _epoch   │          0.5321063995361328          │
-│   test_mae_step for image 7 _epoch   │          0.5448389053344727          │
-│  test_rmse_step for image 1 _epoch   │          0.7165347933769226          │
-│  test_rmse_step for image 2 _epoch   │          0.6978763341903687          │
-│  test_rmse_step for image 3 _epoch   │          0.6987203359603882          │
-│  test_rmse_step for image 4 _epoch   │          0.6804927587509155          │
-│  test_rmse_step for image 5 _epoch   │          0.7012931704521179          │
-│  test_rmse_step for image 6 _epoch   │          0.6960038542747498          │
-│  test_rmse_step for image 7 _epoch   │          0.7104009985923767          │
-│ test_std_dev_step for image 1 _epoch │          0.5527074933052063          │
-│ test_std_dev_step for image 2 _epoch │          0.5429421663284302          │
-│ test_std_dev_step for image 3 _epoch │          0.5420587658882141          │
-│ test_std_dev_step for image 4 _epoch │          0.5332069993019104          │
-│ test_std_dev_step for image 5 _epoch │          0.5433153510093689          │
-│ test_std_dev_step for image 6 _epoch │          0.5418556332588196          │
-│ test_std_dev_step for image 7 _epoch │          0.5469905734062195          │
+│             avg_test_mae             │          0.5029996037483215          │
+│            avg_test_rmse             │          0.6631701588630676          │
+│           avg_test_std_dev           │          0.6139270067214966          │
+│   test_mae_step for image 1 _epoch   │          0.5096641778945923          │
+│   test_mae_step for image 2 _epoch   │         0.49630439281463623          │
+│   test_mae_step for image 3 _epoch   │          0.5079032778739929          │
+│   test_mae_step for image 4 _epoch   │          0.5027337670326233          │
+│   test_mae_step for image 5 _epoch   │          0.4942474067211151          │
+│   test_mae_step for image 6 _epoch   │          0.5004491806030273          │
+│   test_mae_step for image 7 _epoch   │          0.509894073009491           │
+│  test_rmse_step for image 1 _epoch   │          0.6706479787826538          │
+│  test_rmse_step for image 2 _epoch   │          0.6541424989700317          │
+│  test_rmse_step for image 3 _epoch   │          0.6697582006454468          │
+│  test_rmse_step for image 4 _epoch   │          0.6623941659927368          │
+│  test_rmse_step for image 5 _epoch   │          0.6536573767662048          │
+│  test_rmse_step for image 6 _epoch   │          0.6595829725265503          │
+│  test_rmse_step for image 7 _epoch   │          0.6722745895385742          │
+│ test_std_dev_step for image 1 _epoch │          0.6217443943023682          │
+│ test_std_dev_step for image 2 _epoch │          0.6090654730796814          │
+│ test_std_dev_step for image 3 _epoch │          0.6177656650543213          │
+│ test_std_dev_step for image 4 _epoch │          0.6145498752593994          │
+│ test_std_dev_step for image 5 _epoch │          0.6048569083213806          │
+│ test_std_dev_step for image 6 _epoch │          0.6101180911064148          │
+│ test_std_dev_step for image 7 _epoch │          0.6196128129959106          │
 └──────────────────────────────────────┴──────────────────────────────────────┘
 
 
-
-SSL:
+random weights:
 
 ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃             Test metric              ┃             DataLoader 0             ┃
 ┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-│             avg_test_mae             │          0.5271097421646118          │
-│            avg_test_rmse             │          0.6913453936576843          │
-│           avg_test_std_dev           │          0.6128319501876831          │
-│   test_mae_step for image 1 _epoch   │          0.5206242203712463          │
-│   test_mae_step for image 2 _epoch   │          0.5452045202255249          │
-│   test_mae_step for image 3 _epoch   │          0.5286287665367126          │
-│   test_mae_step for image 4 _epoch   │          0.5207968950271606          │
-│   test_mae_step for image 5 _epoch   │          0.5188556909561157          │
-│   test_mae_step for image 6 _epoch   │          0.515264630317688           │
-│   test_mae_step for image 7 _epoch   │          0.5404639840126038          │
-│  test_rmse_step for image 1 _epoch   │          0.6832236051559448          │
-│  test_rmse_step for image 2 _epoch   │          0.7139974236488342          │
-│  test_rmse_step for image 3 _epoch   │          0.6942642331123352          │
-│  test_rmse_step for image 4 _epoch   │          0.6829051971435547          │
-│  test_rmse_step for image 5 _epoch   │          0.6813381910324097          │
-│  test_rmse_step for image 6 _epoch   │          0.6756005883216858          │
-│  test_rmse_step for image 7 _epoch   │          0.7082214951515198          │
-│ test_std_dev_step for image 1 _epoch │          0.6069574952125549          │
-│ test_std_dev_step for image 2 _epoch │          0.6314013004302979          │
-│ test_std_dev_step for image 3 _epoch │           0.61431485414505           │
-│ test_std_dev_step for image 4 _epoch │          0.6079208254814148          │
-│ test_std_dev_step for image 5 _epoch │          0.604171872138977           │
-│ test_std_dev_step for image 6 _epoch │          0.5989925861358643          │
-│ test_std_dev_step for image 7 _epoch │          0.6261353492736816          │
+│             avg_test_mae             │          0.7106951475143433          │
+│            avg_test_rmse             │          0.9194200038909912          │
+│           avg_test_std_dev           │          0.7051976323127747          │
+│   test_mae_step for image 1 _epoch   │          0.7165547609329224          │
+│   test_mae_step for image 2 _epoch   │          0.7051783800125122          │
+│   test_mae_step for image 3 _epoch   │          0.7251987457275391          │
+│   test_mae_step for image 4 _epoch   │          0.7042278051376343          │
+│   test_mae_step for image 5 _epoch   │          0.7057644724845886          │
+│   test_mae_step for image 6 _epoch   │          0.7167526483535767          │
+│   test_mae_step for image 7 _epoch   │          0.7005445957183838          │
+│  test_rmse_step for image 1 _epoch   │          0.9282622337341309          │
+│  test_rmse_step for image 2 _epoch   │          0.9137518405914307          │
+│  test_rmse_step for image 3 _epoch   │          0.9372186660766602          │
+│  test_rmse_step for image 4 _epoch   │          0.9087867140769958          │
+│  test_rmse_step for image 5 _epoch   │          0.9131509065628052          │
+│  test_rmse_step for image 6 _epoch   │          0.927823007106781           │
+│  test_rmse_step for image 7 _epoch   │          0.9061675667762756          │
+│ test_std_dev_step for image 1 _epoch │          0.7113048434257507          │
+│ test_std_dev_step for image 2 _epoch │          0.704101026058197           │
+│ test_std_dev_step for image 3 _epoch │          0.7146992087364197          │
+│ test_std_dev_step for image 4 _epoch │          0.6982179284095764          │
+│ test_std_dev_step for image 5 _epoch │          0.7005385160446167          │
+│ test_std_dev_step for image 6 _epoch │          0.7119019031524658          │
+│ test_std_dev_step for image 7 _epoch │          0.6952031850814819          │
 └──────────────────────────────────────┴──────────────────────────────────────┘
 
 
+fullyfinetuning:
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃             Test metric              ┃             DataLoader 0             ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│             avg_test_mae             │          0.5578063726425171          │
+│            avg_test_rmse             │          0.725141704082489           │
+│           avg_test_std_dev           │          0.6602320075035095          │
+│   test_mae_step for image 1 _epoch   │          0.5426818132400513          │
+│   test_mae_step for image 2 _epoch   │          0.5709211826324463          │
+│   test_mae_step for image 3 _epoch   │          0.5608360767364502          │
+│   test_mae_step for image 4 _epoch   │          0.5690229535102844          │
+│   test_mae_step for image 5 _epoch   │          0.5550581812858582          │
+│   test_mae_step for image 6 _epoch   │          0.5546672344207764          │
+│   test_mae_step for image 7 _epoch   │          0.5516120791435242          │
+│  test_rmse_step for image 1 _epoch   │          0.7059877514839172          │
+│  test_rmse_step for image 2 _epoch   │          0.7422956228256226          │
+│  test_rmse_step for image 3 _epoch   │          0.7294476628303528          │
+│  test_rmse_step for image 4 _epoch   │          0.7391250729560852          │
+│  test_rmse_step for image 5 _epoch   │          0.7208906412124634          │
+│  test_rmse_step for image 6 _epoch   │          0.7212631106376648          │
+│  test_rmse_step for image 7 _epoch   │          0.7171838283538818          │
+│ test_std_dev_step for image 1 _epoch │          0.6406564116477966          │
+│ test_std_dev_step for image 2 _epoch │          0.6746671199798584          │
+│ test_std_dev_step for image 3 _epoch │          0.6665515899658203          │
+│ test_std_dev_step for image 4 _epoch │          0.673202395439148           │
+│ test_std_dev_step for image 5 _epoch │          0.6583220362663269          │
+│ test_std_dev_step for image 6 _epoch │          0.6562231183052063          │
+│ test_std_dev_step for image 7 _epoch │          0.6522008180618286          │
+└──────────────────────────────────────┴──────────────────────────────────────┘
