@@ -19,9 +19,9 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 DEVICES=1                                 # Number of devices for training
 NUM_WORKERS=1                             # Number of data loader workers
 MODEL=mae                                 # Model name
-TRAIN_BATCH_SIZE=4                    # Training batch size
-VAL_BATCH_SIZE=4                    # Validation batch size
-LEARNING_RATE=1e-5   #1e-6                  # Learning rate
+TRAIN_BATCH_SIZE=5                   # Training batch size
+VAL_BATCH_SIZE=5                    # Validation batch size
+LEARNING_RATE=2e-4   #1e-6                  # Learning rate
 EPOCHS=10                              # Number of epochs
 PRETRAINED_MODEL="./results/trains/training_logs/11-channels/checkpoints/epoch=32-step=54747.ckpt" # Path to pretrained model
 DATASET_PATH="/faststorage/joanna/marida/MARIDA" # Dataset path

@@ -15,6 +15,7 @@ import pytorch_lightning as pl
 import timm
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
+import torchvision.transforms.functional as F
 
 # Project-specific imports
 from .marida_unet  import UNet_Marida
@@ -83,6 +84,7 @@ class MAEFineTuning(pl.LightningModule):
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
         self.projection_head = UNet_Marida(input_channels=11, out_channels=11)
+        self.test_step_outputs = []
 
         global class_distr
         # Aggregate Distribution Mixed Water, Wakes, Cloud Shadows, Waves with Marine Water
@@ -173,51 +175,52 @@ class MAEFineTuning(pl.LightningModule):
     
     def test_step(self, batch, batch_idx):
         test_dir = "test_results"
-        data, target,embedding = batch
-        print("data shape",data.shape)
+        data, target, embedding = batch
         batch_size = data.shape[0]
-        logits = self(data,embedding)
+        logits = self(data, embedding)
         target = target.long()
         loss = self.criterion(logits, target)
         self.log("test_loss", loss)
-        self.test_loss = loss
 
         # Accuracy metrics only on annotated pixels
-        logits = torch.movedim(logits, (0,1,2,3), (0,3,1,2))
-        logits = logits.reshape((-1,11))
-        target = target.reshape(-1)
-        mask = target != -1
-        logits = logits[mask]
-        target = target[mask]
-                        
-        probs = torch.nn.functional.softmax(logits, dim=1).cpu().numpy()
-        target = target.cpu().numpy()
+        logits_moved = torch.movedim(logits, (0, 1, 2, 3), (0, 3, 1, 2))
+        logits_reshaped = logits_moved.reshape((-1, 11))
+        target_reshaped = target.reshape(-1)
+        mask = target_reshaped != -1
+        logits_masked = logits_reshaped[mask]
+        target_masked = target_reshaped[mask]
+        probs = nn.functional.softmax(logits_masked, dim=1).cpu().numpy()
+        target_cpu = target_masked.cpu().numpy()
+        print("probs", len(probs.argmax(1)))
 
-        self.y_predicted += probs.argmax(1).tolist()
-        self.y_true += target.tolist()
-                            
-                        
-        self.y_predicted = np.asarray(self.y_predicted)
-        self.y_true = np.asarray(self.y_true)
+        # Store predictions and ground truth in lists
+        self.test_step_outputs.append({
+            "predictions": probs.argmax(1).tolist(),
+            "targets": target_cpu.tolist(),
+        })
 
-        acc = Evaluation(self.y_predicted, self.y_true)
-
-        if not hasattr(self, 'total_test_loss'):
-            self.total_test_loss = 0.0
-            self.test_batch_count = 0
-        self.total_test_loss += loss.item()
-        self.test_batch_count += 1
-        print(f"Evaluation: {acc}")
+        return loss
 
     def on_train_start(self):
         self.log_results()
 
     def on_test_epoch_end(self):
-        avg_test_loss = self.total_test_loss / self.test_batch_count
-        self.log('test_loss', avg_test_loss, on_epoch=True)
-        self.total_test_loss = 0.0
-        self.test_batch_count = 0
-        print(f"Test Loss (Epoch {self.current_epoch}): {avg_test_loss}")
+        all_predictions = []
+        all_targets = []
+        for output in self.test_step_outputs:
+            all_predictions.extend(output["predictions"])
+            all_targets.extend(output["targets"])
+
+        all_predictions = np.array(all_predictions)
+        all_targets = np.array(all_targets)
+
+        acc = Evaluation(all_predictions, all_targets)
+        for key, value in acc.items():
+            prefix = "test"
+            self.log(f"{prefix}_{key}", value) 
+        print(f"Evaluation: {acc}")
+
+        self.test_step_outputs.clear() # Clear the outputs.
         
 
     def on_train_epoch_start(self):
@@ -248,21 +251,16 @@ class MAEFineTuning(pl.LightningModule):
         img= original_images.cpu().numpy()
         target = target.detach().cpu().numpy()
         prediction = torch.argmax(prediction, dim=0).detach().cpu().numpy()
-        print("img",img.shape)
-        img = (img - self.means[:, None, None]) / self.stds[:, None, None]
+
+        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None]) 
         img = img[1:4, :, :]  
         img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
-        print("image shape",img.shape)
-        if img.shape[0] == 3:  
-            img = np.transpose(img, (1, 2, 0))
 
-        print("prediction",prediction.shape)
-        print("target",target.shape)
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
         
         fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
-
+        img = img.transpose(1,2,0)
         # Plot original image
         axes[0].imshow(img)
         axes[0].set_title("Original Image")
@@ -272,7 +270,7 @@ class MAEFineTuning(pl.LightningModule):
         axes[1].imshow(target)
         axes[1].set_title("Ground Truth")
         axes[1].axis('off')
-        print("prediction",prediction.shape)
+
         # Plot prediction (as class labels)
         axes[2].imshow(prediction)  # Use a colormap for labels
         axes[2].set_title("Prediction")

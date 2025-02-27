@@ -40,7 +40,7 @@ class MaridaDataset(Dataset):
             raise ValueError(f"Unknown mode {mode}")
 
         print("mode",mode)
-        #print("self.ROIS",self.ROIs)
+        print("self.ROIS",len(self.ROIs))
         
 
         self.path = Path(path)

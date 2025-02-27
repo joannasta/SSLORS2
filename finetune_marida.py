@@ -68,13 +68,13 @@ class MarineDebrisPredictor:
         if not os.path.exists(data_dir):
             raise FileNotFoundError(f"Data directory not found at {data_dir}")
     
-    def train(self, max_epochs: int = 5) -> pl.Trainer:
+    def train(self, max_epochs: int = 100) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
         # Initialize trainer with specific configurations
         trainer = Trainer(
-            accelerator="cpu", #gpu
+            accelerator="gpu", #gpu
             devices=1,
             max_epochs=max_epochs,
             logger=logger,
@@ -82,7 +82,7 @@ class MarineDebrisPredictor:
             enable_progress_bar=True,
             #val_check_interval=1.0,
             #limit_train_batches=1, 
-            #limit_val_batches=0,  # Skip validation
+            #limit_val_batches=1,  # Skip validation
         )
 
         # Perform model training
