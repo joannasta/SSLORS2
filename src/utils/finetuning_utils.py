@@ -103,6 +103,7 @@ def data_augmentation(cls, *arrays, flip=True, mirror=True):
         
         return tuple(results)
 def metrics_marida(y_true,y_predicted):
+    print(f"y_true shape: {y_true.shape}, y_predicted shape: {y_predicted.shape}")
     micro_prec = precision_score(y_true, y_predicted, average='micro')
     macro_prec = precision_score(y_true, y_predicted, average='macro')
     weight_prec = precision_score(y_true, y_predicted, average='weighted')
@@ -137,6 +138,7 @@ def metrics_marida(y_true,y_predicted):
    
    
 def confusion_matrix(y_gt, y_pred, labels):
+    labels = labels[:-4] # Drop Mixed Water, Wakes, Cloud Shadows, Waves
 
     # compute metrics
     cm      = metr.confusion_matrix  (y_gt, y_pred)
@@ -203,6 +205,9 @@ def confusion_matrix(y_gt, y_pred, labels):
     
     # Convert to data frame
     df = pd.DataFrame(np.array(cm_list))
+    print("cm_list", cm_list)
+    print("first row", first_row)
+    print("first col", first_col)
     df.columns = first_row
     df.index = first_col
     

@@ -27,7 +27,7 @@ class BathymetryPredictor:
         resize_to: Tuple[int, int] = (3, 256, 256)
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.location = "puck_lagoon"
+        self.location = "agia_napa"
         self.pretrained_model = MAE.load_from_checkpoint(
             pretrained_weights_path, 
             strict=False

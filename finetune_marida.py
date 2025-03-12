@@ -20,6 +20,8 @@ from src.data.marida import marida_dataloader
 from src.models.mae import MAE
 from config import get_marida_means_and_stds
 from src.data.marida.marida_dataset import RandomRotationTransform
+
+
     
 class MarineDebrisPredictor:
     def __init__(
@@ -27,7 +29,7 @@ class MarineDebrisPredictor:
         pretrained_weights_path: str, 
         data_dir: str, 
         output_dir: str = "./inference_results/marine_debris",
-        batch_size: int = 32,
+        batch_size: int = 5,
         resize_to: Tuple[int, int] = (3, 256, 256)
     ):
 
@@ -37,10 +39,10 @@ class MarineDebrisPredictor:
         # Determine computational device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         # Load pre-trained model
-        #self.pretrained_model = MAE.load_from_checkpoint(
-        #    pretrained_weights_path, 
-        #    strict=False
-        #)
+        self.pretrained_model = MAE.load_from_checkpoint(
+            pretrained_weights_path, 
+            strict=False
+        )
 
         bands_mean, bands_std,pos_weight = get_marida_means_and_stds()
         standardization = transforms.Normalize(bands_mean, bands_std)
@@ -51,13 +53,11 @@ class MarineDebrisPredictor:
             standardization=standardization,
             transform = transforms.Compose([transforms.ToTensor(),
                                     RandomRotationTransform([-90, 0, 90, 180]),
-                                    transforms.RandomHorizontalFlip()])
-
-           # pretrained_model=self.pretrained_model,
-        )
+                                    transforms.RandomHorizontalFlip()]),
+            pretrained_model=self.pretrained_model)
         
 
-        self.model = MAEFineTuning()#pretrained_model=self.pretrained_model)
+        self.model = MAEFineTuning(pretrained_model=self.pretrained_model)
         # Create output directory
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
@@ -68,7 +68,7 @@ class MarineDebrisPredictor:
         if not os.path.exists(data_dir):
             raise FileNotFoundError(f"Data directory not found at {data_dir}")
     
-    def train(self, max_epochs: int = 100) -> pl.Trainer:
+    def train(self, max_epochs: int = 45) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
@@ -78,7 +78,7 @@ class MarineDebrisPredictor:
             devices=1,
             max_epochs=max_epochs,
             logger=logger,
-            gradient_clip_val=1.0,
+            gradient_clip_val=0.5,
             enable_progress_bar=True,
             #val_check_interval=1.0,
             #limit_train_batches=1, 

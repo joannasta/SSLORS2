@@ -6,15 +6,14 @@ import json
 import os
 cwd = os.getcwd()
 print(cwd)
-path = cwd + '/results/inference/bathymetry/'
-data_agia_napa = json.load(open(path+"agia_napa_10000.json"))
-data_puck_lagoon = json.load(open(path+"puck_lagoon_10000.json"))
-data = {"agia_napa": data_agia_napa, "puck_lagoon": data_puck_lagoon}
+path = cwd + '/results/inference/marine_debris/'
+data_marida = json.load(open(path+"results_marida.json"))
+data = {"marida": data_marida }
 
 # Grouped Bar Chart (Agia Napa)
-models = list(data["agia_napa"].keys())
-metrics = list(data["agia_napa"]["baseline"].keys())
-values = [[data["agia_napa"][model][metric] for model in models] for metric in metrics]
+models = list(data["marida"].keys())
+metrics = list(data["marida"]["baseline"].keys())
+values = [[data["marida"][model][metric] for model in models] for metric in metrics]
 
 x = range(len(models))
 width = 0.2
@@ -25,16 +24,16 @@ for i, metric in enumerate(metrics):
 
 plt.xticks([pos + width for pos in x], models, rotation=45, ha='right')
 plt.legend()
-plt.title("Model Performance Comparison - Agia Napa")
+plt.title("Model Performance Comparison")
 plt.ylabel("Metric Value")
 plt.tight_layout()
-plt.savefig("Agia_Napa_BarChart.png")
+plt.savefig("Marida_BarChart.png")
 plt.close()
 
 # Grouped Bar Chart (Agia Napa)
-models = list(data["puck_lagoon"].keys())
-metrics = list(data["puck_lagoon"]["baseline"].keys())
-values = [[data["puck_lagoon"][model][metric] for model in models] for metric in metrics]
+models = list(data["marida"].keys())
+metrics = list(data["marida"]["baseline"].keys())
+values = [[data["marida"][model][metric] for model in models] for metric in metrics]
 
 x = range(len(models))
 width = 0.2
@@ -45,15 +44,15 @@ for i, metric in enumerate(metrics):
 
 plt.xticks([pos + width for pos in x], models, rotation=45, ha='right')
 plt.legend()
-plt.title("Model Performance Comparison - Puck Lagoon")
+plt.title("Model Performance Comparison ")
 plt.ylabel("Metric Value")
 plt.tight_layout()
-plt.savefig("Puck_Lagoon_BarChart.png")
+plt.savefig("Marida_BarChart.png")
 plt.close()
 
 # Line Charts (Metric Trends)
-metrics = list(data["agia_napa"]["baseline"].keys())
-models = list(data["agia_napa"].keys())
+metrics = list(data["marida"]["baseline"].keys())
+models = list(data["marida"].keys())
 regions = list(data.keys())
 
 plt.figure(figsize=(12, 8))
@@ -83,31 +82,18 @@ for region in regions:
     plt.close()
 
 
-# Delta Bar Chart of MAE
-delta_mae = {}
-
-for region in regions:
-    my_mae = data[region]["baseline"]["avg_test_mae"]
-    paper_mae = data[region]["paper_results"]["avg_test_mae"]
-    delta_mae[region] = my_mae - paper_mae
-
-plt.figure(figsize=(8, 6))
-plt.bar(delta_mae.keys(), delta_mae.values())
-plt.title("Delta MAE: My Baseline vs. Paper Results")
-plt.ylabel("Delta MAE")
-plt.tight_layout()
-plt.savefig("Delta_MAE_BarChart.png")
-plt.close()
 
 # Delta Scatter Plot of MAE and RMSE
 plt.figure(figsize=(8, 6))
 for region in regions:
-    my_mae = data[region]["baseline"]["avg_test_mae"]
-    paper_mae = data[region]["paper_results"]["avg_test_mae"]
-    my_rmse = data[region]["baseline"]["avg_test_rmse"]
-    paper_rmse = data[region]["paper_results"]["avg_test_rmse"]
-    plt.scatter(my_mae, paper_mae, label=f"{region} MAE")
-    plt.scatter(my_rmse, paper_rmse, label=f"{region} RMSE")
+    my_iou = data[region]["baseline"]["IoU"]
+    paper_iou = data[region]["paper_results"]["IoU"]
+    my_pa = data[region]["baseline"]["PA"]
+    paper_pa = data[region]["paper_results"]["PA"]
+    my_f1 = data[region]["baseline"]["PA"]
+    paper_f1 = data[region]["paper_results"]["PA"]
+    plt.scatter(my_iou, paper_pa, my_f1,label=f"{region} IoU")
+    plt.scatter(my_iou, paper_pa, my_f1,label=f"{region} PA")
 
 plt.plot([min(plt.xlim()[0], plt.ylim()[0]), max(plt.xlim()[1], plt.ylim()[1])],
          [min(plt.xlim()[0], plt.ylim()[0]), max(plt.xlim()[1], plt.ylim()[1])],

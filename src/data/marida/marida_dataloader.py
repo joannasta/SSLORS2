@@ -25,6 +25,7 @@ class MaridaDataModule(pl.LightningDataModule):
                 standardization=self.standardization, path=self.root_dir,
                 pretrained_model=self.pretrained_model
             )
+
             self.val_dataset = MaridaDataset(
                 root_dir=self.root_dir, mode='val', transform=self.transform,
                 standardization=self.standardization, path=self.root_dir,
@@ -39,13 +40,13 @@ class MaridaDataModule(pl.LightningDataModule):
             )
     def train_dataloader(self):
         """Return train dataloader."""
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     def val_dataloader(self):
         """Return validation dataloader."""
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 
     def test_dataloader(self):
         """Return test dataloader."""
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
 

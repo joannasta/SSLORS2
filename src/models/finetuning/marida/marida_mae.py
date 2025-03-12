@@ -16,28 +16,27 @@ import timm
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 import torchvision.transforms.functional as F
+import matplotlib.patches as mpatches
 
 # Project-specific imports
 from .marida_unet  import UNet_Marida
 from src.data.marida.marida_dataset import gen_weights
 from src.utils.finetuning_utils import calculate_metrics
-from config import get_marida_means_and_stds
-from src.utils.finetuning_utils import metrics_marida as Evaluation
+from config import get_marida_means_and_stds, labels_marida,cat_mapping_marida
+from src.utils.finetuning_utils import metrics_marida,confusion_matrix 
 
 # TODOs and planned experiments
 # - Perform ablation studies to test input combinations.
-# - Add auxiliary losses for decoded data.
-# - Implement attention mechanisms.
 # - Experiment with freezing and unfreezing encoder/decoder.
 # - Preprocess and verify decoded data quality.
 # - Experiment with learnable contributions for input balance.
-
+# -Experiment with size of model
 
 def gen_weights(class_distribution, c = 1.02):
     return 1/torch.log(c + class_distribution)
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,**kwargs):
+    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,**kwargs):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -47,6 +46,7 @@ class MAEFineTuning(pl.LightningModule):
         self.save_hyperparameters()
         self.run_dir = None  
         self.base_dir = "marine_debris_results"
+        self.pretrained_model=pretrained_model
 
 
         self.src_channels = 11
@@ -84,6 +84,12 @@ class MAEFineTuning(pl.LightningModule):
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
         self.projection_head = UNet_Marida(input_channels=11, out_channels=11)
+        self.fully_finetuning = False
+
+        if self.fully_finetuning:
+            for param in self.parameters():
+                param.requires_grad = True
+            self.projection_head.requires_grad_ = True
         self.test_step_outputs = []
 
         global class_distr
@@ -115,26 +121,19 @@ class MAEFineTuning(pl.LightningModule):
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
         return self.projection_head(embedding,images)
     
-    
-    #TODO Extracting maybe 3 channels first and if not change pretraining
-    #TODO EXTRACTING BEFORE OR AFTER ENCODER TRY BOTH
-    #TODO COMPARE WIHT MAGICBATHYNET
-    #TODO ENCODER / DECODER / PROJECTION HEAD
-    #TODO OVERFITTING ONE BATCH TO SEE IF THAT WORKS
-    #TODO NO SHUFFLING IN DATALOADER
-    #TODO LOKAL TESTING
     def training_step(self, batch, batch_idx):
         train_dir = "train_results"
         data, target,embedding = batch
         batch_size = data.shape[0]
-        prediction = self(data,embedding)
+        logits = self(data,embedding)
         target = target.long()
-        loss = self.criterion(prediction, target)
+        loss = self.criterion(logits, target)
+
 
         if batch_idx % 100 == 0:
             self.log_images(
                 data[0].cpu(),     
-                prediction[0],    
+                logits[0],    
                 target[0].cpu(),   
                 dir = train_dir 
             )
@@ -152,14 +151,14 @@ class MAEFineTuning(pl.LightningModule):
         val_dir="val_results"
         data, target,embedding = batch
         batch_size = data.shape[0]
-        prediction = self(data,embedding)
+        logits = self(data,embedding)
         target = target.long()
-        loss = self.criterion(prediction, target)
+        loss = self.criterion(logits, target)
 
         if batch_idx % 100 == 0:
             self.log_images(
                 data[0].cpu(),     
-                prediction[0],    
+                logits[0],    
                 target[0].cpu(),   
                 dir = val_dir 
             )
@@ -173,10 +172,14 @@ class MAEFineTuning(pl.LightningModule):
 
         return loss
     
+    
     def test_step(self, batch, batch_idx):
         test_dir = "test_results"
         data, target, embedding = batch
         batch_size = data.shape[0]
+        print(f"Batch {batch_idx}: Data shape: {data.shape}, Target shape: {target.shape}")
+        print(f"Batch {batch_idx}: Unique target values: {torch.unique(target)}")
+
         logits = self(data, embedding)
         target = target.long()
         loss = self.criterion(logits, target)
@@ -184,14 +187,13 @@ class MAEFineTuning(pl.LightningModule):
 
         # Accuracy metrics only on annotated pixels
         logits_moved = torch.movedim(logits, (0, 1, 2, 3), (0, 3, 1, 2))
-        logits_reshaped = logits_moved.reshape((-1, 11))
+        logits_reshaped = logits_moved.reshape((-1, 11))  # Assuming 11 classes are used
         target_reshaped = target.reshape(-1)
         mask = target_reshaped != -1
         logits_masked = logits_reshaped[mask]
         target_masked = target_reshaped[mask]
         probs = nn.functional.softmax(logits_masked, dim=1).cpu().numpy()
         target_cpu = target_masked.cpu().numpy()
-        print("probs", len(probs.argmax(1)))
 
         # Store predictions and ground truth in lists
         self.test_step_outputs.append({
@@ -199,7 +201,72 @@ class MAEFineTuning(pl.LightningModule):
             "targets": target_cpu.tolist(),
         })
 
+        # Visualize pixel labels
+        mask_2d = target != -1
+        pixel_locations = np.where(mask_2d[0].cpu().numpy())
+
+        predicted_labels = probs.argmax(1)
+        target_labels = target_cpu
+
+        visual_image = np.zeros((256, 256))
+        min_length = min(len(predicted_labels), len(pixel_locations[0]))
+
+        for i in range(min_length):
+            row = pixel_locations[0][i]
+            col = pixel_locations[1][i]
+            visual_image[row, col] = predicted_labels[i]
+        
+        self.log_images(
+                data[0].cpu(),
+                logits[0],
+                target[0].cpu(),
+                dir=test_dir)
+
+        visual_target_image = np.zeros((256, 256))
+        min_length = min(len(target_labels), len(pixel_locations[0]))
+
+        for i in range(min_length):
+            row = pixel_locations[0][i]
+            col = pixel_locations[1][i]
+            visual_target_image[row, col] = target_labels[i]
+
+        img = data[0].clone().cpu()
+        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None]) 
+        img = img[1:4, :, :]  
+        img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
+
+        img = np.clip(img, 0, np.percentile(img, 99))
+        img = (img / img.max() * 255).to(torch.uint8)
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+        img = img.permute(1,2,0)
+
+        axes[0].imshow(img)
+        axes[0].set_title("Original Image")
+        axes[0].axis('off')
+
+        # Plot original image
+        axes[1].imshow(visual_target_image)
+        axes[1].set_title("Ground Truth")
+        axes[1].axis('off')
+
+        # Plot prediction (as class labels)
+        axes[2].imshow(visual_image)  # Use a colormap for labels
+        axes[2].set_title("Prediction")
+        axes[2].axis('off')
+
+        # Add legend
+        patches = [mpatches.Patch(color=plt.cm.viridis(val / 15), label=key) for key, val in cat_mapping_marida.items()]
+        plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc='upper left')
+        dir_rel = os.path.join(self.run_dir, test_dir)  # Relative path
+        dir_abs = os.path.abspath(dir_rel)  # Absolute path
+        filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
+        self.test_image_count += 1
+
+        plt.savefig(filename)  # Save using absolute path
+        plt.show()
+
         return loss
+
 
     def on_train_start(self):
         self.log_results()
@@ -214,11 +281,20 @@ class MAEFineTuning(pl.LightningModule):
         all_predictions = np.array(all_predictions)
         all_targets = np.array(all_targets)
 
-        acc = Evaluation(all_predictions, all_targets)
+        # In on_test_epoch_end:
+        print(f"Number of predictions: {len(all_predictions)}, Number of targets: {len(all_targets)}")
+        print(f"Unique predictions: {np.unique(all_predictions)}, Unique targets: {np.unique(all_targets)}")
+        print(f"Number of masked values: {np.sum(all_targets == -1)}")
+
+
+        acc = metrics_marida( all_targets,all_predictions,)
         for key, value in acc.items():
             prefix = "test"
             self.log(f"{prefix}_{key}", value) 
         print(f"Evaluation: {acc}")
+        conf_mat = confusion_matrix(all_targets, all_predictions, labels_marida)
+        print("Confusion Matrix:  \n" + str(conf_mat.to_string()))
+
 
         self.test_step_outputs.clear() # Clear the outputs.
         

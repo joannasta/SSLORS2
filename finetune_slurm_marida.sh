@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=11:00:00                   # Time limit
-#SBATCH --output=logs/finetune_slurm_marida.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_marida.err   # Error log
+#SBATCH --output=logs/finetune_slurm_test_unet_marida.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_test_unet_marida.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -21,8 +21,8 @@ NUM_WORKERS=1                             # Number of data loader workers
 MODEL=mae                                 # Model name
 TRAIN_BATCH_SIZE=5                   # Training batch size
 VAL_BATCH_SIZE=5                    # Validation batch size
-LEARNING_RATE=2e-4   #1e-6                  # Learning rate
-EPOCHS=10                              # Number of epochs
+LEARNING_RATE=2e-5  #2e-4                 # Learning rate
+EPOCHS=45                             # Number of epochs
 PRETRAINED_MODEL="./results/trains/training_logs/11-channels/checkpoints/epoch=32-step=54747.ckpt" # Path to pretrained model
 DATASET_PATH="/faststorage/joanna/marida/MARIDA" # Dataset path
 SEED=42                                   # Seed for reproducibility

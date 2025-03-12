@@ -8,10 +8,12 @@ Python Version: 3.7.10
 Description: unet.py Unet model for pixel-level semantic segmentation.
 '''
 
+
 import torch
 import numpy as np
 from torch import nn
 import random
+import torch.nn.functional as F
 
 random.seed(0)
 np.random.seed(0)
@@ -51,10 +53,8 @@ class Up(nn.Module):
             nn.ReLU(inplace=True))
 
     def forward(self, x1, x2):
-        
         x1 = self.up(x1)
         x = torch.cat([x2, x1], dim=1)
-        
         return self.conv(x)
 
 class UNet_Marida(nn.Module):
@@ -70,8 +70,9 @@ class UNet_Marida(nn.Module):
             nn.BatchNorm2d(hidden_channels),
             nn.ReLU(inplace=True))
 
-        self.combined_projection = nn.Linear(257, 256)  # Linear projection layer, adjusted input channels
-
+        self.channel_projection = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=1)  # Projection for x4
+        #self.combined_projection = nn.Linear(257, 256)  # Linear projection layer, adjusted input channels
+        self.combined_projection = nn.Linear(129, 128)
         # Contracting Path
         self.down1 = Down(hidden_channels, 2 * hidden_channels)
         self.down2 = Down(2 * hidden_channels, 4 * hidden_channels)
@@ -96,11 +97,19 @@ class UNet_Marida(nn.Module):
         x4 = self.down3(x3)
         x5 = self.down4(x4)
 
+        x_resized = torch.nn.functional.interpolate(x, size=x5.shape[2:], mode='bilinear')
+        combined = torch.cat([x_resized, x5], dim=1)  # Concatenate along channel dimension
+        batch_size, channels, height, width = combined.shape
+        combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+        combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 128, 16, 16)
+
         # Expanding Path
         x6 = self.up1(x5, x4)
+        #x6 = self.up1(combined_projected, x4)
         x7 = self.up2(x6, x3)
         x8 = self.up3(x7, x2)
         x9 = self.up4(x8, x1)
+
         # Output Convolution Layer
         logits = self.outc(x9)
         return logits

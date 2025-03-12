@@ -4,12 +4,15 @@ import torch
 import numpy as np
 import random
 import os
-from tqdm import tqdm
-import rasterio
-from torch.utils.data import Dataset
-from pathlib import Path
 import torchvision.transforms as transforms
 import torchvision.transforms.functional as F
+import rasterio
+import torch.nn as nn
+
+from tqdm import tqdm
+from torch.utils.data import Dataset
+from pathlib import Path
+from config import get_means_and_stds
 
 
 # Handle potential import errors gracefully
@@ -24,11 +27,15 @@ class MaridaDataset(Dataset):
     def __init__(self, root_dir, mode='train', pretrained_model=None, transform=None, standardization=None, path=dataset_path, img_only_dir=None, agg_to_water=True, save_data=False):
         self.mode = mode
         self.root_dir = Path(root_dir)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.X = []
         self.y = []
         self.transform = transform
-        self.means, self.stds, self.pos_weight = get_marida_means_and_stds()
-
+        self.random = False
+        self.means,self.stds, self.pos_weight = get_marida_means_and_stds()
+        #self.means, self.stds = get_means_and_stds()
+        #self.means = self.means[:11]
+        #self.stds = self.stds[:11]
         if mode == 'train':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'train_X.txt'), dtype='str')
         elif mode == 'test':
@@ -39,15 +46,11 @@ class MaridaDataset(Dataset):
         else:
             raise ValueError(f"Unknown mode {mode}")
 
-        print("mode",mode)
-        print("self.ROIS",len(self.ROIs))
-        
-
         self.path = Path(path)
         self.embeddings = []
-        self.pretrained_model = pretrained_model
+        self.pretrained_model = pretrained_model.to(self.device)
         self.mode = mode
-        self.standardization = transforms.Normalize(self.means, self.stds) if standardization else None
+        self.standardization = transforms.Normalize(self.means[:11], self.stds[:11]) if standardization else None
         self.length = len(self.y)
         self.agg_to_water = agg_to_water
         self.save_data = save_data
@@ -58,8 +61,8 @@ class MaridaDataset(Dataset):
         self._load_data()
         if self.save_data:
             self._save_data_to_tiff()
-        if pretrained_model:
-            self._create_embeddings()
+
+        self._create_embeddings()
 
 
     def getnames(self):
@@ -90,8 +93,7 @@ class MaridaDataset(Dataset):
 
             except rasterio.errors.RasterioIOError as e:
                 print(f"Error opening file for ROI {roi}: {e}")
-            except Exception as e:
-                print(f"An unexpected error occurred for ROI {roi}: {e}")
+        print("impute nan tempshape",  (temp.shape[1],temp.shape[2],1))
         self.impute_nan = np.tile(self.means, (temp.shape[1],temp.shape[2],1))
 
         self.length = len(self.y)
@@ -145,19 +147,31 @@ class MaridaDataset(Dataset):
         return self.ROIs
 
     def _create_embeddings(self):
-        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data"/self.mode /"_images", bands=["B01","B02", "B03", "B04","B05","B06","B07","B08","B8A","B09","B11"])
+        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
         self.embeddings = []
+
+        def weights_init(m):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+        if self.random:
+            self.pretrained_model.cpu() # ensure the model is on the cpu.
+            self.pretrained_model.apply(weights_init)
+
         for idx in range(len(hydro_dataset)):
-            img = hydro_dataset[idx]
+            #print(f"Processing image index: {idx}") # print the index
+            img = hydro_dataset[idx].to(self.device)
             img = img.unsqueeze(0).to(self.pretrained_model.device)
-            # To pass images through hydro interpolate to 256,256
-            img = F.interpolate(img, size=(256,256), mode='nearest')
-            #self.embeddings.append(img)
 
             with torch.no_grad():
                 embedding = self.pretrained_model.forward_encoder(img)
-                self.embeddings.append(embedding.cpu())
+                #print("embedding", embedding)
+            self.embeddings.append(embedding.cpu())
+
         self.embeddings = torch.stack(self.embeddings).cpu()
+
 
     def __getitem__(self, index):
         img = self.X[index]
@@ -167,26 +181,26 @@ class MaridaDataset(Dataset):
             embedding = self.embeddings[index]
         else:
             embedding = torch.zeros(32,1,256,256) # Or torch.empty()
-        
-        img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')  # CxWxH to WxHxC
 
+        img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')  # CxWxH to WxHxC
+        #print(f"Image shape: {img.shape}, dtype: {img.dtype}")  
         nan_mask = np.isnan(img)
+        #print("Nan mask shape: ", nan_mask.shape)
         img[nan_mask] = self.impute_nan[nan_mask]
 
+        #print(f"Image shape after imputation: {img.shape}, dtype: {img.dtype}")  # Debug print
         if self.transform is not None:
             #target = target[:,:,np.newaxis]
             target = target.transpose(1, 2, 0)
             stack = np.concatenate([img, target], axis=-1).astype('float32') # In order to rotate-transform both mask and image
-        
+
             stack = self.transform(stack)
             img = stack[:-1,:,:]
             target = stack[-1,:,:]                                    # Recast target values back to int64 or torch long dtype
 
         if self.standardization is not None:
             img = self.standardization(img)
-
         return img, target, embedding
-    
 
 
 

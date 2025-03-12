@@ -69,21 +69,12 @@ class MAEFineTuning(pl.LightningModule):
         self.test_mae_list = []
         self.test_std_dev_list = []
         self.test_image_count = 0
+        self.fully_finetuning = True
 
-    def check_gradients(self):
-        # Unfreeze all parameters for fine-tuning
-        for param in self.parameters():
-            param.requires_grad = True  # Ensure all parameters can be updated during training
-        for name,param in self.named_parameters():
-            param.requires_grad = True
-        for param in self.pretrained_model.parameters():
-            param.requires_grad = True  # Ensure all parameters can be updated during training
-
-        # Unfreeze all layers in the backbone and decoder
-        for param in self.pretrained_model.backbone.parameters():
-            param.requires_grad = True
-        for param in self.pretrained_model.decoder.parameters():
-            param.requires_grad = True
+        if self.fully_finetuning:
+            for param in self.parameters():
+                param.requires_grad = True
+            self.projection_head.requires_grad_ = True
 
     def forward(self, images,embedding):
         #batch_size = images.shape[0]
@@ -176,7 +167,6 @@ class MAEFineTuning(pl.LightningModule):
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
 
-        #self.check_gradients()
         return loss
     
     def validation_step(self, batch, batch_idx):
@@ -271,9 +261,6 @@ class MAEFineTuning(pl.LightningModule):
         test_dir = "test_results"
         test_data, targets, embeddings = batch
         size = (256, 256)
-        print("test_data",test_data.shape)
-        print("targets",targets.shape)
-        print("embeddings",embeddings.shape)
         idx = 0
         
         for data, target,embedding in zip(test_data, targets,embeddings):

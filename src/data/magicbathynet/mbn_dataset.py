@@ -5,6 +5,7 @@ import torch
 import glob
 import re
 import torch.nn.functional as F  # Import for interpolation
+import torch.nn as nn
 
 from pathlib import Path
 from skimage import io # For image resizing
@@ -32,6 +33,8 @@ class MagicBathyNetDataset(Dataset):
         self.pretrained_model = pretrained_model
         self.train_images = train_images
         self.test_images = test_images
+        self.random = False
+        
         print("split_type:", split_type)
         print("Initializing DatasetProcessor...")
         self.processor = DatasetProcessor(
@@ -78,9 +81,22 @@ class MagicBathyNetDataset(Dataset):
     def __len__(self):
         return 10000
     
+
     def _create_embeddings(self):
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
         self.embeddings = []
+
+        def weights_init(m):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+        if self.random:
+            self.pretrained_model.cpu() # ensure the model is on the cpu.
+            self.pretrained_model.apply(weights_init)
+
+
         for idx in range(len(hydro_dataset)):
             img = hydro_dataset[idx]
             img = img.unsqueeze(0).to(self.pretrained_model.device)
@@ -88,14 +104,13 @@ class MagicBathyNetDataset(Dataset):
             #self.embeddings.append(img)
 
             with torch.no_grad():
-                device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-                self.pretrained_model.to(device)  # Move the model to the GPU
-                img = img.to(device)  # Move the input data to the GPU as well
-                embedding = self.pretrained_model.forward_encoder(img).to(self.pretrained_model.device)
-            #    embedding = torch.randn(embedding.shape)#.to(self.pretrained_model.device)
+                embedding = self.pretrained_model.forward_encoder(img)
+                print("embedding", embedding) # Uncomment this line.
             self.embeddings.append(embedding.cpu())
+
         self.embeddings = torch.stack(self.embeddings).cpu()
 
+    
 
     
     @classmethod
