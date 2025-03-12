@@ -104,8 +104,9 @@ class MagicBathyNetDataset(Dataset):
             #self.embeddings.append(img)
 
             with torch.no_grad():
+                device = next(self.pretrained_model.parameters()).device  # Get model's device
+                img = img.to(device)  # Move input image to the same device
                 embedding = self.pretrained_model.forward_encoder(img)
-                print("embedding", embedding) # Uncomment this line.
             self.embeddings.append(embedding.cpu())
 
         self.embeddings = torch.stack(self.embeddings).cpu()

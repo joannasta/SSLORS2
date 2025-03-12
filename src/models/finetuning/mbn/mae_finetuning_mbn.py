@@ -69,7 +69,7 @@ class MAEFineTuning(pl.LightningModule):
         self.test_mae_list = []
         self.test_std_dev_list = []
         self.test_image_count = 0
-        self.fully_finetuning = True
+        self.fully_finetuning = False
 
         if self.fully_finetuning:
             for param in self.parameters():

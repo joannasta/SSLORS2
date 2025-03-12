@@ -22,8 +22,8 @@ class HydroDataset(Dataset):
         self.band_means, self.band_stds,_ = config.get_marida_means_and_stds()
         self.transforms = transforms
         self.impute_nan = np.tile(self.band_means, (256,256,1))
-        self.norm_param_depth = NORM_PARAM_DEPTH["agia_napa"]
-        self.norm_param = np.load(NORM_PARAM_PATHS["agia_napa"])
+        self.norm_param_depth = NORM_PARAM_DEPTH["agia_napa"] #puck_lagoon
+        self.norm_param = np.load(NORM_PARAM_PATHS["agia_napa"]) #puck_lagoon
 
     def __len__(self):
         return len(self.file_paths)
@@ -48,7 +48,7 @@ class HydroDataset(Dataset):
                 if len(self.bands) == 11:
                     sample = (sample - means[:11, None, None]) / stds[:11, None, None]
                 else:
-                    sample = (sample - means[1:4, None, None]) / stds[1:4, None, None]
+                    sample = (sample - means) / stds
                 if self.transforms is not None:
                     sample = self.transforms(sample)
                 return sample.float()
