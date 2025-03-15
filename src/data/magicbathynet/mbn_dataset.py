@@ -34,6 +34,7 @@ class MagicBathyNetDataset(Dataset):
         self.train_images = train_images
         self.test_images = test_images
         self.random = False
+        self.fully_finetuned = True
         
         print("split_type:", split_type)
         print("Initializing DatasetProcessor...")
@@ -67,7 +68,8 @@ class MagicBathyNetDataset(Dataset):
         self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
         self.embeddings = []
         print("creating embeddings...")
-        self._create_embeddings()
+        if not self.fully_finetuned:
+            self._create_embeddings()
         print("embeddings created.")
         self.norm_param_depth = NORM_PARAM_DEPTH[location]
         self.norm_param = np.load(NORM_PARAM_PATHS[location])
@@ -99,17 +101,23 @@ class MagicBathyNetDataset(Dataset):
 
         for idx in range(len(hydro_dataset)):
             img = hydro_dataset[idx]
-            img = img.unsqueeze(0).to(self.pretrained_model.device)
+            img = img.unsqueeze(0)
             img = F.interpolate(img, size=(256,256), mode='nearest')
             #self.embeddings.append(img)
-
-            with torch.no_grad():
-                device = next(self.pretrained_model.parameters()).device  # Get model's device
-                img = img.to(device)  # Move input image to the same device
-                embedding = self.pretrained_model.forward_encoder(img)
-            self.embeddings.append(embedding.cpu())
-
+            if not self.fully_finetuned:
+                with torch.no_grad():
+                    embedding = self.pretrained_model.forward_encoder(img)
+                self.embeddings.append(embedding.cpu())
         self.embeddings = torch.stack(self.embeddings).cpu()
+
+    def _finetune_embeddings(self,idx):
+        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
+
+        #print(f"Processing image index: {idx}") # print the index
+        img = hydro_dataset[idx]
+        img = img.unsqueeze(0)
+        img = F.interpolate(img, size=(256,256), mode='nearest')
+        return img
 
     
 
@@ -163,7 +171,11 @@ class MagicBathyNetDataset(Dataset):
         
         data_p_tensor = torch.from_numpy(data_p)
         label_p_tensor = torch.from_numpy(label_p)
-        embedding = self.embeddings[random_idx].cpu()
+
+        if self.pretrained_model and not self.fully_finetuned:
+            embedding = self.embeddings[random_idx]
+        else:
+            embedding = self._finetune_embeddings(random_idx)
 
         return (data_p_tensor,
                 label_p_tensor,embedding)

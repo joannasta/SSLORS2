@@ -104,8 +104,8 @@ class UNet_Marida(nn.Module):
         combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 128, 16, 16)
 
         # Expanding Path
-        x6 = self.up1(x5, x4)
-        #x6 = self.up1(combined_projected, x4)
+        #x6 = self.up1(x5, x4)
+        x6 = self.up1(combined_projected, x4)
         x7 = self.up2(x6, x3)
         x8 = self.up3(x7, x2)
         x9 = self.up4(x8, x1)

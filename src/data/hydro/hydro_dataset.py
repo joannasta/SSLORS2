@@ -22,17 +22,15 @@ class HydroDataset(Dataset):
         self.band_means, self.band_stds,_ = config.get_marida_means_and_stds()
         self.transforms = transforms
         self.impute_nan = np.tile(self.band_means, (256,256,1))
-        self.norm_param_depth = NORM_PARAM_DEPTH["agia_napa"] #puck_lagoon
-        self.norm_param = np.load(NORM_PARAM_PATHS["agia_napa"]) #puck_lagoon
+        self.norm_param_depth = NORM_PARAM_DEPTH["puck_lagoon"] #puck_lagoon
+        self.norm_param = np.load(NORM_PARAM_PATHS["puck_lagoon"]) #puck_lagoon
 
     def __len__(self):
         return len(self.file_paths)
     
     def __getitem__(self, idx: int):
         file_path = self.file_paths[idx]
-        #means, stds,_ = get_marida_means_and_stds()#get_means_and_stds()
         #means, stds =  get_means_and_stds()
-        means, stds = self.norm_param[0][:, np.newaxis, np.newaxis], self.norm_param[1][:, np.newaxis, np.newaxis] 
         try:
             with rasterio.open(file_path) as src:
                 bands = []
@@ -42,12 +40,14 @@ class HydroDataset(Dataset):
                     bands.append(band_tensor)
                 sample = torch.cat(bands, dim=0)
                 sample = sample.contiguous()
-                #nan_mask = torch.from_numpy(np.isnan(sample.numpy()))
-                #num_nans = torch.sum(nan_mask).item()
-                #sample[nan_mask] = torch.from_numpy(self.impute_nan.transpose(2, 1, 0))[nan_mask]
                 if len(self.bands) == 11:
+                    nan_mask = torch.from_numpy(np.isnan(sample.numpy()))
+                    num_nans = torch.sum(nan_mask).item()
+                    sample[nan_mask] = torch.from_numpy(self.impute_nan.transpose(2, 1, 0))[nan_mask]
+                    means, stds,_ = get_marida_means_and_stds()#get_means_and_stds()
                     sample = (sample - means[:11, None, None]) / stds[:11, None, None]
                 else:
+                    means, stds = self.norm_param[0][:, np.newaxis, np.newaxis], self.norm_param[1][:, np.newaxis, np.newaxis] 
                     sample = (sample - means) / stds
                 if self.transforms is not None:
                     sample = self.transforms(sample)

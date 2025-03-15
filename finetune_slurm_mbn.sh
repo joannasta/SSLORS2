@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=11:00:00                    # Time limit
-#SBATCH --output=logs/finetune_slurm_agia_napa_mbn_unet_baseline.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_agia_napa_mbn_unet_baseline.err   # Error log
+#SBATCH --output=logs/finetune_slurm_puck_lagoon_ff_TEST.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_puck_lagoon_ff_TEST.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -19,8 +19,8 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 DEVICES=1                                 # Number of devices for training
 NUM_WORKERS=32                             # Number of data loader workers
 MODEL=mae                                 # Model name
-TRAIN_BATCH_SIZE=4                    # Training batch size
-VAL_BATCH_SIZE=4                     # Validation batch size
+TRAIN_BATCH_SIZE=1                    # Training batch size
+VAL_BATCH_SIZE=1                     # Validation batch size
 LEARNING_RATE=1e-4 #1e-5                  # Learning rate
 EPOCHS=10                             # Number of epochs
 PRETRAINED_MODEL="./results/trains/training_logs/3-channels/checkpoints/epoch=99-step=132700.ckpt" # Path to pretrained model

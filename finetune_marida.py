@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from scipy import ndimage
 import scipy
 import torch
+import torch.multiprocessing as mp
 import pytorch_lightning as pl
 
 from pytorch_lightning import Trainer
@@ -123,4 +124,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method('spawn')
     main()

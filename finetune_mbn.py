@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import scipy
 import torch
 import pytorch_lightning as pl
+import torch.multiprocessing as mp
 
 from scipy import ndimage
 from pytorch_lightning import Trainer
@@ -27,7 +28,7 @@ class BathymetryPredictor:
         resize_to: Tuple[int, int] = (3, 256, 256)
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.location = "agia_napa"
+        self.location = "puck_lagoon"
         self.pretrained_model = MAE.load_from_checkpoint(
             pretrained_weights_path, 
             strict=False
@@ -98,4 +99,5 @@ def main():
 
 
 if __name__ == "__main__":
+    mp.set_start_method('spawn')
     main()

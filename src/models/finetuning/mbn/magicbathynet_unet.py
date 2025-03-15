@@ -36,7 +36,8 @@ class UNet_bathy(nn.Module):
         x2 = self.encoder[1](x1)
         x3 = self.encoder[2](x2)
         x4 = self.encoder[3](x3)
-
+        print("x shape:", x.shape)
+        print("x4 shape:", x4.shape)
         x_resized = F.interpolate(x, size=x4.shape[2:], mode='bilinear')
         combined = torch.cat([x_resized, x4], dim=1)  # Concatenate along channel dimension
 
@@ -44,8 +45,8 @@ class UNet_bathy(nn.Module):
         combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
         combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
 
-        #x = self.decoder[0](combined_projected, x3)
-        x = self.decoder[0](x4, x3)
+        x = self.decoder[0](combined_projected, x3)
+        #x = self.decoder[0](x4, x3)
         x = self.decoder[1](x, x2)
         x = self.decoder[2](x, x1)
         output = self.decoder[3](x)

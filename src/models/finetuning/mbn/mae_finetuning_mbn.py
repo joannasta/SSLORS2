@@ -47,7 +47,6 @@ class MAEFineTuning(pl.LightningModule):
         self.stride = MODEL_CONFIG["stride"]
 
         self.projection_head = UNet_bathy(in_channels=3, out_channels=1)
-        self.projection_head.requires_grad_=True
         self.cache = True
         self.criterion = CustomLoss()
         
@@ -69,7 +68,7 @@ class MAEFineTuning(pl.LightningModule):
         self.test_mae_list = []
         self.test_std_dev_list = []
         self.test_image_count = 0
-        self.fully_finetuning = False
+        self.fully_finetuning = True
 
         if self.fully_finetuning:
             for param in self.parameters():
@@ -77,11 +76,14 @@ class MAEFineTuning(pl.LightningModule):
             self.projection_head.requires_grad_ = True
 
     def forward(self, images,embedding):
-        #batch_size = images.shape[0]
+        batch_size = images.shape[0]
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
-        #embedding = embedding.squeeze(0)
-        #embedding = self.pretrained_model.forward_encoder(embedding)
-        #embedding = embedding.unsqueeze(0)
+        if self.fully_finetuning:
+            embedding = embedding.squeeze(0)
+            embedding = self.pretrained_model.forward_encoder(embedding)
+            embedding = embedding.unsqueeze(0)
+            print("embedding",embedding.shape)
+            print("images",images.shape)
         return self.projection_head(embedding,images)
     
     def training_step(self, batch,batch_idx):

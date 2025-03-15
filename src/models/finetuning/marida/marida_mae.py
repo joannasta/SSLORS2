@@ -25,6 +25,8 @@ from src.utils.finetuning_utils import calculate_metrics
 from config import get_marida_means_and_stds, labels_marida,cat_mapping_marida
 from src.utils.finetuning_utils import metrics_marida,confusion_matrix 
 
+from src.data.hydro.hydro_dataset import HydroDataset
+
 # TODOs and planned experiments
 # - Perform ablation studies to test input combinations.
 # - Experiment with freezing and unfreezing encoder/decoder.
@@ -84,7 +86,7 @@ class MAEFineTuning(pl.LightningModule):
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1)
         self.projection_head = UNet_Marida(input_channels=11, out_channels=11)
-        self.fully_finetuning = False
+        self.fully_finetuning = True
 
         if self.fully_finetuning:
             for param in self.parameters():
@@ -116,8 +118,33 @@ class MAEFineTuning(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
+    def preprocess_hydro(self, data):
+        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
+        self.embeddings = []
+
+        for idx in range(len(hydro_dataset)):
+            #print(f"Processing image index: {idx}") # print the index
+            img = hydro_dataset[idx].to(self.device)
+            img = img.unsqueeze(0).to(self.pretrained_model.device)
+            if not self.fully_finetuning:
+                with torch.no_grad():
+                    embedding = self.pretrained_model.forward_encoder(img)
+
+                    print("embeddings shape", embedding)
+
+                self.embeddings.append(embedding.cpu())
+
+        self.embeddings = torch.stack(self.embeddings).cpu()
+
+
+
     def forward(self, images,embedding):
         #batch_size = images.shape[0]
+        if self.fully_finetuning:
+            embedding = embedding.squeeze(1)
+            print("embedding",embedding.shape)
+            embedding = self.pretrained_model.forward_encoder(embedding)
+            embedding = embedding.unsqueeze(1)
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
         return self.projection_head(embedding,images)
     

@@ -12,9 +12,6 @@ import torch.nn as nn
 from tqdm import tqdm
 from torch.utils.data import Dataset
 from pathlib import Path
-from config import get_means_and_stds
-
-
 # Handle potential import errors gracefully
 
 from src.data.hydro.hydro_dataset import HydroDataset
@@ -31,11 +28,10 @@ class MaridaDataset(Dataset):
         self.X = []
         self.y = []
         self.transform = transform
-        self.random = False
+        self.random = False 
+        self.fully_finetuning = True
         self.means,self.stds, self.pos_weight = get_marida_means_and_stds()
-        #self.means, self.stds = get_means_and_stds()
-        #self.means = self.means[:11]
-        #self.stds = self.stds[:11]
+
         if mode == 'train':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'train_X.txt'), dtype='str')
         elif mode == 'test':
@@ -48,7 +44,7 @@ class MaridaDataset(Dataset):
 
         self.path = Path(path)
         self.embeddings = []
-        self.pretrained_model = pretrained_model.to(self.device)
+        self.pretrained_model = pretrained_model
         self.mode = mode
         self.standardization = transforms.Normalize(self.means[:11], self.stds[:11]) if standardization else None
         self.length = len(self.y)
@@ -61,8 +57,8 @@ class MaridaDataset(Dataset):
         self._load_data()
         if self.save_data:
             self._save_data_to_tiff()
-
-        self._create_embeddings()
+        if not self.fully_finetuning:
+            self._create_embeddings()
 
 
     def getnames(self):
@@ -145,7 +141,7 @@ class MaridaDataset(Dataset):
 
     def getnames(self):
         return self.ROIs
-
+    
     def _create_embeddings(self):
         hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
         self.embeddings = []
@@ -157,40 +153,45 @@ class MaridaDataset(Dataset):
                     nn.init.zeros_(m.bias)
 
         if self.random:
+            print("Random weights initialization")
             self.pretrained_model.cpu() # ensure the model is on the cpu.
             self.pretrained_model.apply(weights_init)
 
         for idx in range(len(hydro_dataset)):
             #print(f"Processing image index: {idx}") # print the index
-            img = hydro_dataset[idx].to(self.device)
-            img = img.unsqueeze(0).to(self.pretrained_model.device)
-
-            with torch.no_grad():
-                embedding = self.pretrained_model.forward_encoder(img)
-                #print("embedding", embedding)
-            self.embeddings.append(embedding.cpu())
+            img = hydro_dataset[idx]
+            img = img.unsqueeze(0)
+            if not self.fully_finetuning:
+                with torch.no_grad():
+                    embedding = self.pretrained_model.forward_encoder(img)
+                self.embeddings.append(embedding.cpu())
 
         self.embeddings = torch.stack(self.embeddings).cpu()
+
+    def _finetune_embeddings(self,idx):
+        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
+
+        #print(f"Processing image index: {idx}") # print the index
+        img = hydro_dataset[idx]
+        img = img.unsqueeze(0)
+        return img
 
 
     def __getitem__(self, index):
         img = self.X[index]
         target = self.y[index]
 
-        if self.pretrained_model:
+        if self.pretrained_model and not self.fully_finetuning:
             embedding = self.embeddings[index]
         else:
-            embedding = torch.zeros(32,1,256,256) # Or torch.empty()
+            embedding = self._finetune_embeddings(index)
 
         img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')  # CxWxH to WxHxC
-        #print(f"Image shape: {img.shape}, dtype: {img.dtype}")  
         nan_mask = np.isnan(img)
-        #print("Nan mask shape: ", nan_mask.shape)
         img[nan_mask] = self.impute_nan[nan_mask]
 
         #print(f"Image shape after imputation: {img.shape}, dtype: {img.dtype}")  # Debug print
         if self.transform is not None:
-            #target = target[:,:,np.newaxis]
             target = target.transpose(1, 2, 0)
             stack = np.concatenate([img, target], axis=-1).astype('float32') # In order to rotate-transform both mask and image
 

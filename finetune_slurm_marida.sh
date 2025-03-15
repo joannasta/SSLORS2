@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=Marida_FineTune           # Job name
+#SBATCH --job-name=Marida_SSL           # Job name
 #SBATCH --partition=thesis_student        # Partition name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=11:00:00                   # Time limit
-#SBATCH --output=logs/finetune_slurm_test_unet_marida.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_test_unet_marida.err   # Error log
+#SBATCH --output=logs/finetune_slurm_TEST_ff_marida.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_TEST_ff_marida.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
