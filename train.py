@@ -44,7 +44,7 @@ def main(args):
     
     if args.model == "mae":
         model = model_class(
-            src_channels=11,
+            src_channels=12,
             mask_ratio=0.9,
             decoder_dim=args.decoder_dim,
         )
@@ -57,8 +57,6 @@ def main(args):
     datamodule = HydroDataModule(
         data_dir=args.dataset,
         batch_size=args.train_batch_size,
-        shuffle=True,
-        num_workers=args.num_workers,
         transform =  T.Compose([
             T.RandomResizedCrop(
                     256,

@@ -19,12 +19,14 @@ class HydroDataModule(LightningDataModule):
         self,
         data_dir: str,
         bands: List[str] = None,
-        transform = None
+        transform = None,
+        batch_size = 64,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
         self.bands = bands
         self.transform = transform
+        self.batch_size = batch_size
 
     def setup(self, stage=None):
         # Use stage to load data depending on the task
@@ -65,8 +67,8 @@ class HydroDataModule(LightningDataModule):
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
-            shuffle=self.shuffle,
-            num_workers=self.num_workers,
+            shuffle=True,
+            num_workers=8,
             collate_fn=collate_fn
         )
 
@@ -76,7 +78,7 @@ class HydroDataModule(LightningDataModule):
                 self.val_dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=self.num_workers,
+                num_workers=8,
                 collate_fn=collate_fn
             )
         else:
@@ -88,7 +90,7 @@ class HydroDataModule(LightningDataModule):
                 self.test_dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=self.num_workers,
+                num_workers=8,
                 collate_fn=collate_fn
             )
         else:

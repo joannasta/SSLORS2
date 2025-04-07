@@ -25,10 +25,13 @@ class BathymetryPredictor:
         data_dir: str, 
         output_dir: str = "./inference_results/bathymetry",
         batch_size: int = 16,
-        resize_to: Tuple[int, int] = (3, 256, 256)
+        resize_to: Tuple[int, int] = (3, 256, 256),
+        epochs: int = 10,
+        location: str = "agia_napa"
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.location = "puck_lagoon"
+        self.epochs = epochs
+        self.location = location
         self.pretrained_model = MAE.load_from_checkpoint(
             pretrained_weights_path, 
             strict=False
@@ -53,7 +56,7 @@ class BathymetryPredictor:
         trainer = Trainer(
             accelerator=self.device.type,
             devices=1,
-            max_epochs=max_epochs,
+            max_epochs=self.epochs,
             logger=logger,
             gradient_clip_val=1.0,
             enable_progress_bar=True,
@@ -85,14 +88,16 @@ def main():
     parser.add_argument("--data_dir", required=True, help="Path to data directory")
     parser.add_argument("--output_dir", default="./inference_results", help="Output directory")
     parser.add_argument("--resize-to", type=int, nargs=2, default=(256, 256), help="Resize images")
-
+    parser.add_argument("--location", type=str, default="agia_napa", help="Location of the dataset")
     args = parser.parse_args()
     predictor = BathymetryPredictor(
         pretrained_weights_path=args.weights,
         data_dir=args.data_dir,
         output_dir=args.output_dir,
         resize_to=tuple(args.resize_to),
-        batch_size=args.train_batch_size
+        batch_size=args.train_batch_size,
+        epochs=args.epochs,
+        location=args.location
     )
 
     predictor.train()

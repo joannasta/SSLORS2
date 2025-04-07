@@ -35,7 +35,8 @@ class MagicBathyNetDataset(Dataset):
         self.test_images = test_images
         self.random = False
         self.fully_finetuned = True
-        
+        self.location = location
+
         print("split_type:", split_type)
         print("Initializing DatasetProcessor...")
         self.processor = DatasetProcessor(
@@ -65,14 +66,14 @@ class MagicBathyNetDataset(Dataset):
         self.data_files = filtered_data_files
         self.label_files = filtered_label_files
 
-        self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
+        self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"],location=location)
         self.embeddings = []
         print("creating embeddings...")
         if not self.fully_finetuned:
             self._create_embeddings()
         print("embeddings created.")
-        self.norm_param_depth = NORM_PARAM_DEPTH[location]
-        self.norm_param = np.load(NORM_PARAM_PATHS[location])
+        self.norm_param_depth = NORM_PARAM_DEPTH[self.location]
+        self.norm_param = np.load(NORM_PARAM_PATHS[self.location])
         self.crop_size = MODEL_CONFIG["crop_size"]
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
@@ -85,7 +86,7 @@ class MagicBathyNetDataset(Dataset):
     
 
     def _create_embeddings(self):
-        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
+        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"],location=self.location)
         self.embeddings = []
 
         def weights_init(m):
@@ -106,12 +107,14 @@ class MagicBathyNetDataset(Dataset):
             #self.embeddings.append(img)
             if not self.fully_finetuned:
                 with torch.no_grad():
+                    img = img.cuda()
+                    self.pretrained_model.to(img.device)  # Ensure model is on the same device as img
                     embedding = self.pretrained_model.forward_encoder(img)
                 self.embeddings.append(embedding.cpu())
         self.embeddings = torch.stack(self.embeddings).cpu()
 
     def _finetune_embeddings(self,idx):
-        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
+        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"],location=self.location)
 
         #print(f"Processing image index: {idx}") # print the index
         img = hydro_dataset[idx]

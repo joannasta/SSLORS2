@@ -28,8 +28,8 @@ class MaridaDataset(Dataset):
         self.X = []
         self.y = []
         self.transform = transform
-        self.random = False 
-        self.fully_finetuning = True
+        self.random = False
+        self.fully_finetuning = False
         self.means,self.stds, self.pos_weight = get_marida_means_and_stds()
 
         if mode == 'train':
@@ -158,9 +158,15 @@ class MaridaDataset(Dataset):
             self.pretrained_model.apply(weights_init)
 
         for idx in range(len(hydro_dataset)):
-            #print(f"Processing image index: {idx}") # print the index
             img = hydro_dataset[idx]
             img = img.unsqueeze(0)
+
+            # Get the device of the model
+            device = next(self.pretrained_model.parameters()).device
+
+            # Move the input image to the same device as the model
+            img = img.to(device)
+
             if not self.fully_finetuning:
                 with torch.no_grad():
                     embedding = self.pretrained_model.forward_encoder(img)

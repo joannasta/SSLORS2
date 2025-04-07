@@ -12,7 +12,7 @@ data = {"marida": data_marida }
 
 # Grouped Bar Chart (Agia Napa)
 models = list(data["marida"].keys())
-metrics = list(data["marida"]["baseline"].keys())
+metrics = list(data["marida"][ "Frozen_embedding"].keys())
 values = [[data["marida"][model][metric] for model in models] for metric in metrics]
 
 x = range(len(models))
@@ -32,7 +32,7 @@ plt.close()
 
 # Grouped Bar Chart (Agia Napa)
 models = list(data["marida"].keys())
-metrics = list(data["marida"]["baseline"].keys())
+metrics = list(data["marida"][ "Frozen_embedding"].keys())
 values = [[data["marida"][model][metric] for model in models] for metric in metrics]
 
 x = range(len(models))
@@ -51,7 +51,7 @@ plt.savefig("Marida_BarChart.png")
 plt.close()
 
 # Line Charts (Metric Trends)
-metrics = list(data["marida"]["baseline"].keys())
+metrics = list(data["marida"]["Frozen_embedding"].keys())
 models = list(data["marida"].keys())
 regions = list(data.keys())
 
@@ -86,12 +86,12 @@ for region in regions:
 # Delta Scatter Plot of MAE and RMSE
 plt.figure(figsize=(8, 6))
 for region in regions:
-    my_iou = data[region]["baseline"]["IoU"]
-    paper_iou = data[region]["paper_results"]["IoU"]
-    my_pa = data[region]["baseline"]["PA"]
-    paper_pa = data[region]["paper_results"]["PA"]
-    my_f1 = data[region]["baseline"]["PA"]
-    paper_f1 = data[region]["paper_results"]["PA"]
+    my_iou = data[region][ "Frozen_embedding"]["IoU"]
+    paper_iou = data[region][ "Unet_marida"]["IoU"]
+    my_pa = data[region][ "Frozen_embedding"]["PA"]
+    paper_pa = data[region][ "Unet_marida"]["PA"]
+    my_f1 = data[region][ "Frozen_embedding"]["PA"]
+    paper_f1 = data[region][ "Unet_marida"]["PA"]
     plt.scatter(my_iou, paper_pa, my_f1,label=f"{region} IoU")
     plt.scatter(my_iou, paper_pa, my_f1,label=f"{region} PA")
 

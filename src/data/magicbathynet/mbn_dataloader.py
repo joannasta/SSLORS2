@@ -13,6 +13,7 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         self.cache = cache
         self.pretrained_model = pretrained_model
         self.location = location
+        print("Dataloader location:",location)
 
     def setup(self, stage=None):
         # Use stage to load data depending on the task
@@ -35,8 +36,10 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 pretrained_model=self.pretrained_model,
                 location=self.location
             )
+            #self.val_dataset = self.train_dataset 
 
-        if stage == 'test' or stage is None:
+        if stage == 'test' or stage is None: #'test'
+            #self.test_dataset = self.train_dataset
             # Initialize test dataset for evaluation
             self.test_dataset = MagicBathyNetDataset(
                 root_dir=self.root_dir,
@@ -55,5 +58,4 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
 
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=7, shuffle=False, num_workers=4)
-
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)

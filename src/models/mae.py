@@ -209,9 +209,9 @@ class MAE(pl.LightningModule):
         stds = stds.to(device)
         
         # Denormalize the images
-        print("original images channels",stds[:11,None,None].shape)
-        original_images = (original_images  * stds[:11,None,None]) + means[:11,None,None]  # #(max_value - min_value + 1e-7) + min_value
-        reconstructed_images = (reconstructed_images  * stds[:11,None,None]) + means[:11,None,None] # #(max_value - min_value + 1e-7) + min_value
+        print("original images channels",stds[:,None,None].shape)
+        original_images = (original_images  * stds[:,None,None]) + means[:,None,None]  # #(max_value - min_value + 1e-7) + min_value
+        reconstructed_images = (reconstructed_images  * stds[:,None,None]) + means[:,None,None] # #(max_value - min_value + 1e-7) + min_value
 
         # Select RGB channels and permute dimensions
         original_images = original_images[ [2, 1, 0], :, :].permute(1, 2, 0).detach().cpu().numpy()

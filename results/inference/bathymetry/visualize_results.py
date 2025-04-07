@@ -13,7 +13,7 @@ data = {"agia_napa": data_agia_napa, "puck_lagoon": data_puck_lagoon}
 
 # Grouped Bar Chart (Agia Napa)
 models = list(data["agia_napa"].keys())
-metrics = list(data["agia_napa"]["baseline"].keys())
+metrics = list(data["agia_napa"][  "Frozen_embedding"].keys())
 values = [[data["agia_napa"][model][metric] for model in models] for metric in metrics]
 
 x = range(len(models))
@@ -33,7 +33,7 @@ plt.close()
 
 # Grouped Bar Chart (Agia Napa)
 models = list(data["puck_lagoon"].keys())
-metrics = list(data["puck_lagoon"]["baseline"].keys())
+metrics = list(data["puck_lagoon"]["Frozen_embedding"].keys())
 values = [[data["puck_lagoon"][model][metric] for model in models] for metric in metrics]
 
 x = range(len(models))
@@ -52,7 +52,7 @@ plt.savefig("Puck_Lagoon_BarChart.png")
 plt.close()
 
 # Line Charts (Metric Trends)
-metrics = list(data["agia_napa"]["baseline"].keys())
+metrics = list(data["agia_napa"]["Frozen_embedding"].keys())
 models = list(data["agia_napa"].keys())
 regions = list(data.keys())
 
@@ -87,8 +87,8 @@ for region in regions:
 delta_mae = {}
 
 for region in regions:
-    my_mae = data[region]["baseline"]["avg_test_mae"]
-    paper_mae = data[region]["paper_results"]["avg_test_mae"]
+    my_mae = data[region]["Frozen_embedding"]["avg_test_mae"]
+    paper_mae = data[region][  "Unet_magicbathynet"]["avg_test_mae"]
     delta_mae[region] = my_mae - paper_mae
 
 plt.figure(figsize=(8, 6))
@@ -102,10 +102,10 @@ plt.close()
 # Delta Scatter Plot of MAE and RMSE
 plt.figure(figsize=(8, 6))
 for region in regions:
-    my_mae = data[region]["baseline"]["avg_test_mae"]
-    paper_mae = data[region]["paper_results"]["avg_test_mae"]
-    my_rmse = data[region]["baseline"]["avg_test_rmse"]
-    paper_rmse = data[region]["paper_results"]["avg_test_rmse"]
+    my_mae = data[region]["Frozen_embedding"]["avg_test_mae"]
+    paper_mae = data[region][  "Unet_magicbathynet"]["avg_test_mae"]
+    my_rmse = data[region]["Frozen_embedding"]["avg_test_rmse"]
+    paper_rmse = data[region][  "Unet_magicbathynet"]["avg_test_rmse"]
     plt.scatter(my_mae, paper_mae, label=f"{region} MAE")
     plt.scatter(my_rmse, paper_rmse, label=f"{region} RMSE")
 

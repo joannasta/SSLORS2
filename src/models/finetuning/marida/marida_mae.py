@@ -2,6 +2,8 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.colors as mcolors
 import scipy
 
 # PyTorch and related libraries
@@ -214,7 +216,7 @@ class MAEFineTuning(pl.LightningModule):
 
         # Accuracy metrics only on annotated pixels
         logits_moved = torch.movedim(logits, (0, 1, 2, 3), (0, 3, 1, 2))
-        logits_reshaped = logits_moved.reshape((-1, 11))  # Assuming 11 classes are used
+        logits_reshaped = logits_moved.reshape((-1, 11))  
         target_reshaped = target.reshape(-1)
         mask = target_reshaped != -1
         logits_masked = logits_reshaped[mask]
@@ -264,34 +266,42 @@ class MAEFineTuning(pl.LightningModule):
 
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).to(torch.uint8)
-        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+        fig, axes = plt.subplots(1, 3, figsize=(14, 6))  # Adjusted figure size
         img = img.permute(1,2,0)
-
+        
         axes[0].imshow(img)
         axes[0].set_title("Original Image")
         axes[0].axis('off')
 
-        # Plot original image
         axes[1].imshow(visual_target_image)
         axes[1].set_title("Ground Truth")
         axes[1].axis('off')
 
-        # Plot prediction (as class labels)
         axes[2].imshow(visual_image)  # Use a colormap for labels
         axes[2].set_title("Prediction")
         axes[2].axis('off')
 
-        # Add legend
-        patches = [mpatches.Patch(color=plt.cm.viridis(val / 15), label=key) for key, val in cat_mapping_marida.items()]
-        plt.legend(handles=patches, bbox_to_anchor=(1.05, 1), loc='upper left')
-        dir_rel = os.path.join(self.run_dir, test_dir)  # Relative path
-        dir_abs = os.path.abspath(dir_rel)  # Absolute path
+        # Create a colormap
+        cmap = plt.cm.viridis
+        norm = mcolors.Normalize(vmin=0, vmax=12) # Use 12, because there are 13 classes 0-12
+
+        # Add colorbar
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])  # Required for matplotlib >= 3.1
+        cbar = fig.colorbar(sm, ax=axes[2], shrink=0.8, aspect=20) # Adjust shrink and aspect as needed
+        cbar.set_ticks(np.arange(0, 13)) # Set ticks for each class
+        keys = list(cat_mapping_marida.keys())[:-4]
+        cbar.set_ticklabels(list(cat_mapping_marida.keys())[:-2]) # Set tick labels from category mapping
+
+        # Save and show
+        dir_rel = os.path.join(self.run_dir, test_dir)
+        dir_abs = os.path.abspath(dir_rel)
         filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
         self.test_image_count += 1
-
+        
+        plt.tight_layout()
         plt.savefig(filename)  # Save using absolute path
         plt.show()
-
         return loss
 
 

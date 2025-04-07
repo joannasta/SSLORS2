@@ -82,8 +82,6 @@ class MAEFineTuning(pl.LightningModule):
             embedding = embedding.squeeze(0)
             embedding = self.pretrained_model.forward_encoder(embedding)
             embedding = embedding.unsqueeze(0)
-            print("embedding",embedding.shape)
-            print("images",images.shape)
         return self.projection_head(embedding,images)
     
     def training_step(self, batch,batch_idx):
