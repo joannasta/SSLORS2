@@ -18,7 +18,7 @@ from lightly.models.utils import (
 from lightly.transforms import MoCoV2Transform, utils
 
 class MoCo(pl.LightningModule):
-    def __init__(self,learning_rate=3e-3):
+    def __init__(self,learning_rate=3e-3,src_channels=12):
         super().__init__()
 
         # create a ResNet backbone and remove the classification head
@@ -27,6 +27,7 @@ class MoCo(pl.LightningModule):
             *list(resnet.children())[:-1],
             nn.AdaptiveAvgPool2d(1),
         )
+        self.src_channels = src_channels
         self.learning_rate = learning_rate
         # create a moco model based on ResNet
         self.projection_head = MoCoProjectionHead(512, 512, 128)

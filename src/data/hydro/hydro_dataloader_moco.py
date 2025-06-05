@@ -27,7 +27,8 @@ class HydroMoCoDataModule(LightningDataModule):
         bands: List[str] = None, 
         transform = None, 
         batch_size = 64, 
-        model_name = "moco" 
+        model_name = "moco",
+        num_workers: int = 8, 
     ): 
         super().__init__() 
         self.data_dir = Path(data_dir) 
@@ -35,6 +36,7 @@ class HydroMoCoDataModule(LightningDataModule):
         self.transform = transform 
         self.batch_size = batch_size 
         self.model_name = model_name 
+        self.num_workers = num_workers
 
     def setup(self, stage=None): 
         # Use stage to load data depending on the task 
@@ -43,14 +45,14 @@ class HydroMoCoDataModule(LightningDataModule):
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
                 compute_stats=False, 
-                transforms=self.transform, 
+                transform=self.transform, 
                 model_name = self.model_name 
             ) 
             self.val_dataset = HydroMoCoDataset( 
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
                 compute_stats=False, 
-                transforms=self.transform, 
+                transform=self.transform, 
                 model_name = self.model_name 
             ) 
 
@@ -60,7 +62,7 @@ class HydroMoCoDataModule(LightningDataModule):
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
                 compute_stats=False, 
-                transforms=self.transform, 
+                transform=self.transform, 
                 model_name = self.model_name 
             ) 
 
@@ -70,7 +72,7 @@ class HydroMoCoDataModule(LightningDataModule):
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
                 compute_stats=False, 
-                transforms=self.transform, 
+                transform=self.transform, 
                 model_name = self.model_name 
             ) 
 
@@ -79,7 +81,7 @@ class HydroMoCoDataModule(LightningDataModule):
             self.train_dataset, 
             batch_size=self.batch_size, 
             shuffle=True, 
-            num_workers=8, 
+            num_workers=self.num_workers, 
             collate_fn=collate_fn, 
             pin_memory=True, drop_last=True) 
 
@@ -89,7 +91,7 @@ class HydroMoCoDataModule(LightningDataModule):
                 self.val_dataset, 
                 batch_size=self.batch_size, 
                 shuffle=False, 
-                num_workers=8, 
+                num_workers=self.num_workers, 
                 collate_fn=collate_fn, 
                 pin_memory=True, drop_last=True 
             ) 
@@ -102,7 +104,7 @@ class HydroMoCoDataModule(LightningDataModule):
                 self.test_dataset, 
                 batch_size=self.batch_size, 
                 shuffle=False, 
-                num_workers=8, 
+                num_workers=self.num_workers, 
                 collate_fn=collate_fn, 
                 pin_memory=True, drop_last=True) 
         else: 

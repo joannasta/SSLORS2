@@ -17,23 +17,11 @@ from typing import Optional, List, Callable
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG, train_images, test_images
 from sklearn.cluster import KMeans
 
-class GaussianBlur(object):
-    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
-
-    def __init__(self, sigma=[.1, 2.]):
-        self.sigma = sigma
-
-    def __call__(self, x):
-        sigma = random.uniform(self.sigma[0], self.sigma[1])
-        gaussian_blur = T.GaussianBlur(kernel_size=7, sigma=sigma)
-        x = gaussian_blur(x)
-        return x
-
 class HydroMoCoDataset(Dataset):
     def __init__(
             self, path_dataset: Path, bands: List[str] = None,
             compute_stats: bool = False, location="agia_napa",
-            model_name="mae"):
+            model_name="mae",transform: Optional[Callable] = None):
         self.path_dataset = Path(path_dataset)
         self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
         self.bands = bands
@@ -44,19 +32,7 @@ class HydroMoCoDataset(Dataset):
         self.norm_param_depth = NORM_PARAM_DEPTH[self.location]
         self.norm_param = np.load(NORM_PARAM_PATHS[self.location])
 
-        self.augmentations = T.Compose([
-            T.Resize(256 * 2),
-            T.RandomResizedCrop(256, scale=(0.2, 1.)),
-            T.RandomApply([
-                # T.ColorJitter(0.4, 0.4, 0.4, 0.1)  # not strengthened
-            ], p=0.8),
-            # T.RandomGrayscale(p=0.2),
-            T.RandomApply(
-                [GaussianBlur([.1, 2.])], p=0.5),
-            T.RandomHorizontalFlip(),
-            T.ToTensor(),
-            # Normalization will be applied in __getitem__
-        ])
+        self.transform = transform
 
     def __len__(self):
         return len(self.file_paths)
@@ -111,23 +87,29 @@ class HydroMoCoDataset(Dataset):
         img = self._load_and_preprocess(file_path)
 
         if img is None:
-            return None
+            return None 
 
-        img1 = self.augmentations(img)
-        img2 = self.augmentations(img)
+        img_q, img_k = self.transform(img) 
 
-        # Apply normalization after augmentation
+        # Now, apply normalization to each of the two tensors individually.
         if len(self.bands) == 11:
             means, stds, _ = get_marida_means_and_stds()
-            img1 = (img1 - torch.tensor(means[:11, None, None])) / torch.tensor(stds[:11, None, None])
-            img2 = (img2 - torch.tensor(means[:11, None, None])) / torch.tensor(stds[:11, None, None])
+            # Convert means/stds to tensors once for efficiency within __getitem__
+            means_tensor = torch.tensor(means[:11, None, None], dtype=torch.float32)
+            stds_tensor = torch.tensor(stds[:11, None, None], dtype=torch.float32)
+            img_q = (img_q - means_tensor) / stds_tensor
+            img_k = (img_k - means_tensor) / stds_tensor
         elif len(self.bands) == 3:
             means, stds = self.norm_param[0][:, None, None], self.norm_param[1][:, None, None]
-            img1 = (img1 - torch.tensor(means)) / torch.tensor(stds)
-            img2 = (img2 - torch.tensor(means)) / torch.tensor(stds)
+            means_tensor = torch.tensor(means, dtype=torch.float32) # `means` is already (C,1,1)
+            stds_tensor = torch.tensor(stds, dtype=torch.float32) # `stds` is already (C,1,1)
+            img_q = (img_q - means_tensor) / stds_tensor
+            img_k = (img_k - means_tensor) / stds_tensor
         else:
             means, stds = get_means_and_stds()
-            img1 = (img1 - torch.tensor(means[:, None, None])) / torch.tensor(stds[:, None, None])
-            img2 = (img2 - torch.tensor(means[:, None, None])) / torch.tensor(stds[:, None, None])
+            means_tensor = torch.tensor(means[:, None, None], dtype=torch.float32)
+            stds_tensor = torch.tensor(stds[:, None, None], dtype=torch.float32)
+            img_q = (img_q - means_tensor) / stds_tensor
+            img_k = (img_k - means_tensor) / stds_tensor
 
-        return img1, img2
+        return img_q, img_k 

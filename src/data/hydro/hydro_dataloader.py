@@ -25,7 +25,7 @@ class HydroDataModule(LightningDataModule):
         num_workers: int = 2,
         val_split: float = 0.1,
         test_split: float = 0.1,
-        transform = None
+        transform = None,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -37,97 +37,73 @@ class HydroDataModule(LightningDataModule):
         self.test_split = test_split
         self.transform = transform
 
-def setup(self, stage=None):
-    # Use stage to load data depending on the task
-    if stage == 'fit' or stage is None:
-        self.train_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
-        
-        self.val_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
 
-    if stage == 'test' or stage is None:
-        # Initialize test dataset for evaluation
-        self.test_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
+    def setup(self, stage=None):
+        # Use stage to load data depending on the task
+        if stage == 'fit' or stage is None:
+            self.train_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
+            
+            self.val_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
 
-    if stage == 'predict':
-        # You can set up a different dataset for prediction if needed
-        self.predict_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False,
-            transforms=self.transform
-        )
+        if stage == 'test' or stage is None:
+            # Initialize test dataset for evaluation
+            self.test_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
 
-    def setup(self, stage: str = None):
-        """
-        Prepare dataset for pretraining (no need for validation/test splits).
-        """
-        # Load the entire dataset
-        full_dataset = HydroDataset(
-            path_dataset=self.data_dir,
-            bands=self.bands,
-            compute_stats=False
-        )
-
-
-        # Apply the transformation to the entire dataset for pretraining
-        full_dataset.transforms = self.transform
-
-        # Split dataset if needed
-        total_size = len(full_dataset)
-        val_size = int(self.val_split * total_size)
-        test_size = int(self.test_split * total_size)
-        train_size = total_size - val_size - test_size
-
-        self.train_dataset, self.val_dataset, self.test_dataset = random_split(
-            full_dataset, [train_size, val_size, test_size]
-        )
+        if stage == 'predict':
+            # You can set up a different dataset for prediction if needed
+            self.predict_dataset = HydroDataset(
+                path_dataset=self.data_dir,
+                bands=self.bands,
+                compute_stats=False,
+                transforms=self.transform
+            )
 
     def train_dataloader(self):
-        return DataLoader(
-            self.train_dataset,
-            batch_size=self.batch_size,
-            shuffle=self.shuffle,
-            num_workers=self.num_workers,
-            collate_fn=collate_fn
-        )
+            return DataLoader(
+                self.train_dataset,
+                batch_size=self.batch_size,
+                shuffle=self.shuffle,
+                num_workers=self.num_workers,
+                collate_fn=collate_fn
+            )
 
     def val_dataloader(self):
-        if self.val_dataset is not None:
-            return DataLoader(
-                self.val_dataset,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_workers,
-                collate_fn=collate_fn
-            )
-        else:
-            raise ValueError("Validation dataset is None.")
+            if self.val_dataset is not None:
+                return DataLoader(
+                    self.val_dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.num_workers,
+                    collate_fn=collate_fn
+                )
+            else:
+                raise ValueError("Validation dataset is None.")
 
     def test_dataloader(self):
-        if self.test_dataset is not None:
-            return DataLoader(
-                self.test_dataset,
-                batch_size=self.batch_size,
-                shuffle=False,
-                num_workers=self.num_workers,
-                collate_fn=collate_fn
-            )
-        else:
-            raise ValueError("Test dataset is None.")
-        
- 
+            if self.test_dataset is not None:
+                return DataLoader(
+                    self.test_dataset,
+                    batch_size=self.batch_size,
+                    shuffle=False,
+                    num_workers=self.num_workers,
+                    collate_fn=collate_fn
+                )
+            else:
+                raise ValueError("Test dataset is None.")
+            
+    

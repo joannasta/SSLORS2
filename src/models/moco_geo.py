@@ -26,13 +26,13 @@ class GeoClassifier(nn.Module):
 
 # MoCo backbone (MoCo v2 like architecture)
 class MoCoGeo(pl.LightningModule):
-    def __init__(self, base_encoder=torchvision.models.resnet18, dim=128, K=4096, m=0.99, T=0.07, input_channels=12):
+    def __init__(self, base_encoder=torchvision.models.resnet18, dim=128, K=4096, m=0.99, T=0.07, src_channels=12):
         super(MoCoGeo, self).__init__()
         # Encoder network (backbone + projection head)
         resnet = base_encoder(pretrained=False)
-        
+        self.src_channels = src_channels
         # Modify first layer to accept 12 input channels
-        resnet.conv1 = nn.Conv2d(input_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        resnet.conv1 = nn.Conv2d(src_channels, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.backbone = nn.Sequential(*list(resnet.children())[:-1])  # Remove final FC layer
         self.projection_head = MoCoProjectionHead(512, 512, dim)
 
