@@ -123,7 +123,8 @@ class HydroMoCoGeoDataset(Dataset):
                         q_raw, k_raw = sample
                         q_normalized = (q_raw - self.means_tensor) / self.stds_tensor
                         k_normalized = (k_raw - self.means_tensor) / self.stds_tensor
-                        
+                        q_normalized = q_normalized[1:4,:,:] # Assuming q is a 4D tensor (C, H, W)
+                        k_normalized = k_normalized[1:4,:,:] # Assuming k is a 4D tensor (C, H, W)
                         # Retrieve pseudo_label; use .get() with a default value to prevent KeyError
                         pseudo_label = self.geo_to_label.get(str(file_path), -1) 
                         if pseudo_label == -1: # Warn if a label was not found for a file
@@ -132,12 +133,14 @@ class HydroMoCoGeoDataset(Dataset):
                         return (q_normalized, k_normalized, torch.tensor(pseudo_label, dtype=torch.long))
                     else: # Fallback if transform yields single crop for moco-geo (less common)
                         sample_normalized = (sample - self.means_tensor) / self.stds_tensor
+                        sample_normalized = sample_normalized[1:4,:,:]
                         pseudo_label = self.geo_to_label.get(str(file_path), -1)
                         if pseudo_label == -1:
                             print(f"WARNING: No geo-label found for '{file_path}' in CSV. Using default label -1.")
                         return sample_normalized.float(), torch.tensor(pseudo_label, dtype=torch.long)
                 else: # For other models (e.g., 'mae'), return a single normalized sample
                     sample_normalized = (sample - self.means_tensor) / self.stds_tensor
+                    sample_normalized = sample_normalized[1:4,:,:]
                     return sample_normalized.float()
 
         except rasterio.errors.RasterioIOError as e:

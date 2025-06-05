@@ -1,7 +1,8 @@
 import random
 from PIL import ImageFilter
 from torchvision.transforms import GaussianBlur as GB
-
+import torch
+import torchvision.transforms as T
 class TwoCropsTransform:
     """Take two random crops of one image as the query and key."""
 
@@ -14,15 +15,11 @@ class TwoCropsTransform:
         return [q, k]
 
 
-class GaussianBlur(object):
-    """Gaussian blur augmentation in SimCLR https://arxiv.org/abs/2002.05709"""
+class GaussianBlur:
+    def __init__(self, sigma_range=(0.1, 2.0), kernel_size=5):
+        self.sigma_range = sigma_range
+        self.kernel_size = kernel_size
 
-    def __init__(self, sigma=[.1, 2.]):
-        self.sigma = sigma
-
-    def __call__(self, x):
-        sigma = random.uniform(self.sigma[0], self.sigma[1])
-        #x = x.filter(ImageFilter.GaussianBlur(radius=sigma))
-        gaussian_blur = GB(kernel_size=7,sigma=sigma)
-        x = gaussian_blur(x)
-        return x
+    def __call__(self, img: torch.Tensor) -> torch.Tensor:
+        gaussian_blur_transform = T.GaussianBlur(kernel_size=self.kernel_size, sigma=self.sigma_range)
+        return gaussian_blur_transform(img)

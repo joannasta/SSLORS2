@@ -138,8 +138,6 @@ class MoCo(pl.LightningModule):
         print(f"Starting epoch - Current learning rate: {current_lr}")
 
 
-    # We provide a helper method to log weights in tensorboard
-    # which is useful for debugging.
     def custom_histogram_weights(self):
         for name, params in self.named_parameters():
             self.logger.experiment.add_histogram(name, params, self.current_epoch)

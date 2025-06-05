@@ -6,9 +6,7 @@ import numpy as np
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 from src.models.moco_geo import MoCoGeo
-# from src.models.cmae import CMAE # Removed as per request
 from src.models.moco import MoCo
-# from src.models.dino import DINO_LIT # Removed as per request
 from src.models.mae import MAE
 from src.data.hydro.hydro_dataloader_moco_geo import HydroMoCoGeoDataModule
 from src.data.hydro.hydro_dataloader_moco import HydroMoCoDataModule
@@ -16,7 +14,6 @@ from src.data.hydro.hydro_dataloader import HydroDataModule
 from torchvision import transforms
 from src.utils.mocogeo_utils import GaussianBlur, TwoCropsTransform
 
-# Updated models dictionary
 models = {
     "mae": MAE,
     "moco": MoCo,
@@ -53,13 +50,14 @@ def main(args):
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
+            model_name = args.model,
             num_workers=args.num_workers
         )
     elif args.model == "moco-geo":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
-            transforms.RandomApply([], p=0.8), # Placeholder for ColorJitter if needed
-            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+            # Removed: ColorJitter line as per request
+            transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
             transforms.RandomHorizontalFlip(),
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
@@ -70,6 +68,7 @@ def main(args):
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
+            model_name = args.model,
             num_workers=args.num_workers,
             csv_path="/home/joanna/SSLORS/src/data/hydro/train_geo_labels10_projected.csv" # Explicit CSV path
         )
@@ -77,8 +76,8 @@ def main(args):
     elif args.model == "moco":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
-            transforms.RandomApply([], p=0.8), # Placeholder for ColorJitter if needed
-            transforms.RandomApply([GaussianBlur([.1, 2.])], p=0.5),
+            # Removed: ColorJitter line as per request
+            transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
             transforms.RandomHorizontalFlip(),
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
@@ -89,6 +88,7 @@ def main(args):
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
+            model_name = args.model,
             num_workers=args.num_workers
         )
     

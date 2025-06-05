@@ -111,5 +111,7 @@ class HydroMoCoDataset(Dataset):
             stds_tensor = torch.tensor(stds[:, None, None], dtype=torch.float32)
             img_q = (img_q - means_tensor) / stds_tensor
             img_k = (img_k - means_tensor) / stds_tensor
+            img_q = img_q[1:4, :, :]  # Select RGB channels
+            img_k = img_k[1:4, :, :]
 
         return img_q, img_k 
