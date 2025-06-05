@@ -151,4 +151,4 @@ def get_marida_means_and_stds():
 
     bands_std = np.array([0.04725893, 0.04743808, 0.04699043, 0.04967381, 0.04946782, 0.06458357,
     0.07594915, 0.07120246, 0.08251058, 0.05111466, 0.03524419]).astype('float32')
-    return pos_weight, bands_mean, bands_std
+    return bands_mean, bands_std, pos_weight

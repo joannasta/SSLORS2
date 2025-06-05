@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=MAE_Train # Job name
-#SBATCH --nodes=1 # Number of nodes
-#SBATCH --gres=gpu:1 # Number of GPUs
-#SBATCH --cpus-per-task=8 # Number of CPU cores per task
-#SBATCH --partition=rsim_member # Partition name
-#SBATCH --time=4-00:00:00 # Time limit
-#SBATCH --output=logs/train_slurm_moco.out # Standard output log
-#SBATCH --error=logs/train_slurm_moco.err # Error log
+#SBATCH --job-name=MOCO_Train # Job name
+#SBATCH --nodes=1                         # Number of nodes
+#SBATCH --gres=gpu:1                      # Number of GPUs
+#SBATCH --cpus-per-task=8                 # Number of CPU cores per task
+#SBATCH --time=4-00:00:00                   # Time limit (Corrected format for 4 days)
+#SBATCH --output=logs/train_moco_slurm.out     # Standard output log
+#SBATCH --error=logs/train_moco_slurm.err      # Error log
+#SBATCH --partition=rsim_member
 
 # Set up the environment
 #source activate ssl_new # Activate your conda environment

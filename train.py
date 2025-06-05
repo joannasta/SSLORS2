@@ -67,7 +67,7 @@ def main(args):
                 transforms.RandomApply(
                     [GaussianBlur([.1, 2.])], p=0.5),
                 transforms.RandomHorizontalFlip(),
-                transforms.ToTensor(), # IMPORTANT: Add ToTensor if your dataset does not do it
+                #transforms.ToTensor(), # IMPORTANT: Add ToTensor if your dataset does not do it
                 # transforms.Normalize(mean=[...], std=[...]) # Add normalization for 11 channels
             ]
             transform = TwoCropsTransform(transforms.Compose(augmentations))
@@ -106,7 +106,7 @@ def main(args):
         transform = transforms.Compose([
             transforms.Resize(256), # Or the exact input size your MAE model expects
             transforms.CenterCrop(256), # Or the exact input size your MAE model expects
-            transforms.ToTensor(), # IMPORTANT: Add ToTensor if your dataset does not do it
+            #transforms.ToTensor(), # IMPORTANT: Add ToTensor if your dataset does not do it
             # transforms.Normalize(mean=[...], std=[...]) # Add normalization for 11 channels
         ])
         # Setup the DataModule

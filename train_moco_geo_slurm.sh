@@ -1,13 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=MAE_Train # Job name
-#SBATCH --nodes=1 # Number of nodes
-#SBATCH --gres=gpu:1 # Number of GPUs
-#SBATCH --cpus-per-task=8 # Number of CPU cores per task
-#SBATCH --partition=rsim_member # Partition name
-#SBATCH --time=4-00:00:00 # Time limit
-#SBATCH --output=logs/train_slurm_geo.out # Standard output log
-#SBATCH --error=logs/train_slurm_geo.err # Error log
-
+#SBATCH --job-name=MOCOGOEO_Train # Job name
+#SBATCH --nodes=1                         # Number of nodes
+#SBATCH --gres=gpu:1                      # Number of GPUs
+#SBATCH --cpus-per-task=8                 # Number of CPU cores per task
+#SBATCH --time=4-00:00:00                   # Time limit (Corrected format for 4 days)
+#SBATCH --output=logs/train_mocogeo_slurm.out     # Standard output log
+#SBATCH --error=logs/train_mocogeo_slurm.err      # Error log
+#SBATCH --partition=rsim_member
 # Set up the environment
 #source activate ssl_new # Activate your conda environment
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5 # GPUs to be visible
