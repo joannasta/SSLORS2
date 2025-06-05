@@ -60,4 +60,9 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
 
     def test_dataloader(self):
+<<<<<<< HEAD
         return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+=======
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+
+>>>>>>> a9004982b38e50f148ea21f64b86e0e23fadf176

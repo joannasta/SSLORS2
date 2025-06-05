@@ -143,4 +143,8 @@ class MagicBathyNetDataset(Dataset):
         label_p_tensor = torch.from_numpy(label_p)
 
         return (data_p_tensor,
+<<<<<<< HEAD
                 label_p_tensor,embedding)
+=======
+                label_p_tensor,embedding)
+>>>>>>> a9004982b38e50f148ea21f64b86e0e23fadf176
