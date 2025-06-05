@@ -43,6 +43,6 @@ class HydroDataset(Dataset):
 
         if self.transforms is not None:
             sample = self.transforms(sample)
-        if len(self.bands) == 12:    
-            sample = sample[1:4,:,:] 
+        #if len(self.bands) == 12:    
+        #    sample = sample[1:4,:,:] 
         return sample.float()
