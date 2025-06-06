@@ -21,15 +21,15 @@ import torchvision.transforms.functional as F
 import matplotlib.patches as mpatches
 
 # Project-specific imports
-from .marida_unet import UNet_Marida
+from .marida_unet  import UNet_Marida
 from src.data.marida.marida_dataset import gen_weights
 from src.utils.finetuning_utils import calculate_metrics
 from config import get_marida_means_and_stds, labels_marida,cat_mapping_marida
-from src.utils.finetuning_utils import metrics_marida,confusion_matrix
+from src.utils.finetuning_utils import metrics_marida,confusion_matrix 
 from src.models.mae import MAE
 from src.models.moco import MoCo
 from src.models.moco_geo import MoCoGeo
-from src.data.hydro.hydro_moco_geo_dataset import HydroDataset
+from src.data.hydro.hydro_dataset import HydroDataset
 
 
 class InputChannelAdapter(nn.Module):
@@ -39,7 +39,7 @@ class InputChannelAdapter(nn.Module):
 
     def forward(self, x):
         return self.conv(x)
-
+    
 def gen_weights(class_distribution, c = 1.02):
     return 1/torch.log(c + class_distribution)
 
@@ -52,12 +52,12 @@ class MAEFineTuning(pl.LightningModule):
         self.train_batch_count = 0
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.save_hyperparameters()
-        self.run_dir = None
+        self.run_dir = None  
         self.base_dir = "marine_debris_results"
         self.pretrained_model=pretrained_model
 
 
-        self.src_channels = src_channels
+        self.src_channels = src_channels  
         if self.pretrained_model is not None:
             self.pretrained_in_channels = 3
         else:
@@ -91,31 +91,34 @@ class MAEFineTuning(pl.LightningModule):
         )
 
         self.input_adapter = InputChannelAdapter(self.src_channels, self.pretrained_in_channels)
-        self.projection_head = UNet_Marida(input_channels=self.pretrained_in_channels, out_channels=src_channels)
+        
+        # Determine embedding_channels for UNet_Marida
+        embedding_dim_for_unet = self._get_embedding_dim()
+        self.projection_head = UNet_Marida(input_channels=self.pretrained_in_channels, 
+                                           embedding_channels=embedding_dim_for_unet, # Set embedding_channels here
+                                           out_channels=src_channels)
+        
         self.fully_finetuning = True
         if self.fully_finetuning:
             for param in self.parameters():
                 param.requires_grad = True
-            self.projection_head.requires_grad_ = True
+            self.projection_head.requires_grad_(True)
             self.input_adapter.requires_grad_(True)
         self.test_step_outputs = []
 
-        global class_distr # This line might cause issues if class_distr is not defined globally elsewhere
-        # Aggregate Distribution Mixed Water, Wakes, Cloud Shadows, Waves with Marine Water
         self.agg_to_water = True
         self.weight_param = 1.03
         self.class_distr = torch.Tensor([0.00452, 0.00203, 0.00254, 0.00168, 0.00766, 0.15206, 0.20232,
-        0.35941, 0.00109, 0.20218, 0.03226, 0.00693, 0.01322, 0.01158, 0.00052])
+                                        0.35941, 0.00109, 0.20218, 0.03226, 0.00693, 0.01322, 0.01158, 0.00052])
         if self.agg_to_water:
-            agg_distr = sum(self.class_distr[-4:]) # Density of Mixed Water, Wakes, Cloud Shadows, Waves
-            self.class_distr[6] += agg_distr # To Water
-            self.class_distr = self.class_distr[:-4] # Drop Mixed Water, Wakes, Cloud Shadows, Waves
+            agg_distr = sum(self.class_distr[-4:])
+            self.class_distr[6] += agg_distr       
+            self.class_distr = self.class_distr[:-4]    
 
         self.weight = gen_weights(self.class_distr, c = self.weight_param)
         print("weights",self.weight)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
 
-        # Initialize variables to accumulate the loss
         self.total_train_loss = 0.0
         self.total_test_loss = 0.0
         self.train_batch_count = 0
@@ -123,44 +126,113 @@ class MAEFineTuning(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
-    def forward(self, images, embedding):
-        print("forward")
-        print("images", images.shape)
-        print("embedding", embedding.shape)
+    def _get_embedding_dim(self):
+        if self.pretrained_model:
+            if isinstance(self.pretrained_model, MAE):
+                return self.pretrained_model.encoder.embed_dim
+            elif isinstance(self.pretrained_model, MoCoGeo):
+                return self.pretrained_model.encoder_q.fc.out_features
+            elif isinstance(self.pretrained_model, MoCo):
+                return self.pretrained_model.projection_head.output_dim
+        # Default embedding dimension if no pretrained model or type not recognized
+        return 128 # A common default for many image embeddings
 
-        # Apply input adapter to images regardless of pretrained_model presence
-        # if self.pretrained_model is not None: # This check is only relevant for the embedding path
-        images = self.input_adapter(images) # Always adapt input channels for the UNet
+    def forward(self, images, original_embedding_input):
+        print("\n--- MAEFineTuning Forward Pass ---")
+        print(f"Initial input images shape: {images.shape}")
+        print(f"Initial input original_embedding_input shape: {original_embedding_input.shape}")
+
+        # Adapt input images channels for UNet's encoder path
+        images_for_unet = self.input_adapter(images) 
+        print(f"images_for_unet (after input_adapter) shape: {images_for_unet.shape}") 
+
+        processed_embedding = original_embedding_input
 
         if self.fully_finetuning and self.pretrained_model is not None:
-            embedding = embedding.squeeze(1) # Remove the singleton channel dimension
+            print("\nProcessing embedding with pretrained model:")
+            # Attempt to squeeze extra singleton dimensions if they exist
+            print(f"processed_embedding before initial squeeze: {processed_embedding.shape}")
+            while processed_embedding.dim() > 2 and processed_embedding.shape[1] == 1:
+                processed_embedding = processed_embedding.squeeze(1)
+            print(f"processed_embedding after initial squeeze: {processed_embedding.shape}")
+            
+            # Pass through the pretrained model
+            if isinstance(self.pretrained_model, MAE):
+                print("Using MAE's forward_encoder.")
+                processed_embedding = self.pretrained_model.forward_encoder(processed_embedding)
+            elif isinstance(self.pretrained_model, MoCoGeo):
+                print("Using MoCoGeo's forward.")
+                processed_embedding = self.pretrained_model(processed_embedding)
+            elif isinstance(self.pretrained_model, MoCo):
+                print("Using MoCo's backbone and projection_head.")
+                processed_embedding = self.pretrained_model.backbone(processed_embedding).flatten(start_dim=1)
+                processed_embedding = self.pretrained_model.projection_head(processed_embedding)
+            else:
+                print(f"Warning: Unsupported pretrained model type: {type(self.pretrained_model)}. Embedding may not be processed correctly.")
+            
+            print(f"processed_embedding after pretrained model pass: {processed_embedding.shape}")
 
-        # Determine how to get features based on the pretrained model type
-        if isinstance(self.pretrained_model, MAE):
-            # For MAE, it expects forward_encoder
-            print("Using MAE's forward_encoder for embedding extraction.")
-            embedding = self.pretrained_model.forward_encoder(embedding)
-        elif isinstance(self.pretrained_model, MoCoGeo):
-            # For MoCoGeo, its main `forward` method returns the normalized query features
-            print("Using MoCoGeo's forward method for embedding extraction.")
-            embedding = self.pretrained_model(embedding) # Call the forward method of MoCoGeo
-        elif isinstance(self.pretrained_model, MoCo):
-            print("Using MoCo's backbone for embedding extraction.")
-            embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-            embedding = self.pretrained_model.projection_head(embedding)
+            # Ensure processed_embedding is a 2D feature vector (B, D) before spatial expansion
+            if processed_embedding.dim() > 2:
+                print(f"Flattening processed_embedding from {processed_embedding.shape} to (B, D).")
+                processed_embedding = processed_embedding.flatten(start_dim=1)
+            
+            print(f"processed_embedding (after potential flatten to B, D): {processed_embedding.shape}")
+
+            # Spatially expand the (B, D) feature vector to (B, D, H_target, W_target)
+            target_h = images_for_unet.shape[2] // (2**4) # Assuming 4 downsampling steps in UNet
+            target_w = images_for_unet.shape[3] // (2**4)
+            
+            print(f"Expanding processed_embedding {processed_embedding.shape} to target spatial dimensions ({target_h}, {target_w}).")
+            processed_embedding = processed_embedding.unsqueeze(-1).unsqueeze(-1).expand(
+                -1, -1, target_h, target_w
+            )
+            print(f"processed_embedding (after spatial expand for UNet): {processed_embedding.shape}")
         else:
-            # Fallback or raise an error for unsupported types
-            print(f"Warning: Unsupported pretrained model type: {type(self.pretrained_model)}. Proceeding without specific embedding processing.")
-            embedding = embedding.unsqueeze(1)
+            print("\nNo pretrained model or not fully finetuning. Preparing embedding directly for UNet.")
+            # If not using a pretrained model, ensure `processed_embedding` has the correct (B, C, H, W) shape for UNet.
+            print(f"processed_embedding before processing for UNet: {processed_embedding.shape}")
 
-        print("after input adapter and embedding processing:")
-        print("images", images.shape)
-        print("embedding", embedding.shape) # Check if embedding shape is consistent now
+            if processed_embedding.dim() == 5:
+                # If it's (B, 1, C, H, W), remove the singleton dim
+                processed_embedding = processed_embedding.squeeze(1)
+                print(f"processed_embedding after squeezing 5D to 4D: {processed_embedding.shape}")
+            
+            # Now, it should be (B, C, H, W) or (B, D).
+            # If it's (B, C, H, W), resize it to UNet bottleneck dimensions.
+            if processed_embedding.dim() == 4:
+                target_h = images_for_unet.shape[2] // (2**4) 
+                target_w = images_for_unet.shape[3] // (2**4)
+                print(f"Resizing 4D processed_embedding {processed_embedding.shape} to target spatial dimensions ({target_h}, {target_w}).")
+                processed_embedding = F.interpolate(processed_embedding, size=(target_h, target_w), mode='bilinear', align_corners=False)
+            elif processed_embedding.dim() == 2:
+                # If it's (B, D), treat D as channel and expand spatially
+                embedding_dim_for_unet = processed_embedding.shape[1]
+                target_h = images_for_unet.shape[2] // (2**4) 
+                target_w = images_for_unet.shape[3] // (2**4)
+                print(f"Expanding 2D processed_embedding {processed_embedding.shape} to target spatial dimensions ({target_h}, {target_w}).")
+                processed_embedding = processed_embedding.unsqueeze(-1).unsqueeze(-1).expand(
+                    -1, -1, target_h, target_w
+                )
+            else:
+                # Fallback: create a zero tensor if shape is unexpected
+                embedding_dim_for_unet = self._get_embedding_dim() if self._get_embedding_dim() > 0 else 128
+                target_h = images_for_unet.shape[2] // (2**4) 
+                target_w = images_for_unet.shape[3] // (2**4)
+                print(f"Warning: Unexpected embedding shape {processed_embedding.shape}. Creating zero tensor for embedding.")
+                processed_embedding = torch.zeros(
+                    images.shape[0], embedding_dim_for_unet, target_h, target_w,
+                    device=images.device
+                )
+            print(f"processed_embedding (final shape before UNet call, without pretrained model processing): {processed_embedding.shape}")
 
-        # The projection_head is your UNet_Marida which expects `embedding` and `images`
-        # Ensure the dimensions of embedding and images are compatible with UNet_Marida
-        return self.projection_head(embedding, images)
 
+        print("\n--- Final shapes before UNet_Marida call ---")
+        print(f"images_for_unet shape: {images_for_unet.shape}")
+        print(f"processed_embedding shape: {processed_embedding.shape}")
+
+        return self.projection_head(processed_embedding, images_for_unet)
+    
     def training_step(self, batch, batch_idx):
         train_dir = "train_results"
         data, target,embedding = batch
@@ -172,17 +244,17 @@ class MAEFineTuning(pl.LightningModule):
 
         if batch_idx % 100 == 0:
             self.log_images(
-            data[0].cpu(),
-            logits[0],
-            target[0].cpu(),
-            dir = train_dir
+                data[0].cpu(),     
+                logits[0],    
+                target[0].cpu(),   
+                dir = train_dir 
             )
 
-            if not hasattr(self, 'total_train_loss'): # This block seems oddly placed inside the if batch_idx % 100 == 0
-                self.total_train_loss = 0.0
-                self.train_batch_count = 0
-            self.total_train_loss += loss.item() # Moved out of the conditional init
-            self.train_batch_count += 1 # Moved out of the conditional init
+        if not hasattr(self, 'total_train_loss'):
+            self.total_train_loss = 0.0
+            self.train_batch_count = 0
+        self.total_train_loss += loss.item()
+        self.train_batch_count += 1
 
         return loss
 
@@ -197,21 +269,22 @@ class MAEFineTuning(pl.LightningModule):
 
         if batch_idx % 100 == 0:
             self.log_images(
-            data[0].cpu(),
-            logits[0],
-            target[0].cpu(),
-            dir = val_dir
+                data[0].cpu(),     
+                logits[0],    
+                target[0].cpu(),   
+                dir = val_dir 
             )
 
         self.log('val_loss', loss)
-        if not hasattr(self, 'total_val_loss'): # This block seems oddly placed
+        if not hasattr(self, 'total_val_loss'):
             self.total_val_loss = 0.0
             self.val_batch_count = 0
-        self.total_val_loss += loss.item() # Moved out of the conditional init
-        self.val_batch_count += 1 # Moved out of the conditional init
+        self.total_val_loss += loss.item()
+        self.val_batch_count += 1
 
         return loss
-
+    
+    
     def test_step(self, batch, batch_idx):
         test_dir = "test_results"
         data, target, embedding = batch
@@ -226,7 +299,7 @@ class MAEFineTuning(pl.LightningModule):
 
         # Accuracy metrics only on annotated pixels
         logits_moved = torch.movedim(logits, (0, 1, 2, 3), (0, 3, 1, 2))
-        logits_reshaped = logits_moved.reshape((-1, 11))
+        logits_reshaped = logits_moved.reshape((-1, 11))  
         target_reshaped = target.reshape(-1)
         mask = target_reshaped != -1
         logits_masked = logits_reshaped[mask]
@@ -236,8 +309,8 @@ class MAEFineTuning(pl.LightningModule):
 
         # Store predictions and ground truth in lists
         self.test_step_outputs.append({
-        "predictions": probs.argmax(1).tolist(),
-        "targets": target_cpu.tolist(),
+            "predictions": probs.argmax(1).tolist(),
+            "targets": target_cpu.tolist(),
         })
 
         # Visualize pixel labels
@@ -254,11 +327,12 @@ class MAEFineTuning(pl.LightningModule):
             row = pixel_locations[0][i]
             col = pixel_locations[1][i]
             visual_image[row, col] = predicted_labels[i]
+        
         self.log_images(
-        data[0].cpu(),
-        logits[0],
-        target[0].cpu(),
-        dir=test_dir)
+                data[0].cpu(),
+                logits[0],
+                target[0].cpu(),
+                dir=test_dir)
 
         visual_target_image = np.zeros((256, 256))
         min_length = min(len(target_labels), len(pixel_locations[0]))
@@ -269,14 +343,15 @@ class MAEFineTuning(pl.LightningModule):
             visual_target_image[row, col] = target_labels[i]
 
         img = data[0].clone().cpu()
-        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None])
-        img = img[1:4, :, :]
-        img = img[[2, 1, 0], :, :] # Swap BGR to RGB
+        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None]) 
+        img = img[1:4, :, :]  
+        img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
 
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).to(torch.uint8)
-        fig, axes = plt.subplots(1, 3, figsize=(14, 6)) # Adjusted figure size
+        fig, axes = plt.subplots(1, 3, figsize=(14, 6))  # Adjusted figure size
         img = img.permute(1,2,0)
+        
         axes[0].imshow(img)
         axes[0].set_title("Original Image")
         axes[0].axis('off')
@@ -285,7 +360,7 @@ class MAEFineTuning(pl.LightningModule):
         axes[1].set_title("Ground Truth")
         axes[1].axis('off')
 
-        axes[2].imshow(visual_image) # Use a colormap for labels
+        axes[2].imshow(visual_image)  # Use a colormap for labels
         axes[2].set_title("Prediction")
         axes[2].axis('off')
 
@@ -295,7 +370,7 @@ class MAEFineTuning(pl.LightningModule):
 
         # Add colorbar
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([]) # Required for matplotlib >= 3.1
+        sm.set_array([])  # Required for matplotlib >= 3.1
         cbar = fig.colorbar(sm, ax=axes[2], shrink=0.8, aspect=20) # Adjust shrink and aspect as needed
         cbar.set_ticks(np.arange(0, 13)) # Set ticks for each class
         keys = list(cat_mapping_marida.keys())[:-4]
@@ -306,8 +381,9 @@ class MAEFineTuning(pl.LightningModule):
         dir_abs = os.path.abspath(dir_rel)
         filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
         self.test_image_count += 1
+        
         plt.tight_layout()
-        plt.savefig(filename) # Save using absolute path
+        plt.savefig(filename)  # Save using absolute path
         plt.show()
         return loss
 
@@ -322,32 +398,33 @@ class MAEFineTuning(pl.LightningModule):
             all_predictions.extend(output["predictions"])
             all_targets.extend(output["targets"])
 
-            all_predictions = np.array(all_predictions)
-            all_targets = np.array(all_targets)
+        all_predictions = np.array(all_predictions)
+        all_targets = np.array(all_targets)
 
-            # In on_test_epoch_end:
-            print(f"Number of predictions: {len(all_predictions)}, Number of targets: {len(all_targets)}")
-            print(f"Unique predictions: {np.unique(all_predictions)}, Unique targets: {np.unique(all_targets)}")
-            print(f"Number of masked values: {np.sum(all_targets == -1)}")
+        # In on_test_epoch_end:
+        print(f"Number of predictions: {len(all_predictions)}, Number of targets: {len(all_targets)}")
+        print(f"Unique predictions: {np.unique(all_predictions)}, Unique targets: {np.unique(all_targets)}")
+        print(f"Number of masked values: {np.sum(all_targets == -1)}")
 
 
         acc = metrics_marida( all_targets,all_predictions,)
         for key, value in acc.items():
             prefix = "test"
-            self.log(f"{prefix}_{key}", value)
-            print(f"Evaluation: {acc}")
-            conf_mat = confusion_matrix(all_targets, all_predictions, labels_marida)
-            print("Confusion Matrix: \n" + str(conf_mat.to_string()))
+            self.log(f"{prefix}_{key}", value) 
+        print(f"Evaluation: {acc}")
+        conf_mat = confusion_matrix(all_targets, all_predictions, labels_marida)
+        print("Confusion Matrix:  \n" + str(conf_mat.to_string()))
 
 
         self.test_step_outputs.clear() # Clear the outputs.
+        
 
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
         print(f"Starting epoch - Current learning rate: {current_lr}")
-
-    def on_validation_epoch_end(self): # Corrected indentation for this method
+    
+    def on_validation_epoch_end(self):
         avg_val_loss = self.total_val_loss / self.val_batch_count
         self.log('val_loss', avg_val_loss, on_epoch=True)
         self.total_val_loss = 0.0
@@ -363,7 +440,7 @@ class MAEFineTuning(pl.LightningModule):
 
     def on_train_end(self):
         self.writer.close()
-
+    
     def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,dir) -> None:
         print("log images")
         self.log_results()
@@ -371,13 +448,14 @@ class MAEFineTuning(pl.LightningModule):
         target = target.detach().cpu().numpy()
         prediction = torch.argmax(prediction, dim=0).detach().cpu().numpy()
 
-        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None])
-        img = img[1:4, :, :]
-        img = img[[2, 1, 0], :, :] # Swap BGR to RGB
+        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None]) 
+        img = img[1:4, :, :]  
+        img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
 
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
-        fig, axes = plt.subplots(1, 3, figsize=(10, 5)) # Create a figure with 1 row and 2 columns
+        
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
         img = img.transpose(1,2,0)
         # Plot original image
         axes[0].imshow(img)
@@ -390,33 +468,35 @@ class MAEFineTuning(pl.LightningModule):
         axes[1].axis('off')
 
         # Plot prediction (as class labels)
-        axes[2].imshow(prediction) # Use a colormap for labels
+        axes[2].imshow(prediction)  # Use a colormap for labels
         axes[2].set_title("Prediction")
         axes[2].axis('off')
 
-        dir_rel = os.path.join(self.run_dir, dir) # Relative path
-        dir_abs = os.path.abspath(dir_rel) # Absolute path
+        dir_rel = os.path.join(self.run_dir, dir)  # Relative path
+        dir_abs = os.path.abspath(dir_rel)  # Absolute path
 
-        os.makedirs(dir_abs, exist_ok=True) # Create (or do nothing) using absolute path
+        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
         if dir == "test_results":
             filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
             self.test_image_count += 1
         else:
             filename = os.path.join(dir_abs, f"segmentation_comparison_epoch_{self.current_epoch}.png")
-            plt.savefig(filename) # Save using absolute path
-            print(f"Saving to: {filename}") # Print to check where you are saving
+        plt.savefig(filename)  # Save using absolute path
+        print(f"Saving to: {filename}") # Print to check where you are saving
 
         plt.close()
 
     def log_results(self):
-        if self.run_dir is None:
+        if self.run_dir is None:  
             run_index = 0
-            while os.path.exists(os.path.join(self.base_dir, f"run_{run_index}")): # This line should be inside the while loop if run_index is incremented
+            while os.path.exists(os.path.join(self.base_dir, f"run_{run_index}")):
                 run_index += 1
+            
             self.run_dir = os.path.join(self.base_dir, f"run_{run_index}")
             os.makedirs(self.run_dir, exist_ok=True)
-            
+                
     def configure_optimizers(self):
+        
         optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1, verbose=True)
         return [optimizer], [scheduler]

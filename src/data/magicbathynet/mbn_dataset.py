@@ -1,3 +1,5 @@
+# src/data/magicbathynet/mbn_dataset.py
+
 import numpy as np
 import random
 import os
@@ -14,7 +16,7 @@ from utils.finetuning_utils import get_random_pos
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG, train_images, test_images
 from src.data.hydro.hydro_dataset import HydroDataset
 from src.utils.data_processing import DatasetProcessor
-from src.models.mae import MAE
+
 from pathlib import Path
 
 random.seed(1)
@@ -22,7 +24,9 @@ random.seed(1)
 
 class MagicBathyNetDataset(Dataset):
     def __init__(self, root_dir, transform=None, split_type='train', cache=True, augmentation=True, pretrained_model=None,location="agia_napa",
-                 full_finetune=False, random=False, ssl=False):
+                 full_finetune=False, random=False, ssl=False,
+                 image_ids_for_this_split=None):
+        print(f"Initializing MagicBathyNetDataset for split: {split_type}")
         self.root_dir = root_dir
         self.split_type = split_type
         self.transform = transform
@@ -40,37 +44,51 @@ class MagicBathyNetDataset(Dataset):
         mode_count = sum([full_finetune, random, ssl])
         if mode_count != 1:
             raise ValueError("Exactly one of 'full_finetune', 'random', or 'ssl' must be True.")
-   
+        print(f"Dataset mode: full_finetune={self.full_finetune}, random={self.random}, ssl={self.ssl}")
 
+        print("Initializing DatasetProcessor...")
         self.processor = DatasetProcessor(
             img_dir=Path(self.root_dir) / self.location / 'img' / 's2',
             depth_dir=Path(self.root_dir) / self.location / 'depth' / 's2',
             output_dir=Path(self.root_dir) / 'processed_data' ,
             img_only_dir=Path(self.root_dir) / 'processed_img',
-            depth_only_dir=Path(self.root_dir) / 'processed_depth' 
+            depth_only_dir=Path(self.root_dir) / 'processed_depth',
+            image_ids_to_process=image_ids_for_this_split
         )
+        print("DatasetProcessor initialized.")
 
         self.paired_files = self.processor.paired_files
         self.data_files = [pair[0] for pair in self.paired_files]
         self.label_files =[pair[1] for pair in self.paired_files] 
+        print(f"Found {len(self.data_files)} image files and {len(self.label_files)} label files for {self.split_type} split.")
+        if self.data_files:
+            print("self.data_files[0]:", self.data_files[0])  # Debugging line to check the first data file
 
-        self.hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=[ "B02", "B03", "B04"])
         self.embeddings = None
-        self._create_embeddings()
+        print("Starting embedding creation...")
+        if self.pretrained_model is not None:
+            # THIS IS WHERE IT WAS CALLED AND WAS MISSING
+            self._create_embeddings() 
+            print("Embedding creation complete.")
 
         self.norm_param_depth = NORM_PARAM_DEPTH[self.location]
         self.norm_param = np.load(NORM_PARAM_PATHS[self.location])
+        print("Normalization parameters loaded.")
 
         self.crop_size = MODEL_CONFIG["crop_size"]
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
+        print(f"Model config: crop_size={self.crop_size}, window_size={self.window_size}, stride={self.stride}")
+
 
         self.data_cache_ = {}
         self.label_cache_ = {}
+        print("Data and label caches initialized.")
         
     def __len__(self):
+        # Keep 10000 for your "epoch length"
         return 10000
-    
+
     def _create_embeddings(self):
         def weights_init(m):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
@@ -78,19 +96,29 @@ class MagicBathyNetDataset(Dataset):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-        if self.pretrained_model is None:
-            raise ValueError("Pretrained model is None. Cannot create embeddings when not in full fine-tuning mode.")
-
+        print("Initializing HydroDataset for embedding creation...")
+        # Note: HydroDataset uses self.processor.img_only_dir, which should contain the
+        # filtered images for the current split after the DatasetProcessor runs.
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
+        print(f"HydroDataset for embeddings has {len(hydro_dataset)} images.")
         self.embeddings_list = []
         
         model_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        print(f"Pretrained model will be moved to device: {model_device}")
         self.pretrained_model.to(model_device)
+        self.pretrained_model.eval() # Ensure model is in eval mode for embeddings
 
         if self.random:
+            print("Applying random weights initialization to pretrained model.")
             self.pretrained_model.apply(weights_init)
 
+        print("Starting batch processing for embeddings...")
+        # It's better to use a DataLoader here for batching and num_workers,
+        # especially if hydro_dataset is large. For now, using a simple loop.
         for idx in range(len(hydro_dataset)):
+            if (idx + 1) % 100 == 0 or idx == len(hydro_dataset) - 1:
+                print(f"  Processing image {idx + 1}/{len(hydro_dataset)} for embeddings...")
+            
             img = hydro_dataset[idx]
             img = img.unsqueeze(0).to(model_device)
             img = F.interpolate(img, size=(256,256), mode='bilinear', align_corners=False)
@@ -103,10 +131,17 @@ class MagicBathyNetDataset(Dataset):
                 else:
                     raise ValueError(f"Model {self.pretrained_model.__class__.__name__} not configured for embedding creation.")
                 self.embeddings_list.append(embedding)
-
+        
+        print("Concatenating embeddings...")
         self.embeddings = torch.cat(self.embeddings_list, dim=0)
-        self.embeddings = self.embeddings.cpu() 
+        print(f"Embeddings concatenated. Shape: {self.embeddings.shape}")
+        
+        print("Moving embeddings to CPU.")
+        self.embeddings = self.embeddings.cpu()
+        print("Embeddings moved to CPU.")
 
+    # === END OF RESTORED _create_embeddings METHOD ===
+    
     @classmethod
     def data_augmentation(cls, *arrays, flip=True, mirror=True):
         will_flip, will_mirror = False, False
@@ -132,7 +167,9 @@ class MagicBathyNetDataset(Dataset):
         return tuple(results)
     
     def __getitem__(self, idx):
+        # print(f"DEBUG: __getitem__ called for batch {idx}") # Add this
         random_idx = random.randint(0, len(self.data_files) - 1)
+        
 
         if random_idx in self.data_cache_.keys():
             data = self.data_cache_[random_idx]
@@ -159,8 +196,5 @@ class MagicBathyNetDataset(Dataset):
         data_p_tensor = torch.from_numpy(data_p)
         label_p_tensor = torch.from_numpy(label_p)
 
-        if self.full_finetune:
-            return (data_p_tensor, label_p_tensor)
-        else:
-            embedding = self.embeddings[random_idx]
-            return (data_p_tensor, label_p_tensor, embedding)
+        embedding = self.embeddings[random_idx]
+        return (data_p_tensor, label_p_tensor, embedding)
