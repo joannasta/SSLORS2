@@ -25,7 +25,7 @@ from src.utils.finetuning_utils import calculate_metrics
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=3, mask_ratio=0.5):
+    def __init__(self, src_channels=3, mask_ratio=0.5,location="agia_napa",pretrained_weights=None):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -35,11 +35,13 @@ class MAEFineTuning(pl.LightningModule):
         self.save_hyperparameters()
         self.run_dir = None  
         self.base_dir = "bathymetry_results"
+        self.location=location
+        self.pretrained_weights=pretrained_weights
 
         self.src_channels = 3
         self.mask_ratio = mask_ratio
-        self.norm_param_depth = NORM_PARAM_DEPTH["agia_napa"]
-        self.norm_param = np.load(NORM_PARAM_PATHS["agia_napa"])
+        self.norm_param_depth = NORM_PARAM_DEPTH[self.location]
+        self.norm_param = np.load(NORM_PARAM_PATHS[self.location])
         self.crop_size = MODEL_CONFIG["crop_size"]
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
@@ -71,12 +73,6 @@ class MAEFineTuning(pl.LightningModule):
         #idx_keep, idx_mask = utils.random_token_mask(size=(batch_size, self.sequence_length), mask_ratio=self.mask_ratio, device=images.device)
         return self.projection_head(embedding,images)
     
-    
-    #TODO sein code mit richtiger datensatzlänge
-    #TODO alle files statt 21 ??
-    #TODO oVerfitten an einem batch
-    #TODO gradients printen
-    #TODO Unet variieren
     def training_step(self, batch,batch_idx):
         print("TRAINING STEP START")
         

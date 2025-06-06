@@ -14,12 +14,13 @@ class MAE(pl.LightningModule):
         self.src_channels = src_channels
         self.save_hyperparameters()
         self.mask_ratio = mask_ratio
+        self.pretrained_weights = pretrained_weights
 
         vit = timm.create_model(
-            'vit_base_patch32_224',
+            'vit_base_patch16_224',
             in_chans=self.src_channels,
-            img_size=224,
-            patch_size=32, # Ensure this matches the timm model name's patch size
+            img_size=256,          
+            patch_size=16,        
         )
         self.patch_size = vit.patch_embed.patch_size[0]
         self.backbone = MaskedVisionTransformerTIMM(vit=vit)
@@ -40,8 +41,8 @@ class MAE(pl.LightningModule):
 
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1) if self.src_channels == 3 else None
 
-        if pretrained_weights:
-            self.load_pretrained_weights(pretrained_weights)
+        if self.pretrained_weights:
+            self.load_pretrained_weights(self.pretrained_weights)
 
         self.criterion = nn.MSELoss()
 

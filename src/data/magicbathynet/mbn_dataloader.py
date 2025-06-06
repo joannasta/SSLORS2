@@ -4,13 +4,18 @@ from .mbn_dataset import MagicBathyNetDataset
 
 
 class MagicBathyNetDataModule(pl.LightningDataModule):
-    def __init__(self, root_dir, batch_size=32, transform=None, cache=False,pretrained_model=None):
+    def __init__(self, root_dir, batch_size=32, transform=None, cache=False,pretrained_model=None,location="agia_napa",
+                 full_finetune=True, random=False, ssl=False):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
         self.transform = transform
         self.cache = cache
         self.pretrained_model = pretrained_model
+        self.location=location
+        self.full_finetune = full_finetune
+        self.random = random
+        self.ssl = ssl
 
     def setup(self, stage=None):
         # Use stage to load data depending on the task
@@ -21,7 +26,11 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='train',
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location,
+                full_finetune=self.full_finetune,
+                random=self.random,
+                ssl=self.ssl 
             )
             
             self.val_dataset = MagicBathyNetDataset(
@@ -29,7 +38,11 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='val',
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location,
+                full_finetune=self.full_finetune,
+                random=self.random,
+                ssl=self.ssl
             )
 
         if stage == 'test' or stage is None:
@@ -39,7 +52,11 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='test',
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location,
+                full_finetune=self.full_finetune,
+                random=self.random,
+                ssl=self.ssl
             )
 
         if stage == 'predict':
@@ -49,7 +66,11 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='predict',  # Adjust if there's a different mode
                 cache=self.cache,
-                pretrained_model=self.pretrained_model
+                pretrained_model=self.pretrained_model,
+                location=self.location,
+                full_finetune=self.full_finetune,
+                random=self.random,
+                ssl=self.ssl
             )
 
 

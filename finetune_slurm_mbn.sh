@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=11:00:00                   # Time limit
-#SBATCH --output=logs/finetune_slurm.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm.err   # Error log
+#SBATCH --output=logs/finetune_slurm_mbn_mae_agia_napa.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_mbn_mae_agia_napa.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -26,6 +26,10 @@ EPOCHS=50                              # Number of epochs
 PRETRAINED_MODEL="./results/trains/training_logs/3-channels/checkpoints/epoch=99-step=132700.ckpt" # Path to pretrained model
 DATASET_PATH="/faststorage/joanna/magicbathynet/MagicBathyNet"  # Dataset path
 SEED=42                                   # Seed for reproducibility
+LOCATION="agia_napa"
+FULL_FINETUNING="True" 
+RANDOM="False"  
+SSL="False"  
 
 # --- Run Training ---
 srun python -u finetune_mbn.py \
