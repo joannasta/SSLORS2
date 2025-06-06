@@ -41,6 +41,10 @@ class MagicBathyNetDataset(Dataset):
         self.random = random
         self.ssl = ssl
         
+        print("self.full_finetune:", self.full_finetune)
+        print("self.random:", self.random)
+        print("self.ssl:", self.ssl)
+        
         mode_count = sum([full_finetune, random, ssl])
         if mode_count != 1:
             raise ValueError("Exactly one of 'full_finetune', 'random', or 'ssl' must be True.")
@@ -67,7 +71,6 @@ class MagicBathyNetDataset(Dataset):
         self.embeddings = None
         print("Starting embedding creation...")
         if self.pretrained_model is not None:
-            # THIS IS WHERE IT WAS CALLED AND WAS MISSING
             self._create_embeddings() 
             print("Embedding creation complete.")
 
@@ -104,7 +107,6 @@ class MagicBathyNetDataset(Dataset):
         self.embeddings_list = []
         
         model_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        print(f"Pretrained model will be moved to device: {model_device}")
         self.pretrained_model.to(model_device)
         self.pretrained_model.eval() # Ensure model is in eval mode for embeddings
 
@@ -113,8 +115,7 @@ class MagicBathyNetDataset(Dataset):
             self.pretrained_model.apply(weights_init)
 
         print("Starting batch processing for embeddings...")
-        # It's better to use a DataLoader here for batching and num_workers,
-        # especially if hydro_dataset is large. For now, using a simple loop.
+
         for idx in range(len(hydro_dataset)):
             if (idx + 1) % 100 == 0 or idx == len(hydro_dataset) - 1:
                 print(f"  Processing image {idx + 1}/{len(hydro_dataset)} for embeddings...")
@@ -123,15 +124,18 @@ class MagicBathyNetDataset(Dataset):
             img = img.unsqueeze(0).to(model_device)
             img = F.interpolate(img, size=(256,256), mode='bilinear', align_corners=False)
             
-            with torch.no_grad():
-                if self.pretrained_model.__class__.__name__ == "MAE":
-                    embedding = self.pretrained_model.forward_encoder(img)
-                elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
-                    embedding = self.pretrained_model.backbone(img).flatten(start_dim=1)
-                else:
-                    raise ValueError(f"Model {self.pretrained_model.__class__.__name__} not configured for embedding creation.")
-                self.embeddings_list.append(embedding)
-        
+            if self.full_finetune:
+                self.embeddings_list.append(img)
+            elif self.random or self.ssl:
+                with torch.no_grad():
+                    if self.pretrained_model.__class__.__name__ == "MAE":
+                        embedding = self.pretrained_model.forward_encoder(img)
+                    elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
+                        embedding = self.pretrained_model.backbone(img).flatten(start_dim=1)
+                    else:
+                        raise ValueError(f"Model {self.pretrained_model.__class__.__name__} not configured for embedding creation.")
+                    self.embeddings_list.append(embedding)
+            
         print("Concatenating embeddings...")
         self.embeddings = torch.cat(self.embeddings_list, dim=0)
         print(f"Embeddings concatenated. Shape: {self.embeddings.shape}")
@@ -139,8 +143,6 @@ class MagicBathyNetDataset(Dataset):
         print("Moving embeddings to CPU.")
         self.embeddings = self.embeddings.cpu()
         print("Embeddings moved to CPU.")
-
-    # === END OF RESTORED _create_embeddings METHOD ===
     
     @classmethod
     def data_augmentation(cls, *arrays, flip=True, mirror=True):

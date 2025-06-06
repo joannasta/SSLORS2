@@ -27,7 +27,7 @@ from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 
 class MAEFineTuning(pl.LightningModule):
     def __init__(self, src_channels=3, mask_ratio=0.5,pretrained_model=None,location="agia_napa",
-                 full_finetune=False, random=False, ssl=False):
+                 full_finetune=False, random=False, ssl=False, model_type="mae"):
 
         super().__init__()
         self.writer = SummaryWriter()
@@ -39,6 +39,7 @@ class MAEFineTuning(pl.LightningModule):
         self.run_dir = None
         self.base_dir = "bathymetry_results"
         self.pretrained_model=pretrained_model
+        self.model_type = model_type
 
         self.src_channels = 3
         self.mask_ratio = mask_ratio
@@ -49,7 +50,7 @@ class MAEFineTuning(pl.LightningModule):
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
 
-        self.projection_head = UNet_bathy(in_channels=3, out_channels=1) # Removed dropout_rate from here as it's not in your UNet_bathy init.
+        self.projection_head = UNet_bathy(in_channels=3, out_channels=1,model_type=self.model_type) 
         self.cache = True
         self.criterion = CustomLoss()
         self.total_train_loss = 0.0
@@ -73,18 +74,28 @@ class MAEFineTuning(pl.LightningModule):
         if self.full_finetune:
             for param in self.parameters():
                 param.requires_grad = True
-            # This line might cause an error as `requires_grad_` is not a direct attribute.
-            # If you intend to set requires_grad for all parameters within projection_head,
-            # it's usually handled by the above loop or by setting it on the module when defined.
-            # self.projection_head.requires_grad_ = True
-
+ 
     def forward(self, images,embedding):
         batch_size = images.shape[0]
         if self.full_finetune:
-            embedding = embedding.squeeze(0)
-            print("embedding shape",embedding.shape)
-            embedding = self.pretrained_model.forward_encoder(embedding)
-            embedding = embedding.unsqueeze(0)
+            if self.model_type == "mae":
+                embedding = embedding.squeeze(0)
+                print("embedding shape",embedding.shape)
+                embedding = self.pretrained_model.forward_encoder(embedding)
+                embedding = embedding.unsqueeze(0)
+            elif self.model_type == "moco":
+                embedding = embedding.squeeze(0)
+                print("embedding shape",embedding.shape)
+                embedding = self.pretrained_model.backbone(images)#.flatten(start_dim=1)
+                print("embedding shape after ",embedding.shape)
+                embedding = embedding.unsqueeze(0)
+                print("embedding shape after unsqueeze",embedding.shape)
+            elif self.model_type == "moco_geo":
+                embedding = embedding.squeeze(0)
+                print("embedding shape",embedding.shape)
+                embedding = self.pretrained_model.backbone(images).flatten(start_dim=1)
+                embedding = embedding.unsqueeze(0)
+                
         return self.projection_head(embedding,images)
 
     def training_step(self, batch,batch_idx):
