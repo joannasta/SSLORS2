@@ -86,7 +86,10 @@ class UNet_Marida(nn.Module):
         self.combined_projection = nn.Linear(expected_in_features, 8 * self.hidden_channels)
 
 
-    def forward(self, x, image):
+    def forward(self, image,x_embedding):
+        image = image.transpose(0,3,1,2)
+        print("unet image",image.shape)
+        print("x_embedding shape:", x_embedding.shape)
         
         x1 = self.inc(image)
         x2 = self.down1(x1)

@@ -100,7 +100,7 @@ class MAEFineTuning(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
-    def forward(self, images, embeddings):
+    def forward(self, images, embedding):
 
         # Adapt input images channels for UNet's encoder path
         #images = self.input_adapter(images) 
@@ -113,7 +113,9 @@ class MAEFineTuning(pl.LightningModule):
                 embedding = embedding.squeeze(0)
                 print("embedding shape",embedding.shape)
                 embedding = self.pretrained_model.forward_encoder(embedding)
+                print("embedding shape after encoder",embedding.shape)
                 embedding = embedding.unsqueeze(0)
+                print("embedding shape after unsqueeze",embedding.shape)
             elif self.model_type == "moco":
                 embedding = embedding.squeeze(0)
                 print("embedding shape",embedding.shape)
@@ -129,7 +131,7 @@ class MAEFineTuning(pl.LightningModule):
                 embedding = embedding.unsqueeze(0)
                 print("embedding after unsqueeze")
                 
-        return self.projection_head(embedding,images)
+        return self.projection_head(images,embedding)
     
     def training_step(self, batch, batch_idx):
         train_dir = "train_results"
