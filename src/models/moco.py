@@ -22,7 +22,7 @@ class MoCo(pl.LightningModule):
         super().__init__()
 
         # create a ResNet backbone and remove the classification head
-        resnet = ResNetGenerator("resnet-18", 1, num_splits=8)
+        resnet = ResNetGenerator("resnet-18", 1, num_splits=1)
         self.backbone = nn.Sequential(
             *list(resnet.children())[:-1],
             nn.AdaptiveAvgPool2d(1),

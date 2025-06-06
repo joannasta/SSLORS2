@@ -69,8 +69,7 @@ def main(args):
             batch_size=args.train_batch_size,
             transform=transform,
             model_name = args.model,
-            num_workers=args.num_workers,
-            csv_path="/home/joanna/SSLORS/src/data/hydro/train_geo_labels10_projected.csv" # Explicit CSV path
+            num_workers=args.num_workers
         )
         
     elif args.model == "moco":

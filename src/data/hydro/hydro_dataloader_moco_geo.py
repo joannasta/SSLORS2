@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, default_collate # Import default_collate
 from torchvision import transforms as T
 from pathlib import Path
 from typing import Optional, List
@@ -14,7 +14,17 @@ class HydroMoCoGeoDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.transform = transform
         self.model_name = model_name
+        # Ensure num_geo_clusters is not a tuple
         self.num_geo_clusters = num_geo_clusters
+        
+    # --- Custom collate_fn to filter out None values ---
+    def custom_collate_fn(self, batch):
+        # Filter out None values from the batch
+        batch = [item for item in batch if item is not None]
+        if not batch: # If the batch is empty after filtering, return None or an empty list
+            return None # Or raise an error if an empty batch is not desired
+        return default_collate(batch)
+    # --- End custom collate_fn ---
 
     def setup(self, stage: Optional[str] = None):
         # Use stage to load data depending on the task
@@ -59,7 +69,8 @@ class HydroMoCoGeoDataModule(LightningDataModule):
             shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
-            drop_last=True
+            drop_last=True,
+            collate_fn=self.custom_collate_fn # Apply the custom collate_fn
         )
 
     def val_dataloader(self):
@@ -71,7 +82,8 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 shuffle=False,
                 num_workers=self.num_workers,
                 pin_memory=True,
-                drop_last=False
+                drop_last=False,
+                collate_fn=self.custom_collate_fn # Apply the custom collate_fn
             )
         else:
             print("WARNING: Validation dataloader requested but val_dataset not initialized or is None.")
@@ -86,7 +98,8 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 shuffle=False,
                 num_workers=self.num_workers,
                 pin_memory=True,
-                drop_last=False
+                drop_last=False,
+                collate_fn=self.custom_collate_fn # Apply the custom collate_fn
             )
         else:
             print("WARNING: Test dataloader requested but test_dataset not initialized or is None.")
