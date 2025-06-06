@@ -9,18 +9,26 @@ from .marida_dataset import MaridaDataset # Update the path as per your project 
 import numpy as np
 
 class MaridaDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size=32, root_dir="/faststorage/joanna/marida/MARIDA", transform=None, standardization=None):
+    def __init__(self, batch_size=32, root_dir="/faststorage/joanna/marida/MARIDA", transform=None, standardization=None,
+                 full_finetune=True, random=False, ssl=False, pretrained_model=None,model_type='mae'):
         super().__init__()
         self.batch_size = batch_size
         self.root_dir = root_dir
+        self.path ="/faststorage/joanna/marida/MARIDA/"
         self.transform = transform
         self.standardization = standardization
-
+        self.img_only_dir = "/faststorage/joanna/marida/MARIDA/roi_data"
+        self.full_finetune = full_finetune
+        self.random = random
+        self.ssl = ssl
+        self.model_type = model_type
+        self.pretrained_model = pretrained_model
+        
     def setup(self, stage=None):
         """Setup dataset for training, validation, or test."""
-        self.train_dataset = MaridaDataset(mode='train', transform=self.transform, standardization=self.standardization, path=self.root_dir)
-        self.val_dataset = MaridaDataset(mode='val', transform=self.transform, standardization=self.standardization, path=self.root_dir)
-        self.test_dataset = MaridaDataset(mode='test', transform=self.transform, standardization=self.standardization, path=self.root_dir)
+        self.train_dataset = MaridaDataset(root_dir=self.root_dir,mode='train', transform=self.transform, standardization=self.standardization, path=self.path,full_finetune=self.full_finetune, random=self.random, ssl=self.ssl, pretrained_model=self.pretrained_model,model_type=self.model_type)
+        self.val_dataset = MaridaDataset(root_dir=self.root_dir, mode='val', transform=self.transform, standardization=self.standardization, path=self.path,full_finetune=self.full_finetune, random=self.random, ssl=self.ssl,pretrained_model=self.pretrained_model,model_type=self.model_type)
+        self.test_dataset = MaridaDataset(root_dir=self.root_dir, mode='test', transform=self.transform, standardization=self.standardization, path=self.path,full_finetune=self.full_finetune, random=self.random, ssl=self.ssl, pretrained_model=self.pretrained_model,model_type=self.model_type)
 
     def train_dataloader(self):
         """Return train dataloader."""

@@ -44,7 +44,7 @@ def gen_weights(class_distribution, c = 1.02):
     return 1/torch.log(c + class_distribution)
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,**kwargs):
+    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,model_type="mae",full_finetune=True):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -55,6 +55,12 @@ class MAEFineTuning(pl.LightningModule):
         self.run_dir = None  
         self.base_dir = "marine_debris_results"
         self.pretrained_model=pretrained_model
+        self.model_type = model_type
+        self.full_finetune = full_finetune
+        
+        if self.full_finetune:
+            for param in self.parameters():
+                param.requires_grad = True
 
 
         self.src_channels = src_channels  
@@ -66,44 +72,12 @@ class MAEFineTuning(pl.LightningModule):
         self.mask_ratio = mask_ratio
         self.means,self.stds,self.pos_weight = get_marida_means_and_stds()
 
-
-        # Create Vision Transformer backbone
-        vit = timm.create_model('vit_base_patch32_224', in_chans=self.src_channels, img_size=256, patch_size=16)
-        self.patch_size = vit.patch_embed.patch_size[0]
-        self.backbone = MaskedVisionTransformerTIMM(vit=vit)
-        self.sequence_length = self.backbone.sequence_length
-        self.y_predicted =[]
-        self.y_true = []
         self.test_image_count = 0
 
-        # Define the MAE decoder
-        self.decoder = MAEDecoderTIMM(
-            in_chans=self.src_channels,
-            num_patches=vit.patch_embed.num_patches,
-            patch_size=self.patch_size,
-            embed_dim=vit.embed_dim,
-            decoder_embed_dim=512,
-            decoder_depth=1,
-            decoder_num_heads=16,
-            mlp_ratio=4.0,
-            proj_drop_rate=0.0,
-            attn_drop_rate=0.0,
-        )
-
         self.input_adapter = InputChannelAdapter(self.src_channels, self.pretrained_in_channels)
-        
-        # Determine embedding_channels for UNet_Marida
-        embedding_dim_for_unet = self._get_embedding_dim()
         self.projection_head = UNet_Marida(input_channels=self.pretrained_in_channels, 
-                                           embedding_channels=embedding_dim_for_unet, # Set embedding_channels here
-                                           out_channels=src_channels)
+                                           out_channels=src_channels,model_type=self.model_type)
         
-        self.fully_finetuning = True
-        if self.fully_finetuning:
-            for param in self.parameters():
-                param.requires_grad = True
-            self.projection_head.requires_grad_(True)
-            self.input_adapter.requires_grad_(True)
         self.test_step_outputs = []
 
         self.agg_to_water = True
@@ -116,7 +90,7 @@ class MAEFineTuning(pl.LightningModule):
             self.class_distr = self.class_distr[:-4]    
 
         self.weight = gen_weights(self.class_distr, c = self.weight_param)
-        print("weights",self.weight)
+
         self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
 
         self.total_train_loss = 0.0
@@ -126,112 +100,33 @@ class MAEFineTuning(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
-    def _get_embedding_dim(self):
-        if self.pretrained_model:
-            if isinstance(self.pretrained_model, MAE):
-                return self.pretrained_model.encoder.embed_dim
-            elif isinstance(self.pretrained_model, MoCoGeo):
-                return self.pretrained_model.encoder_q.fc.out_features
-            elif isinstance(self.pretrained_model, MoCo):
-                return self.pretrained_model.projection_head.output_dim
-        # Default embedding dimension if no pretrained model or type not recognized
-        return 128 # A common default for many image embeddings
-
-    def forward(self, images, original_embedding_input):
-        print("\n--- MAEFineTuning Forward Pass ---")
-        print(f"Initial input images shape: {images.shape}")
-        print(f"Initial input original_embedding_input shape: {original_embedding_input.shape}")
+    def forward(self, images, embeddings):
 
         # Adapt input images channels for UNet's encoder path
-        images_for_unet = self.input_adapter(images) 
-        print(f"images_for_unet (after input_adapter) shape: {images_for_unet.shape}") 
+        images = self.input_adapter(images) 
 
-        processed_embedding = original_embedding_input
-
-        if self.fully_finetuning and self.pretrained_model is not None:
-            print("\nProcessing embedding with pretrained model:")
-            # Attempt to squeeze extra singleton dimensions if they exist
-            print(f"processed_embedding before initial squeeze: {processed_embedding.shape}")
-            while processed_embedding.dim() > 2 and processed_embedding.shape[1] == 1:
-                processed_embedding = processed_embedding.squeeze(1)
-            print(f"processed_embedding after initial squeeze: {processed_embedding.shape}")
-            
-            # Pass through the pretrained model
-            if isinstance(self.pretrained_model, MAE):
-                print("Using MAE's forward_encoder.")
-                processed_embedding = self.pretrained_model.forward_encoder(processed_embedding)
-            elif isinstance(self.pretrained_model, MoCoGeo):
-                print("Using MoCoGeo's forward.")
-                processed_embedding = self.pretrained_model(processed_embedding)
-            elif isinstance(self.pretrained_model, MoCo):
-                print("Using MoCo's backbone and projection_head.")
-                processed_embedding = self.pretrained_model.backbone(processed_embedding).flatten(start_dim=1)
-                processed_embedding = self.pretrained_model.projection_head(processed_embedding)
-            else:
-                print(f"Warning: Unsupported pretrained model type: {type(self.pretrained_model)}. Embedding may not be processed correctly.")
-            
-            print(f"processed_embedding after pretrained model pass: {processed_embedding.shape}")
-
-            # Ensure processed_embedding is a 2D feature vector (B, D) before spatial expansion
-            if processed_embedding.dim() > 2:
-                print(f"Flattening processed_embedding from {processed_embedding.shape} to (B, D).")
-                processed_embedding = processed_embedding.flatten(start_dim=1)
-            
-            print(f"processed_embedding (after potential flatten to B, D): {processed_embedding.shape}")
-
-            # Spatially expand the (B, D) feature vector to (B, D, H_target, W_target)
-            target_h = images_for_unet.shape[2] // (2**4) # Assuming 4 downsampling steps in UNet
-            target_w = images_for_unet.shape[3] // (2**4)
-            
-            print(f"Expanding processed_embedding {processed_embedding.shape} to target spatial dimensions ({target_h}, {target_w}).")
-            processed_embedding = processed_embedding.unsqueeze(-1).unsqueeze(-1).expand(
-                -1, -1, target_h, target_w
-            )
-            print(f"processed_embedding (after spatial expand for UNet): {processed_embedding.shape}")
-        else:
-            print("\nNo pretrained model or not fully finetuning. Preparing embedding directly for UNet.")
-            # If not using a pretrained model, ensure `processed_embedding` has the correct (B, C, H, W) shape for UNet.
-            print(f"processed_embedding before processing for UNet: {processed_embedding.shape}")
-
-            if processed_embedding.dim() == 5:
-                # If it's (B, 1, C, H, W), remove the singleton dim
-                processed_embedding = processed_embedding.squeeze(1)
-                print(f"processed_embedding after squeezing 5D to 4D: {processed_embedding.shape}")
-            
-            # Now, it should be (B, C, H, W) or (B, D).
-            # If it's (B, C, H, W), resize it to UNet bottleneck dimensions.
-            if processed_embedding.dim() == 4:
-                target_h = images_for_unet.shape[2] // (2**4) 
-                target_w = images_for_unet.shape[3] // (2**4)
-                print(f"Resizing 4D processed_embedding {processed_embedding.shape} to target spatial dimensions ({target_h}, {target_w}).")
-                processed_embedding = F.interpolate(processed_embedding, size=(target_h, target_w), mode='bilinear', align_corners=False)
-            elif processed_embedding.dim() == 2:
-                # If it's (B, D), treat D as channel and expand spatially
-                embedding_dim_for_unet = processed_embedding.shape[1]
-                target_h = images_for_unet.shape[2] // (2**4) 
-                target_w = images_for_unet.shape[3] // (2**4)
-                print(f"Expanding 2D processed_embedding {processed_embedding.shape} to target spatial dimensions ({target_h}, {target_w}).")
-                processed_embedding = processed_embedding.unsqueeze(-1).unsqueeze(-1).expand(
-                    -1, -1, target_h, target_w
-                )
-            else:
-                # Fallback: create a zero tensor if shape is unexpected
-                embedding_dim_for_unet = self._get_embedding_dim() if self._get_embedding_dim() > 0 else 128
-                target_h = images_for_unet.shape[2] // (2**4) 
-                target_w = images_for_unet.shape[3] // (2**4)
-                print(f"Warning: Unexpected embedding shape {processed_embedding.shape}. Creating zero tensor for embedding.")
-                processed_embedding = torch.zeros(
-                    images.shape[0], embedding_dim_for_unet, target_h, target_w,
-                    device=images.device
-                )
-            print(f"processed_embedding (final shape before UNet call, without pretrained model processing): {processed_embedding.shape}")
-
-
-        print("\n--- Final shapes before UNet_Marida call ---")
-        print(f"images_for_unet shape: {images_for_unet.shape}")
-        print(f"processed_embedding shape: {processed_embedding.shape}")
-
-        return self.projection_head(processed_embedding, images_for_unet)
+        if self.full_finetune:
+            if self.model_type == "mae":
+                embedding = embedding.squeeze(0)
+                print("embedding shape",embedding.shape)
+                embedding = self.pretrained_model.forward_encoder(embedding)
+                embedding = embedding.unsqueeze(0)
+            elif self.model_type == "moco":
+                embedding = embedding.squeeze(0)
+                print("embedding shape",embedding.shape)
+                embedding = self.pretrained_model.backbone(images)#.flatten(start_dim=1)
+                print("embedding shape after ",embedding.shape)
+                embedding = embedding.unsqueeze(0)
+                print("embedding shape after unsqueeze",embedding.shape)
+            elif self.model_type == "mocogeo":
+                embedding = embedding.squeeze(0)
+                print("embedding shape before backbone",embedding.shape)
+                embedding = self.pretrained_model.backbone(images).flatten(start_dim=1)
+                print("embedding shape after backbone")
+                embedding = embedding.unsqueeze(0)
+                print("embedding after unsqueeze")
+                
+        return self.projection_head(embedding,images)
     
     def training_step(self, batch, batch_idx):
         train_dir = "train_results"
@@ -400,12 +295,6 @@ class MAEFineTuning(pl.LightningModule):
 
         all_predictions = np.array(all_predictions)
         all_targets = np.array(all_targets)
-
-        # In on_test_epoch_end:
-        print(f"Number of predictions: {len(all_predictions)}, Number of targets: {len(all_targets)}")
-        print(f"Unique predictions: {np.unique(all_predictions)}, Unique targets: {np.unique(all_targets)}")
-        print(f"Number of masked values: {np.sum(all_targets == -1)}")
-
 
         acc = metrics_marida( all_targets,all_predictions,)
         for key, value in acc.items():

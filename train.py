@@ -62,7 +62,7 @@ def main(args):
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
         model = MoCoGeo(
-            src_channels=12 # Assuming 12 channels for Hydro data
+            src_channels=3 # Assuming 12 channels for Hydro data
         )
         datamodule = HydroMoCoGeoDataModule( # Specific DataModule for MoCo-Geo
             data_dir=args.dataset,

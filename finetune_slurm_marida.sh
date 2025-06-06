@@ -1,11 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=MAE_FineTune           # Job name
+#SBATCH --partition=rsim_member       # Partition name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
-#SBATCH --time=72:00:00                   # Time limit
-#SBATCH --output=logs/finetune_slurm.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm.err   # Error log
+#SBATCH --time=4-00:00:00              # Time limit
+#SBATCH --output=logs/finetune_slurm_marida_mae.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_marida_mae.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new

@@ -41,7 +41,7 @@ class MoCoGeo(pl.LightningModule):
         K: int = 4096,       # Memory bank size for NTXentLoss
         m: float = 0.99,     # Momentum coefficient for momentum encoder update
         T: float = 0.07,     # Temperature for NTXentLoss
-        src_channels: int = 12, # Number of input channels for the images
+        src_channels: int = 3, # Number of input channels for the images
         num_geo_classes: int = 100 # Number of geographical classes
     ):
         super().__init__()

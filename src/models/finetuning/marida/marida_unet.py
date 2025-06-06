@@ -48,11 +48,18 @@ class Up(nn.Module):
         return out
 
 class UNet_Marida(nn.Module):
-    def __init__(self, input_channels=11, out_channels=11, hidden_channels=16, embedding_dim=128):
+    def __init__(self, input_channels=11, out_channels=11, hidden_channels=16, embedding_dim=128,model_type="mae"):
         super(UNet_Marida, self).__init__()
         
         # Store hidden_channels as an instance variable
-        self.hidden_channels = hidden_channels 
+        self.hidden_channels = hidden_channels
+        self.input_channels = input_channels
+        self.out_channels = out_channels
+        self.model_type = model_type
+        self.embedding_projector = nn.Linear(768, 256)
+        self.combined_projection = nn.Linear(256 + 256, 256) 
+        self.moco_projection =  nn.Linear(in_features=512, out_features=262144)
+        self.mocogeo_projection =  nn.Linear(in_features=512, out_features=262144)
 
         self.inc = nn.Sequential(
             nn.Conv2d(input_channels, self.hidden_channels, kernel_size=3, padding=1),
@@ -77,7 +84,6 @@ class UNet_Marida(nn.Module):
         self.embedding_dim = embedding_dim 
         expected_in_features = self.embedding_dim + (8 * self.hidden_channels)
         self.combined_projection = nn.Linear(expected_in_features, 8 * self.hidden_channels)
-        print(f"DEBUG: Initializing combined_projection with in_features={expected_in_features} (embedding_dim={self.embedding_dim}, hidden_channels={self.hidden_channels})")
 
 
     def forward(self, x, image):
@@ -87,35 +93,42 @@ class UNet_Marida(nn.Module):
         x3 = self.down2(x2)
         x4 = self.down3(x3) 
         x5 = self.down4(x4)
-
-        if x.dim() == 3 and x.shape[1] == 1: # (batch_size, 1, features)
-            x_reshaped_for_interp = x.squeeze(1).unsqueeze(2).unsqueeze(3) # -> (batch_size, features, 1, 1)
-            print(f"DEBUG: Handled 3D input (B,1,F): {x.shape} -> {x_reshaped_for_interp.shape}")
-        elif x.dim() == 2: # (batch_size, features)
-            x_reshaped_for_interp = x.unsqueeze(2).unsqueeze(3) # -> (batch_size, features, 1, 1)
-            print(f"DEBUG: Handled 2D input (B,F): {x.shape} -> {x_reshaped_for_interp.shape}")
-        elif x.dim() == 4: # (batch_size, channels, H, W)
-            x_reshaped_for_interp = x
-            print(f"DEBUG: Handled 4D input (B,C,H,W): {x.shape} -> {x_reshaped_for_interp.shape}")
-        else:
-            raise ValueError(f"Unsupported dimension for input x: {x.dim()}. Expected (B,F), (B,1,F), or (B,C,H,W). Received: {x.shape}")
-
-        x_resized = torch.nn.functional.interpolate(x_reshaped_for_interp, size=x5.shape[2:], mode='bilinear', align_corners=True)
         
-        combined = torch.cat([x_resized, x5], dim=1)
+        if self.model_type == "mae":
+            projected_embedding = self.embedding_projector(x_embedding) 
+            patch_tokens = projected_embedding[:, 1:, :] 
+            batch_size, num_patches, features = patch_tokens.shape 
+            spatial_size = int(num_patches**0.5) 
 
-        batch_size, channels, height, width = combined.shape
-        combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+            spatial_embedding = patch_tokens.permute(0, 2, 1).reshape(
+                batch_size, features, spatial_size, spatial_size
+            )
+
+            x_embedding = F.interpolate(
+                spatial_embedding, 
+                size=(x5.shape[2], x5.shape[3]), 
+                mode='bilinear', 
+                align_corners=False
+            ) 
+
+        elif self.model_type == "moco":
+            x_embedding = x_embedding.squeeze().unsqueeze(0)
+            x_embedding = self.moco_projection(x_embedding)
+            x_embedding = x_embedding.view(x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3])
+            combined_projected = torch.cat([x_embedding, x5], dim=1) 
         
-        # DEBUG PRINTS to see what's actually going into the linear layer
-        print(f"DEBUG: x_resized shape: {x_resized.shape}")
-        print(f"DEBUG: x5 shape: {x5.shape}")
-        print(f"DEBUG: combined shape: {combined.shape}")
-        print(f"DEBUG: combined_reshaped shape (input to linear): {combined_reshaped.shape}")
-        print(f"DEBUG: self.combined_projection.weight.shape (linear layer's mat2): {self.combined_projection.weight.shape}")
-
-        # Use self.hidden_channels
-        combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 8 * self.hidden_channels, height, width)
+        elif self.model_type == "mocogeo":
+            print("x_embedding shape before projection:", x_embedding.shape)
+            x_embedding = x_embedding.squeeze().unsqueeze(0)
+            print("x_embedding shape after unsqueeze:", x_embedding.shape)
+            print("x5 shape:", x5.shape)
+            x_embedding = self.moco_projection(x_embedding)
+            x_embedding = x_embedding.view(x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3])
+            
+        combined = torch.cat([x_embedding, x5], dim=1) 
+        batch_size, channels_combined, height, width = combined.shape
+        combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
+        combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
 
         x6 = self.up1(combined_projected, x4)
         x7 = self.up2(x6, x3)

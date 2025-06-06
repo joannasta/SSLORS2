@@ -4,11 +4,12 @@ import os
 import re
 import numpy as np
 class DatasetProcessor:
-    def __init__(self, img_dir, depth_dir, output_dir, splits_dir=None):
+    def __init__(self, img_dir, depth_dir, output_dir, splits_dir=None,split_type="train"):
         self.img_dir = Path(img_dir)
         self.depth_dir = Path(depth_dir)
         self.output_dir = Path(output_dir)  # This will be the base output directory
         self.splits_dir = Path(splits_dir)
+        self.split_type = split_type
 
         for mode in ["train", "val", "test"]:  # Process for each mode
             mode_output_dir = self.output_dir / mode # Create subdirectory for each mode

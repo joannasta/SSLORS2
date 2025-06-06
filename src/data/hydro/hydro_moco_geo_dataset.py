@@ -116,7 +116,7 @@ class HydroMoCoGeoDataset(Dataset):
         
         normalized_tensor = (img_tensor - self.means_tensor) / self.stds_tensor
         # Select channels from 1 to 3 (inclusive), which is 1:4 in Python slicing
-        return normalized_tensor#[1:4, :, :]
+        return normalized_tensor[1:4, :, :]
 
     def __getitem__(self, idx: int):
         file_path = self.file_paths[idx]

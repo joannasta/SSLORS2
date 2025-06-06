@@ -25,26 +25,19 @@ class Down(nn.Module):
     def forward(self, x):
         return self.maxpool_conv(x)
 
-# CORRECTED UP MODULE DEFINITION
 class Up(nn.Module):
     def __init__(self, in_channels_from_prev_layer, in_channels_skip_connection, out_channels_for_this_block):
         super().__init__()
-        # self.up takes input from the previous decoder layer
+
         self.up = nn.ConvTranspose2d(in_channels_from_prev_layer, out_channels_for_this_block, kernel_size=2, stride=2)
-        
-        # self.conv takes concatenated input: (upsampled_channels + skip_channels)
         self.conv = DoubleConv(out_channels_for_this_block + in_channels_skip_connection, out_channels_for_this_block)
         
-    def forward(self, x1, x2): # x1 comes from previous decoder stage (to be upsampled), x2 is the skip connection
+    def forward(self, x1, x2): 
         x1 = self.up(x1)
-        
-        # Pad x1 if dimensions don't perfectly match x2 (due to odd/even sizes)
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
         x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
                         diffY // 2, diffY - diffY // 2])
-        
-        # Concatenate x2 (skip connection) and x1 (upsampled output)
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
@@ -57,6 +50,7 @@ class UNet_bathy(nn.Module):
         self.embedding_projector = nn.Linear(768, 256)
         self.combined_projection = nn.Linear(256 + 256, 256) 
         self.moco_projection =  nn.Linear(in_features=512, out_features=262144)
+        self.mocogeo_projection =  nn.Linear(in_features=512, out_features=262144)
 
 
         self.encoder = nn.Sequential(
@@ -102,13 +96,18 @@ class UNet_bathy(nn.Module):
             ) 
 
         elif self.model_type == "moco":
-            print("x4 shape:", x4.shape)
-            print("x_embedding shape:", x_embedding.shape)
             x_embedding = x_embedding.squeeze().unsqueeze(0)
             x_embedding = self.moco_projection(x_embedding)
-            print("x_embedding after projection shape:", x_embedding.shape)
             x_embedding = x_embedding.view(x4.shape[0], x4.shape[1], x4.shape[2], x4.shape[3])
             combined_projected = torch.cat([x_embedding, x4], dim=1) 
+        
+        elif self.model_type == "mocogeo":
+            print("x_embedding shape before projection:", x_embedding.shape)
+            x_embedding = x_embedding.squeeze().unsqueeze(0)
+            print("x_embedding shape after unsqueeze:", x_embedding.shape)
+            print("x4 shape:", x4.shape)
+            x_embedding = self.moco_projection(x_embedding)
+            x_embedding = x_embedding.view(x4.shape[0], x4.shape[1], x4.shape[2], x4.shape[3])
             
         combined = torch.cat([x_embedding, x4], dim=1) 
         batch_size, channels_combined, height, width = combined.shape

@@ -90,11 +90,13 @@ class MAEFineTuning(pl.LightningModule):
                 print("embedding shape after ",embedding.shape)
                 embedding = embedding.unsqueeze(0)
                 print("embedding shape after unsqueeze",embedding.shape)
-            elif self.model_type == "moco_geo":
+            elif self.model_type == "mocogeo":
                 embedding = embedding.squeeze(0)
-                print("embedding shape",embedding.shape)
+                print("embedding shape before backbone",embedding.shape)
                 embedding = self.pretrained_model.backbone(images).flatten(start_dim=1)
+                print("embedding shape after backbone")
                 embedding = embedding.unsqueeze(0)
+                print("embedding after unsqueeze")
                 
         return self.projection_head(embedding,images)
 
