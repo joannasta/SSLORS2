@@ -103,8 +103,11 @@ class MAEFineTuning(pl.LightningModule):
     def forward(self, images, embeddings):
 
         # Adapt input images channels for UNet's encoder path
-        images = self.input_adapter(images) 
-
+        #images = self.input_adapter(images) 
+        print("images shape", images.shape)
+        print("self.full_finetune", self.full_finetune)
+        print("self.model_type", self.model_type)
+        
         if self.full_finetune:
             if self.model_type == "mae":
                 embedding = embedding.squeeze(0)
