@@ -50,14 +50,12 @@ class Up(nn.Module):
 class UNet_Marida(nn.Module):
     def __init__(self, input_channels=11, out_channels=11, hidden_channels=16, embedding_dim=128,model_type="mae"):
         super(UNet_Marida, self).__init__()
-        
-        # Store hidden_channels as an instance variable
+
         self.hidden_channels = hidden_channels
         self.input_channels = input_channels
         self.out_channels = out_channels
         self.model_type = model_type
         self.embedding_projector = nn.Linear(768, 256)
-        self.combined_projection = nn.Linear(256 + 256, 256) 
         self.moco_projection =  nn.Linear(in_features=512, out_features=262144)
         self.mocogeo_projection =  nn.Linear(in_features=512, out_features=262144)
 
@@ -74,45 +72,58 @@ class UNet_Marida(nn.Module):
         self.down3 = Down(4 * self.hidden_channels, 8 * self.hidden_channels)
         self.down4 = Down(8 * self.hidden_channels, 8 * self.hidden_channels)
 
-        self.up1 = Up(16 * self.hidden_channels, 4 * self.hidden_channels)
+        # --- IMPORTANT CHANGE HERE ---
+        # The first argument to Up is `in_channels`, which is for the *concatenated* tensor.
+        # x1 (from Up) is `combined_projected` which has 256 channels.
+        # x2 (from Up) is `x4` which has `8 * hidden_channels = 128` channels.
+        # So, the concatenated input will have 256 + 128 = 384 channels.
+        self.up1 = Up(256 + (8 * self.hidden_channels), 4 * self.hidden_channels) # Changed 16*hc to 256 + 8*hc
+        # self.up1 = Up(384, 4 * self.hidden_channels) # This is the explicit value
+
         self.up2 = Up(8 * self.hidden_channels, 2 * self.hidden_channels)
         self.up3 = Up(4 * self.hidden_channels, self.hidden_channels)
         self.up4 = Up(2 * self.hidden_channels, self.hidden_channels)
 
         self.outc = nn.Conv2d(self.hidden_channels, out_channels, kernel_size=1)
 
-        self.embedding_dim = embedding_dim 
-        expected_in_features = self.embedding_dim + (8 * self.hidden_channels)
-        self.combined_projection = nn.Linear(expected_in_features, 8 * self.hidden_channels)
-
+        self.embedding_dim = embedding_dim
+        self.combined_projection = nn.Linear(256 + (8 * self.hidden_channels), 256)
 
     def forward(self, image,x_embedding):
-        image = image.transpose(0,3,1,2)
         print("unet image",image.shape)
         print("x_embedding shape:", x_embedding.shape)
-        
+        print("model_type:", self.model_type)
         x1 = self.inc(image)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3) 
         x5 = self.down4(x4)
-        
+        print("x5 shape:", x5.shape)
         if self.model_type == "mae":
-            projected_embedding = self.embedding_projector(x_embedding) 
-            patch_tokens = projected_embedding[:, 1:, :] 
-            batch_size, num_patches, features = patch_tokens.shape 
-            spatial_size = int(num_patches**0.5) 
+            projected_embedding = self.embedding_projector(x_embedding)
 
+            # Squeeze the redundant first dimension if present, assuming batch is at dim 1
+            if projected_embedding.shape[0] == 1 and projected_embedding.shape[1] == x5.shape[0]:
+                 projected_embedding = projected_embedding.squeeze(0)
+
+            # Exclude the CLS token (first token) to get only patch embeddings
+            patch_tokens = projected_embedding[:, 1:, :]
+
+            batch_size, num_patches, features = patch_tokens.shape
+            spatial_size = int(num_patches**0.5)
+
+            # Reshape from (Batch, Patches, Features) to (Batch, Features, Height, Width)
             spatial_embedding = patch_tokens.permute(0, 2, 1).reshape(
                 batch_size, features, spatial_size, spatial_size
             )
 
+            # Interpolate to match x5's spatial dimensions
             x_embedding = F.interpolate(
-                spatial_embedding, 
-                size=(x5.shape[2], x5.shape[3]), 
-                mode='bilinear', 
+                spatial_embedding,
+                size=(x5.shape[2], x5.shape[3]),
+                mode='bilinear',
                 align_corners=False
-            ) 
+            )
 
         elif self.model_type == "moco":
             x_embedding = x_embedding.squeeze().unsqueeze(0)

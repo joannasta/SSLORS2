@@ -233,6 +233,7 @@ class MaridaDataset(Dataset):
         if self.standardization is not None:
             img = self.standardization(img)
 
+        img = img.transpose(2,1,0)
         return img, target, embedding
 
 

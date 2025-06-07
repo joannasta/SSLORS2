@@ -65,7 +65,7 @@ class MAEFineTuning(pl.LightningModule):
 
         self.src_channels = src_channels  
         if self.pretrained_model is not None:
-            self.pretrained_in_channels = 3
+            self.pretrained_in_channels = 11
         else:
             self.pretrained_in_channels = src_channels
         self.learning_rate = learning_rate
@@ -136,6 +136,7 @@ class MAEFineTuning(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         train_dir = "train_results"
         data, target,embedding = batch
+        target = target.squeeze(1) 
         batch_size = data.shape[0]
         logits = self(data,embedding)
         target = target.long()
@@ -162,6 +163,7 @@ class MAEFineTuning(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         val_dir="val_results"
         data, target,embedding = batch
+        target = target.squeeze(1) 
         batch_size = data.shape[0]
         logits = self(data,embedding)
         target = target.long()
@@ -188,6 +190,7 @@ class MAEFineTuning(pl.LightningModule):
     def test_step(self, batch, batch_idx):
         test_dir = "test_results"
         data, target, embedding = batch
+        target = target.squeeze(1) 
         batch_size = data.shape[0]
         print(f"Batch {batch_idx}: Data shape: {data.shape}, Target shape: {target.shape}")
         print(f"Batch {batch_idx}: Unique target values: {torch.unique(target)}")
