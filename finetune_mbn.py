@@ -73,7 +73,8 @@ class BathymetryPredictor:
             location=location,
             full_finetune=self.full_finetune,
             random=self.random, # Keep random=False for finetuning with loaded SSL model
-            ssl=self.ssl # Pass the determined SSL status to DataModule
+            ssl=self.ssl, # Pass the determined SSL status to DataModule
+            location=location,
         )
         
         self.model = MAEFineTuning(
@@ -129,10 +130,12 @@ def main():
     parser.add_argument("--data_dir", required=True, help="Path to data directory")
     parser.add_argument("--output_dir", default="./inference_results", help="Output directory")
     parser.add_argument("--resize-to", type=int, nargs=2, default=(256, 256), help="Resize images (height width)")
+    parser.add_argument("--location", type=str, default="agia_napa", help="location")
 
     # Parse arguments and initialize predictor
     args = parser.parse_args()
     model_type = args.model.lower()
+    location = args.location
     # Pass the new 'model_type' argument to BathymetryPredictor
     predictor = BathymetryPredictor(
         pretrained_weights_path=args.weights,
@@ -140,7 +143,8 @@ def main():
         model_type=model_type, # Pass the model type
         output_dir=args.output_dir,
         resize_to=tuple(args.resize_to),
-        batch_size=args.train_batch_size # Ensure this aligns with DataModule's batch_size
+        batch_size=args.train_batch_size,
+        location=location# Ensure this aligns with DataModule's batch_size
     )
         # Run prediction workflow
     predictor.train(max_epochs=args.epochs) # Pass epochs from args

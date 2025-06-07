@@ -44,7 +44,7 @@ def gen_weights(class_distribution, c = 1.02):
     return 1/torch.log(c + class_distribution)
 
 class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,model_type="mae",full_finetune=True):
+    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,model_type="mae",full_finetune=True,location="agia_napa"):
         super().__init__()
         self.writer = SummaryWriter()
         self.train_step_losses = []
@@ -52,7 +52,8 @@ class MAEFineTuning(pl.LightningModule):
         self.train_batch_count = 0
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.save_hyperparameters()
-        self.run_dir = None  
+        self.run_dir = None 
+        self.location = location 
         self.base_dir = "marine_debris_results"
         self.pretrained_model=pretrained_model
         self.model_type = model_type

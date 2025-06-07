@@ -102,7 +102,7 @@ class MagicBathyNetDataset(Dataset):
         print("Initializing HydroDataset for embedding creation...")
         # Note: HydroDataset uses self.processor.img_only_dir, which should contain the
         # filtered images for the current split after the DatasetProcessor runs.
-        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"])
+        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"],location=self.location)
         print(f"HydroDataset for embeddings has {len(hydro_dataset)} images.")
         self.embeddings_list = []
         
