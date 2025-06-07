@@ -56,8 +56,9 @@ class UNet_Marida(nn.Module):
         self.out_channels = out_channels
         self.model_type = model_type
         self.embedding_projector = nn.Linear(768, 256)
-        self.moco_projection =  nn.Linear(in_features=512, out_features=262144)
-        self.mocogeo_projection =  nn.Linear(in_features=512, out_features=262144)
+
+        self.moco_projection =  nn.Linear(in_features=512, out_features=128 * 16 * 16)
+        self.mocogeo_projection =  nn.Linear(in_features=512, out_features=128 * 16 * 16)
 
         self.inc = nn.Sequential(
             nn.Conv2d(input_channels, self.hidden_channels, kernel_size=3, padding=1),
@@ -72,14 +73,7 @@ class UNet_Marida(nn.Module):
         self.down3 = Down(4 * self.hidden_channels, 8 * self.hidden_channels)
         self.down4 = Down(8 * self.hidden_channels, 8 * self.hidden_channels)
 
-        # --- IMPORTANT CHANGE HERE ---
-        # The first argument to Up is `in_channels`, which is for the *concatenated* tensor.
-        # x1 (from Up) is `combined_projected` which has 256 channels.
-        # x2 (from Up) is `x4` which has `8 * hidden_channels = 128` channels.
-        # So, the concatenated input will have 256 + 128 = 384 channels.
-        self.up1 = Up(256 + (8 * self.hidden_channels), 4 * self.hidden_channels) # Changed 16*hc to 256 + 8*hc
-        # self.up1 = Up(384, 4 * self.hidden_channels) # This is the explicit value
-
+        self.up1 = Up(256 + (8 * self.hidden_channels), 4 * self.hidden_channels)
         self.up2 = Up(8 * self.hidden_channels, 2 * self.hidden_channels)
         self.up3 = Up(4 * self.hidden_channels, self.hidden_channels)
         self.up4 = Up(2 * self.hidden_channels, self.hidden_channels)
@@ -87,38 +81,29 @@ class UNet_Marida(nn.Module):
         self.outc = nn.Conv2d(self.hidden_channels, out_channels, kernel_size=1)
 
         self.embedding_dim = embedding_dim
-        self.combined_projection = nn.Linear(256 + (8 * self.hidden_channels), 256)
+        self.combined_projection = nn.Linear(256, 256) # Corrected in_features to 256
+
 
     def forward(self, image,x_embedding):
-        print("unet image",image.shape)
-        print("x_embedding shape:", x_embedding.shape)
-        print("model_type:", self.model_type)
         x1 = self.inc(image)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
-        x4 = self.down3(x3) 
+        x4 = self.down3(x3)
         x5 = self.down4(x4)
-        print("x5 shape:", x5.shape)
+
+        processed_x_embedding = None
+
         if self.model_type == "mae":
             projected_embedding = self.embedding_projector(x_embedding)
-
-            # Squeeze the redundant first dimension if present, assuming batch is at dim 1
             if projected_embedding.shape[0] == 1 and projected_embedding.shape[1] == x5.shape[0]:
                  projected_embedding = projected_embedding.squeeze(0)
-
-            # Exclude the CLS token (first token) to get only patch embeddings
             patch_tokens = projected_embedding[:, 1:, :]
-
             batch_size, num_patches, features = patch_tokens.shape
             spatial_size = int(num_patches**0.5)
-
-            # Reshape from (Batch, Patches, Features) to (Batch, Features, Height, Width)
             spatial_embedding = patch_tokens.permute(0, 2, 1).reshape(
                 batch_size, features, spatial_size, spatial_size
             )
-
-            # Interpolate to match x5's spatial dimensions
-            x_embedding = F.interpolate(
+            processed_x_embedding = F.interpolate(
                 spatial_embedding,
                 size=(x5.shape[2], x5.shape[3]),
                 mode='bilinear',
@@ -126,20 +111,20 @@ class UNet_Marida(nn.Module):
             )
 
         elif self.model_type == "moco":
-            x_embedding = x_embedding.squeeze().unsqueeze(0)
-            x_embedding = self.moco_projection(x_embedding)
-            x_embedding = x_embedding.view(x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3])
-            combined_projected = torch.cat([x_embedding, x5], dim=1) 
-        
+            x_embedding_flat = self.moco_projection(x_embedding)
+            processed_x_embedding = x_embedding_flat.view(
+                x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3]
+            )
+
         elif self.model_type == "mocogeo":
-            print("x_embedding shape before projection:", x_embedding.shape)
-            x_embedding = x_embedding.squeeze().unsqueeze(0)
-            print("x_embedding shape after unsqueeze:", x_embedding.shape)
-            print("x5 shape:", x5.shape)
-            x_embedding = self.moco_projection(x_embedding)
-            x_embedding = x_embedding.view(x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3])
-            
-        combined = torch.cat([x_embedding, x5], dim=1) 
+            x_embedding_flat = self.mocogeo_projection(x_embedding)
+            if x_embedding_flat.shape[0] == 1 and x_embedding_flat.shape[1] == x5.shape[0]:
+                x_embedding_flat = x_embedding_flat.squeeze(0)
+            processed_x_embedding = x_embedding_flat.view(
+                x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3]
+            )
+
+        combined = torch.cat([processed_x_embedding, x5], dim=1)
         batch_size, channels_combined, height, width = combined.shape
         combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
         combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)

@@ -108,29 +108,25 @@ class MAEFineTuning(pl.LightningModule):
         print("self.full_finetune", self.full_finetune)
         print("self.model_type", self.model_type)
         
+        processed_embedding_for_unet = None
+
         if self.full_finetune:
             if self.model_type == "mae":
-                embedding = embedding.squeeze(0)
-                print("embedding shape",embedding.shape)
-                embedding = self.pretrained_model.forward_encoder(embedding)
-                print("embedding shape after encoder",embedding.shape)
-                embedding = embedding.unsqueeze(0)
-                print("embedding shape after unsqueeze",embedding.shape)
+                processed_embedding_for_unet = embedding.squeeze(0)
+                processed_embedding_for_unet = self.pretrained_model.forward_encoder(processed_embedding_for_unet)
+                processed_embedding_for_unet = processed_embedding_for_unet.unsqueeze(0)
             elif self.model_type == "moco":
-                embedding = embedding.squeeze(0)
-                print("embedding shape",embedding.shape)
-                embedding = self.pretrained_model.backbone(images)#.flatten(start_dim=1)
-                print("embedding shape after ",embedding.shape)
-                embedding = embedding.unsqueeze(0)
-                print("embedding shape after unsqueeze",embedding.shape)
+                moco_features = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
+                processed_embedding_for_unet = moco_features
             elif self.model_type == "mocogeo":
-                embedding = embedding.squeeze(0)
-                print("embedding shape before backbone",embedding.shape)
-                embedding = self.pretrained_model.backbone(images).flatten(start_dim=1)
-                print("embedding shape after backbone")
-                embedding = embedding.unsqueeze(0)
-                print("embedding after unsqueeze")
-                
+                processed_embedding_for_unet = embedding.squeeze(0)
+                processed_embedding_for_unet = self.pretrained_model.backbone(processed_embedding_for_unet).flatten(start_dim=1)
+        else:
+            processed_embedding_for_unet = embedding
+
+        return self.projection_head(images, processed_embedding_for_unet)
+
+
         return self.projection_head(images,embedding)
     
     def training_step(self, batch, batch_idx):
