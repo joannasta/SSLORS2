@@ -73,8 +73,7 @@ class BathymetryPredictor:
             location=location,
             full_finetune=self.full_finetune,
             random=self.random, # Keep random=False for finetuning with loaded SSL model
-            ssl=self.ssl, # Pass the determined SSL status to DataModule
-            location=location,
+            ssl=self.ssl # Pass the determined SSL status to DataModule
         )
         
         self.model = MAEFineTuning(

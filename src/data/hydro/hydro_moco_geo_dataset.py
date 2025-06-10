@@ -161,4 +161,5 @@ class HydroMoCoGeoDataset(Dataset):
                 )
         else: # For other models (e.g., 'mae'), expect a single tensor
             sample_normalized = self._normalize_tensor(sample)
+            sample_normalized = sample_normalized[1:4, :, :]  
             return sample_normalized.float()

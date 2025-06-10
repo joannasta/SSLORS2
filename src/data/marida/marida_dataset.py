@@ -232,8 +232,11 @@ class MaridaDataset(Dataset):
 
         if self.standardization is not None:
             img = self.standardization(img)
+        print("img shape after standardization:", img.shape)
 
-        img = img.transpose(2,1,0)
+        if isinstance(img, np.ndarray):
+            img = torch.from_numpy(img)   
+        img = img.permute(2,1,0)
         return img, target, embedding
 
 

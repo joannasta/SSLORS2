@@ -121,7 +121,11 @@ class MagicBathyNetDataset(Dataset):
                 print(f"  Processing image {idx + 1}/{len(hydro_dataset)} for embeddings...")
             
             img = hydro_dataset[idx]
-            img = img.unsqueeze(0).to(model_device)
+            print("img shape before processing:", img.shape)
+            img = img.squeeze(1)
+
+
+            print("img shape before resizing:", img.shape)
             img = F.interpolate(img, size=(256,256), mode='bilinear', align_corners=False)
             
             if self.full_finetune:

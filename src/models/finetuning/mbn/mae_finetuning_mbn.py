@@ -77,6 +77,7 @@ class MAEFineTuning(pl.LightningModule):
  
     def forward(self, images,embedding):
         batch_size = images.shape[0]
+        print("images.shape",images.shape)
         if self.full_finetune:
             if self.model_type == "mae":
                 embedding = embedding.squeeze(0)
