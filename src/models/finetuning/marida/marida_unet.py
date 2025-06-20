@@ -85,6 +85,9 @@ class UNet_Marida(nn.Module):
 
 
     def forward(self, image,x_embedding):
+        print("image shape before:", image.shape)
+        #image = image.permute(0,3,1,2)
+        print("image shape after:", image.shape)
         x1 = self.inc(image)
         x2 = self.down1(x1)
         x3 = self.down2(x2)

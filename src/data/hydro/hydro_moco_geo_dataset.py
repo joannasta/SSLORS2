@@ -136,8 +136,8 @@ class HydroMoCoGeoDataset(Dataset):
                 q_raw, k_raw = sample
                 
                 # Normalize query and key crops
-                q_normalized = self._normalize_tensor(q_raw)
-                k_normalized = self._normalize_tensor(k_raw)
+                q_normalized = self._normalize_tensor(q_raw)[1:4, :, :]  # Select channels 1:4
+                k_normalized = self._normalize_tensor(k_raw)[1:4, :, :] 
                 
                 pseudo_label = self.geo_to_label.get(str(file_path), -1)
                 if pseudo_label == -1:

@@ -153,11 +153,14 @@ class MAEFineTuning(pl.LightningModule):
             self.train_batch_count = 0
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
+        
+        print("training loss", loss)
 
         return loss
 
 
     def validation_step(self, batch, batch_idx):
+        torch.autograd.set_detect_anomaly(True) 
         val_dir="val_results"
         data, target,embedding = batch
         target = target.squeeze(1) 
@@ -180,11 +183,16 @@ class MAEFineTuning(pl.LightningModule):
             self.val_batch_count = 0
         self.total_val_loss += loss.item()
         self.val_batch_count += 1
+        
+        print("validation loss", loss)
 
         return loss
     
     
     def test_step(self, batch, batch_idx):
+        # Place it here, as the first line in test_step
+        torch.autograd.set_detect_anomaly(True) 
+
         test_dir = "test_results"
         data, target, embedding = batch
         target = target.squeeze(1) 
@@ -194,8 +202,33 @@ class MAEFineTuning(pl.LightningModule):
 
         logits = self(data, embedding)
         target = target.long()
+
+        # --- Debugging steps ---
+        print(f"Logits shape before loss: {logits.shape}")
+        print(f"Target shape before loss: {target.shape}")
+        print(f"Logits dtypes: {logits.dtype}")
+        print(f"Target dtypes: {target.dtype}")
+
+        # Check for NaN/Inf in logits
+        if torch.isnan(logits).any():
+            print("!!! NaN detected in logits before loss calculation !!!")
+        if torch.isinf(logits).any():
+            print("!!! Inf detected in logits before loss calculation !!!")
+
+        # Check value range of logits (especially min/max)
+        print(f"Logits min: {logits.min()}, Logits max: {logits.max()}")
+
+        # Check the actual values of target where it's not -1
+        unique_valid_targets = torch.unique(target[target != -1])
+        print(f"Unique valid targets: {unique_valid_targets}")
+
+        # --- End debugging steps ---
+
         loss = self.criterion(logits, target)
         self.log("test_loss", loss)
+        
+        print(f"Test Step {batch_idx}: Loss: {loss.item()}")
+
 
         # Accuracy metrics only on annotated pixels
         logits_moved = torch.movedim(logits, (0, 1, 2, 3), (0, 3, 1, 2))
@@ -301,17 +334,23 @@ class MAEFineTuning(pl.LightningModule):
         all_predictions = np.array(all_predictions)
         all_targets = np.array(all_targets)
 
-        acc = metrics_marida( all_targets,all_predictions,)
+        unique_targets = np.unique(all_targets)
+        unique_predictions = np.unique(all_predictions)
+        
+        actual_labels_present = np.sort(np.unique(np.concatenate((unique_targets, unique_predictions))))
+
+        labels_for_confusion_matrix = [label for label in actual_labels_present if label != -1]
+
+        acc = metrics_marida(all_targets, all_predictions)
         for key, value in acc.items():
             prefix = "test"
-            self.log(f"{prefix}_{key}", value) 
+            self.log(f"{prefix}_{key}", value)
         print(f"Evaluation: {acc}")
-        conf_mat = confusion_matrix(all_targets, all_predictions, labels_marida)
+
+        conf_mat = confusion_matrix(all_targets, all_predictions, labels_for_confusion_matrix)
         print("Confusion Matrix:  \n" + str(conf_mat.to_string()))
 
-
-        self.test_step_outputs.clear() # Clear the outputs.
-        
+        self.test_step_outputs.clear()
 
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -390,7 +429,10 @@ class MAEFineTuning(pl.LightningModule):
             os.makedirs(self.run_dir, exist_ok=True)
                 
     def configure_optimizers(self):
-        
         optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1, verbose=True)
+        
+        # Add gradient clipping
+        self.clip_gradients(optimizer, gradient_clip_val=1.0, gradient_clip_algorithm="norm") # Example values
+
         return [optimizer], [scheduler]

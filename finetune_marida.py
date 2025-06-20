@@ -93,19 +93,25 @@ class MarineDebrisPredictor:
     
     
     
-    def train(self, max_epochs: int = 50) -> pl.Trainer:
+    def train(self, max_epochs: int = 5) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
         # Initialize trainer with specific configurations
+        if self.device.type == "cuda":
+            accelerator = "gpu"
+        else:
+            accelerator = "cpu"
+            
         trainer = Trainer(
-            accelerator="gpu",
+            accelerator=accelerator,
             devices=1,
             max_epochs=max_epochs,
             logger=logger,
             gradient_clip_val=1.0,
             enable_progress_bar=True,
-            val_check_interval=1.0
+            val_check_interval=1.0,
+            
         )
 
         # Perform model training

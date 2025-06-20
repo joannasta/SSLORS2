@@ -99,9 +99,6 @@ class MagicBathyNetDataset(Dataset):
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
 
-        print("Initializing HydroDataset for embedding creation...")
-        # Note: HydroDataset uses self.processor.img_only_dir, which should contain the
-        # filtered images for the current split after the DatasetProcessor runs.
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"],location=self.location)
         print(f"HydroDataset for embeddings has {len(hydro_dataset)} images.")
         self.embeddings_list = []
@@ -114,18 +111,12 @@ class MagicBathyNetDataset(Dataset):
             print("Applying random weights initialization to pretrained model.")
             self.pretrained_model.apply(weights_init)
 
-        print("Starting batch processing for embeddings...")
-
         for idx in range(len(hydro_dataset)):
             if (idx + 1) % 100 == 0 or idx == len(hydro_dataset) - 1:
                 print(f"  Processing image {idx + 1}/{len(hydro_dataset)} for embeddings...")
             
             img = hydro_dataset[idx]
-            print("img shape before processing:", img.shape)
             img = img.squeeze(1)
-
-
-            print("img shape before resizing:", img.shape)
             img = F.interpolate(img, size=(256,256), mode='bilinear', align_corners=False)
             
             if self.full_finetune:
@@ -140,13 +131,9 @@ class MagicBathyNetDataset(Dataset):
                         raise ValueError(f"Model {self.pretrained_model.__class__.__name__} not configured for embedding creation.")
                     self.embeddings_list.append(embedding)
             
-        print("Concatenating embeddings...")
         self.embeddings = torch.cat(self.embeddings_list, dim=0)
         print(f"Embeddings concatenated. Shape: {self.embeddings.shape}")
-        
-        print("Moving embeddings to CPU.")
         self.embeddings = self.embeddings.cpu()
-        print("Embeddings moved to CPU.")
     
     @classmethod
     def data_augmentation(cls, *arrays, flip=True, mirror=True):
@@ -203,4 +190,8 @@ class MagicBathyNetDataset(Dataset):
         label_p_tensor = torch.from_numpy(label_p)
 
         embedding = self.embeddings[random_idx]
+        
+        print("data_p_tensor shape:", data_p_tensor.shape)  
+        print("label_p_tensor shape:", label_p_tensor.shape)
+        print("embedding shape:", embedding.shape)
         return (data_p_tensor, label_p_tensor, embedding)

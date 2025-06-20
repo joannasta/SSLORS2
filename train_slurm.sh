@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=MAE_Train              # Job name
+#SBATCH --job-name=MOCOGEO_Train              # Job name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=4-00:00:00                   # Time limit (Corrected format for 4 days)
-#SBATCH --output=logs/train_slurm.out     # Standard output log
-#SBATCH --error=logs/train_slurm.err      # Error log
+#SBATCH --output=logs/train_slurm_moco_geo_ocean.out     # Standard output log
+#SBATCH --error=logs/train_slurm_moco_geo_ocean.err      # Error log
 #SBATCH --partition=rsim_member
 # Set up the environment
 #source activate ssl_new                   # Activate your conda environment
@@ -15,7 +15,7 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 # Define variables
 DEVICES=1                                 # Number of devices for training
 NUM_WORKERS=8                             # Number of data loader workers
-MODEL=mae                            # Model name
+MODEL=moco-geo-ocean                   # Model name
 TRAIN_BATCH_SIZE=64                       # Training batch size
 VAL_BATCH_SIZE=64                         # Validation batch size
 LEARNING_RATE=1e-5                        # Learning rate

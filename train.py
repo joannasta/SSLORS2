@@ -8,7 +8,9 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from src.models.moco_geo import MoCoGeo
 from src.models.moco import MoCo
 from src.models.mae import MAE
+from src.models.moco_geo_ocean import MoCoGeoOcean  # Assuming MoCoGeoOcean is defined in this module
 from src.data.hydro.hydro_dataloader_moco_geo import HydroMoCoGeoDataModule
+from src.data.hydro.hydro_dataloader_moco_geo_ocean import HydroOceanFeaturesDataModule
 from src.data.hydro.hydro_dataloader_moco import HydroMoCoDataModule
 from src.data.hydro.hydro_dataloader import HydroDataModule
 from torchvision import transforms
@@ -17,7 +19,8 @@ from src.utils.mocogeo_utils import GaussianBlur, TwoCropsTransform
 models = {
     "mae": MAE,
     "moco": MoCo,
-    "moco-geo": MoCoGeo
+    "moco-geo": MoCoGeo,
+    "moco-geo-ocean": MoCoGeoOcean,  # Assuming MoCoGeo can handle ocean features
 }
 
 def set_seed(seed):
@@ -65,6 +68,24 @@ def main(args):
             src_channels=3 # Assuming 12 channels for Hydro data
         )
         datamodule = HydroMoCoGeoDataModule( # Specific DataModule for MoCo-Geo
+            data_dir=args.dataset,
+            batch_size=args.train_batch_size,
+            transform=transform,
+            model_name = args.model,
+            num_workers=args.num_workers
+        )
+    elif args.model == "moco-geo-ocean":
+        augmentations = [
+            transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
+            # Removed: ColorJitter line as per request
+            transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
+            transforms.RandomHorizontalFlip(),
+        ]
+        transform = TwoCropsTransform(transforms.Compose(augmentations))
+        model = MoCoGeoOcean(
+            src_channels=3 # Assuming 12 channels for Hydro data
+        )
+        datamodule = HydroOceanFeaturesDataModule( # Specific DataModule for MoCo-Geo
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,

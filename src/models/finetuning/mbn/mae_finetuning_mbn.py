@@ -49,8 +49,9 @@ class MAEFineTuning(pl.LightningModule):
         self.crop_size = MODEL_CONFIG["crop_size"]
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
+        self.full_finetune = full_finetune
 
-        self.projection_head = UNet_bathy(in_channels=3, out_channels=1,model_type=self.model_type) 
+        self.projection_head = UNet_bathy(in_channels=3, out_channels=1,model_type=self.model_type,full_finetune=self.full_finetune) 
         self.cache = True
         self.criterion = CustomLoss()
         self.total_train_loss = 0.0
@@ -69,15 +70,14 @@ class MAEFineTuning(pl.LightningModule):
         self.test_mae_list = []
         self.test_std_dev_list = []
         self.test_image_count = 0
-        self.full_finetune = full_finetune
 
         if self.full_finetune:
             for param in self.parameters():
                 param.requires_grad = True
  
     def forward(self, images,embedding):
+        print("Forward method called")
         batch_size = images.shape[0]
-        print("images.shape",images.shape)
         if self.full_finetune:
             if self.model_type == "mae":
                 embedding = embedding.squeeze(0)
@@ -86,19 +86,17 @@ class MAEFineTuning(pl.LightningModule):
                 embedding = embedding.unsqueeze(0)
             elif self.model_type == "moco":
                 embedding = embedding.squeeze(0)
-                print("embedding shape",embedding.shape)
+                print("embedding shape before backbone",embedding.shape)
                 embedding = self.pretrained_model.backbone(images)#.flatten(start_dim=1)
-                print("embedding shape after ",embedding.shape)
+                print("embedding shape after backbone",embedding.shape)
                 embedding = embedding.unsqueeze(0)
                 print("embedding shape after unsqueeze",embedding.shape)
             elif self.model_type == "mocogeo":
                 embedding = embedding.squeeze(0)
                 print("embedding shape before backbone",embedding.shape)
-                embedding = self.pretrained_model.backbone(images).flatten(start_dim=1)
-                print("embedding shape after backbone")
-                embedding = embedding.unsqueeze(0)
-                print("embedding after unsqueeze")
-                
+                embedding = self.pretrained_model.backbone(images).flatten(start_dim=1) #(1,512)
+                print("embedding shape after backbone",embedding.shape)
+
         return self.projection_head(embedding,images)
 
     def training_step(self, batch,batch_idx):

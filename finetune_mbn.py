@@ -102,8 +102,8 @@ class BathymetryPredictor:
             enable_progress_bar=True,
             val_check_interval=1.0,
             # Ensure no batch limits are set here that could interfere
-            # limit_train_batches=1.0, # Make sure these are NOT set to integers if you want full training
-            # limit_val_batches=1.0,
+            limit_train_batches=1.0, 
+            limit_val_batches=1.0,
         )
 
         # Perform model training
@@ -146,7 +146,7 @@ def main():
         location=location# Ensure this aligns with DataModule's batch_size
     )
         # Run prediction workflow
-    predictor.train(max_epochs=args.epochs) # Pass epochs from args
+    predictor.train(max_epochs=args.epochs) 
 
 if __name__ == "__main__":
     main()

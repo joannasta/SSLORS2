@@ -36,7 +36,7 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
             self.train_dataset = MagicBathyNetDataset(
                 root_dir=self.root_dir,
                 transform=self.transform,
-                split_type='train', # Label this as 'train'
+                split_type='train', 
                 cache=self.cache,
                 pretrained_model=self.pretrained_model,
                 location=self.location,
@@ -50,14 +50,14 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
             self.val_dataset = MagicBathyNetDataset(
                 root_dir=self.root_dir,
                 transform=self.transform,
-                split_type='val', # Label this as 'val' for context, but it uses test data
+                split_type='val', 
                 cache=self.cache,
                 pretrained_model=self.pretrained_model,
                 location=self.location,
                 full_finetune=self.full_finetune,
                 random=self.random,
                 ssl=self.ssl,
-                image_ids_for_this_split=all_test_ids # Pass all testing IDs for validation
+                image_ids_for_this_split=all_train_ids # Pass all testing IDs for validation
             )
 
         if stage == 'test' or stage is None:
@@ -75,21 +75,6 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 image_ids_for_this_split=all_test_ids # Pass all testing IDs
             )
 
-        if stage == 'predict':
-            # For prediction, we'll also use the test set
-            print("DataModule: Using test images for predict stage.")
-            self.predict_dataset = MagicBathyNetDataset(
-                root_dir=self.root_dir,
-                transform=self.transform,
-                split_type='predict',
-                cache=self.cache,
-                pretrained_model=self.pretrained_model,
-                location=self.location,
-                full_finetune=self.full_finetune,
-                random=self.random,
-                ssl=self.ssl,
-                image_ids_for_this_split=all_test_ids # Pass all testing IDs for prediction
-            )
 
     def worker_init_fn(self, worker_id):
         worker_seed = torch.initial_seed() % 2**32 + worker_id
@@ -100,5 +85,7 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     def val_dataloader(self):
-        # Validation uses the test dataset
         return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
+    
+    def test_dataloader(self):
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)

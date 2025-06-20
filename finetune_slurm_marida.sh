@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=MoCoGeo_FineTune           # Job name
+#SBATCH --job-name=Marida_Mo_FineTune           # Job name
 #SBATCH --partition=rsim_member       # Partition name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
@@ -22,7 +22,7 @@ MODEL=moco                                 # Model name
 TRAIN_BATCH_SIZE=16                     # Training batch size
 VAL_BATCH_SIZE=16                     # Validation batch size
 LEARNING_RATE=1e-5   #1e-6                  # Learning rate
-EPOCHS=200                               # Number of epochs
+EPOCHS=50                               # Number of epochs
 PRETRAINED_MODEL="./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"
 #"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
 #"./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"

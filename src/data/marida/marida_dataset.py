@@ -159,7 +159,7 @@ class MaridaDataset(Dataset):
 
 
     def __len__(self):
-        return self.length
+        return 5#self.length
 
     def _create_embeddings(self):
         def weights_init(m):
@@ -178,12 +178,7 @@ class MaridaDataset(Dataset):
             print("Applying random weights initialization to pretrained model.")
             self.pretrained_model.apply(weights_init)
 
-        print("Starting batch processing for embeddings...")
-
         for idx in range(len(hydro_dataset)):
-            if (idx + 1) % 100 == 0 or idx == len(hydro_dataset) - 1:
-                print(f"  Processing image {idx + 1}/{len(hydro_dataset)} for embeddings...")
-            
             img = hydro_dataset[idx]
             img = img.unsqueeze(0).to(model_device)
             img = F.interpolate(img, size=(256,256), mode='bilinear', align_corners=False)
@@ -201,13 +196,9 @@ class MaridaDataset(Dataset):
                         raise ValueError(f"Model {self.pretrained_model.__class__.__name__} not configured for embedding creation.")
                     self.embeddings_list.append(embedding)
             
-        print("Concatenating embeddings...")
         self.embeddings = torch.cat(self.embeddings_list, dim=0)
         print(f"Embeddings concatenated. Shape: {self.embeddings.shape}")
-        
-        print("Moving embeddings to CPU.")
         self.embeddings = self.embeddings.cpu()
-        print("Embeddings moved to CPU.")
 
     def __getitem__(self, index):
         img = self.X[index]
@@ -232,11 +223,12 @@ class MaridaDataset(Dataset):
 
         if self.standardization is not None:
             img = self.standardization(img)
-        print("img shape after standardization:", img.shape)
-
         if isinstance(img, np.ndarray):
             img = torch.from_numpy(img)   
-        img = img.permute(2,1,0)
+        if not self.mode=="test":
+            img = img.permute(2,1,0)
+        
+        print(f"Image shape: {img.shape}, Target shape: {target.shape}, Embedding shape: {embedding.shape}")
         return img, target, embedding
 
 
