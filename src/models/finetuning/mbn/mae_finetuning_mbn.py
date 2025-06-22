@@ -76,23 +76,20 @@ class MAEFineTuning(pl.LightningModule):
                 param.requires_grad = True
  
     def forward(self, images,embedding):
-        print("Forward method called")
-        batch_size = images.shape[0]
+        embedding = embedding.squeeze(0)
         if self.full_finetune:
             if self.model_type == "mae":
-                embedding = embedding.squeeze(0)
+                
                 print("embedding shape",embedding.shape)
                 embedding = self.pretrained_model.forward_encoder(embedding)
                 embedding = embedding.unsqueeze(0)
             elif self.model_type == "moco":
-                embedding = embedding.squeeze(0)
                 print("embedding shape before backbone",embedding.shape)
                 embedding = self.pretrained_model.backbone(images)#.flatten(start_dim=1)
                 print("embedding shape after backbone",embedding.shape)
                 embedding = embedding.unsqueeze(0)
                 print("embedding shape after unsqueeze",embedding.shape)
             elif self.model_type == "mocogeo":
-                embedding = embedding.squeeze(0)
                 print("embedding shape before backbone",embedding.shape)
                 embedding = self.pretrained_model.backbone(images).flatten(start_dim=1) #(1,512)
                 print("embedding shape after backbone",embedding.shape)
@@ -103,8 +100,8 @@ class MAEFineTuning(pl.LightningModule):
         train_dir = "training_results"
         data, target, embedding = batch
         data, target,embedding = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
-        size = (256, 256)
-        batch_size = data.size(0)
+        size = (256, 256)   
+
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(1), size=size, mode='nearest')
         data_size = data.size()[2:]
@@ -117,6 +114,7 @@ class MAEFineTuning(pl.LightningModule):
         
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)
         target_mask = torch.from_numpy(target_mask).to(self.device)
+        
         for i in range(target_mask.shape[0]):
             target_mask[i] = target_mask[i].reshape(self.crop_size, self.crop_size)
         target_mask = target_mask.squeeze(1)
@@ -188,6 +186,7 @@ class MAEFineTuning(pl.LightningModule):
         
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)
         target_mask = torch.from_numpy(target_mask).to(self.device)
+        
         for i in range(target_mask.shape[0]):
             target_mask[i] = target_mask[i].reshape(self.crop_size, self.crop_size)
         target_mask = target_mask.squeeze(1)
@@ -239,16 +238,12 @@ class MAEFineTuning(pl.LightningModule):
         return val_loss
 
     def test_step(self, batch, batch_idx):
-        print("TEST STEP START")
-        print(f"Batch Index: {batch_idx}")
         pad_size = 32
         crop_size = 256
         ratio = crop_size / self.window_size[0]
 
         test_dir = "test_results"
         test_data, targets, embeddings = batch
-
-        size = (256, 256)
         idx = 0
 
         for data, target, embedding in zip(test_data, targets, embeddings):
@@ -284,6 +279,7 @@ class MAEFineTuning(pl.LightningModule):
             data = torch.from_numpy(data_expanded).cuda()
 
             with torch.no_grad():
+                print("self.full_finetune",self.full_finetune)
                 outs = self(data.float(), embedding.float())
                 pred = outs.data.cpu().numpy().squeeze()
 

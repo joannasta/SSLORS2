@@ -82,6 +82,8 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         random.seed(worker_seed)
 
     def train_dataloader(self):
+        
+        #self.test_dataset 
         return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     def val_dataloader(self):

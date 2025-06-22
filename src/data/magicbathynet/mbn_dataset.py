@@ -90,7 +90,7 @@ class MagicBathyNetDataset(Dataset):
         
     def __len__(self):
         # Keep 10000 for your "epoch length"
-        return 10000
+        return 10#000
 
     def _create_embeddings(self):
         def weights_init(m):

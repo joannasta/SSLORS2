@@ -40,14 +40,15 @@ class MarineDebrisPredictor:
         
         self._validate_paths(pretrained_weights_path, data_dir)
         
-        # Determine computational device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         if self.full_finetune or self.random or self.ssl:
             print(f"Loading pretrained model of type: {self.model_type} from {pretrained_weights_path}")
+            
             if self.model_type.lower() == "mae":
                 self.pretrained_model = MAE.load_from_checkpoint(
                     pretrained_weights_path,
-                    strict=False # Use strict=False if the checkpoint has extra keys
+                    strict=False 
                 )
             elif self.model_type.lower() == "moco":
                 self.pretrained_model = MoCo.load_from_checkpoint(
@@ -93,25 +94,19 @@ class MarineDebrisPredictor:
     
     
     
-    def train(self, max_epochs: int = 5) -> pl.Trainer:
+    def train(self, max_epochs: int = 50) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
-        # Initialize trainer with specific configurations
-        if self.device.type == "cuda":
-            accelerator = "gpu"
-        else:
-            accelerator = "cpu"
             
         trainer = Trainer(
-            accelerator=accelerator,
+            accelerator=self.device.type,
             devices=1,
             max_epochs=max_epochs,
             logger=logger,
             gradient_clip_val=1.0,
             enable_progress_bar=True,
             val_check_interval=1.0,
-            
         )
 
         # Perform model training

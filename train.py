@@ -8,7 +8,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from src.models.moco_geo import MoCoGeo
 from src.models.moco import MoCo
 from src.models.mae import MAE
-from src.models.moco_geo_ocean import MoCoGeoOcean  # Assuming MoCoGeoOcean is defined in this module
+from src.models.moco_geo_ocean import MoCoOceanFeatures # Assuming MoCoGeoOcean is defined in this module
 from src.data.hydro.hydro_dataloader_moco_geo import HydroMoCoGeoDataModule
 from src.data.hydro.hydro_dataloader_moco_geo_ocean import HydroOceanFeaturesDataModule
 from src.data.hydro.hydro_dataloader_moco import HydroMoCoDataModule

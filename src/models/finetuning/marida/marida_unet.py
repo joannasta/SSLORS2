@@ -85,27 +85,32 @@ class UNet_Marida(nn.Module):
 
 
     def forward(self, image,x_embedding):
-        print("image shape before:", image.shape)
-        #image = image.permute(0,3,1,2)
-        print("image shape after:", image.shape)
+        print("image shape forward unet:", image.shape)
         x1 = self.inc(image)
         x2 = self.down1(x1)
         x3 = self.down2(x2)
         x4 = self.down3(x3)
         x5 = self.down4(x4)
+        
+        print("x5 shape forward unet:", x5.shape)
 
         processed_x_embedding = None
 
         if self.model_type == "mae":
+            #linear layer to project the embedding
             projected_embedding = self.embedding_projector(x_embedding)
+            
             if projected_embedding.shape[0] == 1 and projected_embedding.shape[1] == x5.shape[0]:
                  projected_embedding = projected_embedding.squeeze(0)
+                 
             patch_tokens = projected_embedding[:, 1:, :]
             batch_size, num_patches, features = patch_tokens.shape
             spatial_size = int(num_patches**0.5)
             spatial_embedding = patch_tokens.permute(0, 2, 1).reshape(
                 batch_size, features, spatial_size, spatial_size
             )
+            
+            # Interpolate to match the spatial dimensions of x5
             processed_x_embedding = F.interpolate(
                 spatial_embedding,
                 size=(x5.shape[2], x5.shape[3]),
@@ -129,6 +134,7 @@ class UNet_Marida(nn.Module):
 
         combined = torch.cat([processed_x_embedding, x5], dim=1)
         batch_size, channels_combined, height, width = combined.shape
+        # Reshape and project the combined tensor as input for up-sampling
         combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
         combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
 

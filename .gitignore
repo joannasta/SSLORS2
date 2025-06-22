@@ -15,7 +15,8 @@
 *pyc
 *prettierrc
 *ipynb
-
+*out
+*err
 # Ignore event files (e.g., TensorBoard event files)
 events.out*
 

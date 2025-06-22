@@ -109,23 +109,24 @@ class MAEFineTuning(pl.LightningModule):
         print("self.full_finetune", self.full_finetune)
         print("self.model_type", self.model_type)
         
-        processed_embedding_for_unet = None
+        processed_embedding = None
 
         if self.full_finetune:
             if self.model_type == "mae":
-                processed_embedding_for_unet = embedding.squeeze(0)
-                processed_embedding_for_unet = self.pretrained_model.forward_encoder(processed_embedding_for_unet)
-                processed_embedding_for_unet = processed_embedding_for_unet.unsqueeze(0)
+                embedding = embedding.squeeze(0)
+                processed_embedding = self.pretrained_model.forward_encoder(embedding)
+                processed_embedding = processed_embedding.unsqueeze(0)
             elif self.model_type == "moco":
-                moco_features = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-                processed_embedding_for_unet = moco_features
+                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
             elif self.model_type == "mocogeo":
-                processed_embedding_for_unet = embedding.squeeze(0)
-                processed_embedding_for_unet = self.pretrained_model.backbone(processed_embedding_for_unet).flatten(start_dim=1)
+                embedding = embedding.squeeze(0)
+                print("embedding shape before backbone:", embedding.shape)
+                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
+                print("embedding shape after backbone:", processed_embedding.shape)
         else:
-            processed_embedding_for_unet = embedding
+            processed_embedding = embedding
 
-        return self.projection_head(images, processed_embedding_for_unet)
+        return self.projection_head(images, processed_embedding)
 
 
         return self.projection_head(images,embedding)

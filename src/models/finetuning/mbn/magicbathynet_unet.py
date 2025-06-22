@@ -48,9 +48,11 @@ class UNet_bathy(nn.Module):
         self.out_channels = out_channels
         self.model_type = model_type
         self.full_finetune = full_finetune
+        
+        target_embedding_flat_size = 256 * 32 * 32 # = 262144
+        
         self.embedding_projector = nn.Linear(768, 256)
         self.combined_projection = nn.Linear(256 + 256, 256) 
-        target_embedding_flat_size = 256 * 32 * 32 # = 262144
         self.moco_projection = nn.Linear(in_features=512, out_features=target_embedding_flat_size)
         self.mocogeo_projection = nn.Linear(in_features=512, out_features=target_embedding_flat_size)
         
@@ -77,8 +79,6 @@ class UNet_bathy(nn.Module):
         x3 = self.encoder[2](x2)    # [B, 128, 64, 64]
         x4 = self.encoder[3](x3)    # [B, 256, 32, 32]
 
-        processed_x_embedding = None 
-
         if self.model_type == "mae":
             projected_embedding = self.embedding_projector(x_embedding) 
             patch_tokens = projected_embedding[:, 1:, :] 
@@ -102,6 +102,9 @@ class UNet_bathy(nn.Module):
                     x_embedding_flat = self.moco_projection(x_embedding)
                 else: # mocogeo
                     x_embedding_flat = self.mocogeo_projection(x_embedding)
+                    
+                print("x_embedding",x_embedding.shape)
+                print("x4",x4.shape)
                 
                 processed_x_embedding = x_embedding_flat.view(
                     x_embedding_flat.shape[0], # Batch size
@@ -109,9 +112,6 @@ class UNet_bathy(nn.Module):
                     x4.shape[2],              # Height (32)
                     x4.shape[3]               # Width (32)
                 )
-
-        if processed_x_embedding is None:
-            raise ValueError(f"processed_x_embedding was not initialized. Check model_type: {self.model_type} and full_finetune status.")
 
         # Concatenate processed_x_embedding (should be [B, 256, 32, 32]) with x4 (also [B, 256, 32, 32])
         combined = torch.cat([processed_x_embedding, x4], dim=1) 

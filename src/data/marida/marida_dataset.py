@@ -43,6 +43,8 @@ class MaridaDataset(Dataset):
             print("val ROIS are used")
         else:
             raise ValueError(f"Unknown mode {mode}")
+        
+        print("length of ROIs:", len(self.ROIs))
 
         self.path = Path(path)
         self.embeddings = []
@@ -159,7 +161,7 @@ class MaridaDataset(Dataset):
 
 
     def __len__(self):
-        return 5#self.length
+        return self.length
 
     def _create_embeddings(self):
         def weights_init(m):
@@ -225,8 +227,8 @@ class MaridaDataset(Dataset):
             img = self.standardization(img)
         if isinstance(img, np.ndarray):
             img = torch.from_numpy(img)   
-        if not self.mode=="test":
-            img = img.permute(2,1,0)
+
+        print("self.mode", self.mode)
         
         print(f"Image shape: {img.shape}, Target shape: {target.shape}, Embedding shape: {embedding.shape}")
         return img, target, embedding
