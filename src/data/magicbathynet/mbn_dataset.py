@@ -12,7 +12,7 @@ import torch.nn as nn
 from skimage import io
 from torch.utils.data import Dataset
 from torchvision.transforms import RandomCrop
-from utils.finetuning_utils import get_random_pos
+from src.utils.finetuning_utils import get_random_pos
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG, train_images, test_images
 from src.data.hydro.hydro_dataset import HydroDataset
 from src.utils.data_processing import DatasetProcessor
@@ -32,6 +32,7 @@ class MagicBathyNetDataset(Dataset):
         self.transform = transform
         self.cache = cache
         self.augmentation = augmentation
+        
         self.pretrained_model = pretrained_model
         self.train_images = train_images
         self.test_images = test_images
@@ -160,38 +161,38 @@ class MagicBathyNetDataset(Dataset):
         return tuple(results)
     
     def __getitem__(self, idx):
-        # print(f"DEBUG: __getitem__ called for batch {idx}") # Add this
-        random_idx = random.randint(0, len(self.data_files) - 1)
-        
 
+
+        # Pick a random image
+        random_idx = random.randint(0, len(self.data_files) - 1)
+        embedding = self.embeddings[random_idx]
+        
+        # If the tile hasn't been loaded yet, put in cache
         if random_idx in self.data_cache_.keys():
             data = self.data_cache_[random_idx]
         else:
+            # Data is normalized in [0, 1]
             data = np.asarray(io.imread(self.data_files[random_idx]).transpose((2,0,1)), dtype='float32')
             data = (data - self.norm_param[0][:, np.newaxis, np.newaxis]) / (self.norm_param[1][:, np.newaxis, np.newaxis] - self.norm_param[0][:, np.newaxis, np.newaxis]) 
-
+            
             if self.cache:
                 self.data_cache_[random_idx] = data
-
+            
         if random_idx in self.label_cache_.keys():
             label = self.label_cache_[random_idx]
         else: 
+            # Labels are converted from RGB to their numeric values
             label = 1/self.norm_param_depth * np.asarray(io.imread(self.label_files[random_idx]), dtype='float32')
             if self.cache:
                 self.label_cache_[random_idx] = label
-
+        
+  
         x1, x2, y1, y2 = get_random_pos(data, self.window_size)
         data_p = data[:, x1:x2,y1:y2]
         label_p = label[x1:x2,y1:y2]
 
-        data_p, label_p = self.data_augmentation(data_p, label_p)
-        
-        data_p_tensor = torch.from_numpy(data_p)
-        label_p_tensor = torch.from_numpy(label_p)
 
-        embedding = self.embeddings[random_idx]
-        
-        print("data_p_tensor shape:", data_p_tensor.shape)  
-        print("label_p_tensor shape:", label_p_tensor.shape)
-        print("embedding shape:", embedding.shape)
-        return (data_p_tensor, label_p_tensor, embedding)
+        data_p, label_p = self.data_augmentation(data_p, label_p)
+
+        return (torch.from_numpy(data_p),
+                torch.from_numpy(label_p),embedding)
