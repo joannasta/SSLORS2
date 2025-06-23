@@ -94,7 +94,7 @@ class MarineDebrisPredictor:
     
     
     
-    def train(self, max_epochs: int = 50) -> pl.Trainer:
+    def train(self, max_epochs: int = 10) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 

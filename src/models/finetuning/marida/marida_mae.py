@@ -109,6 +109,10 @@ class MAEFineTuning(pl.LightningModule):
         print("self.full_finetune", self.full_finetune)
         print("self.model_type", self.model_type)
         
+        if torch.isnan(images).any() or torch.isinf(images).any():
+            print("!!! WARNING: NaN/Inf detected in 'images' at start of forward pass!")
+        # Debug: print(images[torch.isnan(images)]) to see specific NaN locations
+        
         processed_embedding = None
 
         if self.full_finetune:
@@ -125,11 +129,14 @@ class MAEFineTuning(pl.LightningModule):
                 print("embedding shape after backbone:", processed_embedding.shape)
         else:
             processed_embedding = embedding
+            
+        # Check processed_embedding for NaNs/Infs
+        if torch.isnan(processed_embedding).any() or torch.isinf(processed_embedding).any():
+            print("!!! WARNING: NaN/Inf detected in 'processed_embedding' after backbone!")
+            # Debug: print(processed_embedding[torch.isnan(processed_embedding)])
+
 
         return self.projection_head(images, processed_embedding)
-
-
-        return self.projection_head(images,embedding)
     
     def training_step(self, batch, batch_idx):
         train_dir = "train_results"
@@ -191,7 +198,6 @@ class MAEFineTuning(pl.LightningModule):
     
     
     def test_step(self, batch, batch_idx):
-        # Place it here, as the first line in test_step
         torch.autograd.set_detect_anomaly(True) 
 
         test_dir = "test_results"
@@ -201,6 +207,11 @@ class MAEFineTuning(pl.LightningModule):
         print(f"Batch {batch_idx}: Data shape: {data.shape}, Target shape: {target.shape}")
         print(f"Batch {batch_idx}: Unique target values: {torch.unique(target)}")
 
+        # --- NEW DEBUGGING ADDITION ---
+        problematic_target_values = target[~((target >= 0) & (target < self.src_channels)) & (target != -1)]
+        if problematic_target_values.numel() > 0:
+            print(f"!!! ALERT: Found unexpected target values (not in [0, {self.src_channels-1}] and not -1): {torch.unique(problematic_target_values)}")
+            
         logits = self(data, embedding)
         target = target.long()
 

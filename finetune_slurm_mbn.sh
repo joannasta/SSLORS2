@@ -22,7 +22,7 @@ MODEL=mocogeo                                 # Model name
 TRAIN_BATCH_SIZE=1                    # Training batch size
 VAL_BATCH_SIZE=1                     # Validation batch size
 LEARNING_RATE=1e-4 #1e-5                  # Learning rate
-EPOCHS=1                              # Number of epochs
+EPOCHS=10                              # Number of epochs
 PRETRAINED_MODEL="./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
 #"./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"
 #"./results/trains/moco-geo/version_27/checkpoints/epoch=199-step=331600.ckpt"

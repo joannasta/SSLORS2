@@ -84,31 +84,63 @@ class UNet_Marida(nn.Module):
         self.combined_projection = nn.Linear(256, 256) # Corrected in_features to 256
 
 
-    def forward(self, image,x_embedding):
+    def forward(self, image, x_embedding):
+        # Initial image input check
+        if torch.isnan(image).any() or torch.isinf(image).any():
+            print("!!! UNET_MARIDA INPUT: NaN/Inf detected in 'image' input at start of forward !!!")
+            # print(f"Image problematic values: {image[torch.isnan(image) | torch.isinf(image)]}") # Uncomment for deeper debug
+
         print("image shape forward unet:", image.shape)
         x1 = self.inc(image)
+        if torch.isnan(x1).any() or torch.isinf(x1).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.inc (x1) !!!")
+
         x2 = self.down1(x1)
+        if torch.isnan(x2).any() or torch.isinf(x2).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.down1 (x2) !!!")
+
         x3 = self.down2(x2)
+        if torch.isnan(x3).any() or torch.isinf(x3).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.down2 (x3) !!!")
+
         x4 = self.down3(x3)
+        if torch.isnan(x4).any() or torch.isinf(x4).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.down3 (x4) !!!")
+
         x5 = self.down4(x4)
+        if torch.isnan(x5).any() or torch.isinf(x5).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.down4 (x5) !!!")
         
         print("x5 shape forward unet:", x5.shape)
+
+        # Embedding input check
+        if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
+            print("!!! UNET_MARIDA INPUT: NaN/Inf detected in 'x_embedding' input at start of forward !!!")
+            # print(f"Embedding problematic values: {x_embedding[torch.isnan(x_embedding) | torch.isinf(x_embedding)]}") # Uncomment for deeper debug
 
         processed_x_embedding = None
 
         if self.model_type == "mae":
-            #linear layer to project the embedding
-            projected_embedding = self.embedding_projector(x_embedding)
+            # Check before projection
+            if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
+                print("!!! UNET_MARIDA MAE: NaN/Inf in x_embedding before projector !!!")
             
+            projected_embedding = self.embedding_projector(x_embedding)
+            if torch.isnan(projected_embedding).any() or torch.isinf(projected_embedding).any():
+                print("!!! UNET_MARIDA MAE: NaN/Inf detected after embedding_projector !!!")
+            
+            # Original logic for squeezing
             if projected_embedding.shape[0] == 1 and projected_embedding.shape[1] == x5.shape[0]:
-                 projected_embedding = projected_embedding.squeeze(0)
-                 
+                projected_embedding = projected_embedding.squeeze(0)
+                
             patch_tokens = projected_embedding[:, 1:, :]
             batch_size, num_patches, features = patch_tokens.shape
             spatial_size = int(num_patches**0.5)
             spatial_embedding = patch_tokens.permute(0, 2, 1).reshape(
                 batch_size, features, spatial_size, spatial_size
             )
+            if torch.isnan(spatial_embedding).any() or torch.isinf(spatial_embedding).any():
+                print("!!! UNET_MARIDA MAE: NaN/Inf detected after reshaping spatial_embedding !!!")
             
             # Interpolate to match the spatial dimensions of x5
             processed_x_embedding = F.interpolate(
@@ -117,31 +149,80 @@ class UNet_Marida(nn.Module):
                 mode='bilinear',
                 align_corners=False
             )
+            if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
+                print("!!! UNET_MARIDA MAE: NaN/Inf detected after interpolation of embedding !!!")
 
         elif self.model_type == "moco":
+            # Check before projection
+            if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
+                print("!!! UNET_MARIDA MOCO: NaN/Inf in x_embedding before projector !!!")
+
             x_embedding_flat = self.moco_projection(x_embedding)
+            if torch.isnan(x_embedding_flat).any() or torch.isinf(x_embedding_flat).any():
+                print("!!! UNET_MARIDA MOCO: NaN/Inf detected after moco_projection !!!")
+
             processed_x_embedding = x_embedding_flat.view(
                 x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3]
             )
+            if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
+                print("!!! UNET_MARIDA MOCO: NaN/Inf detected after view operation for embedding !!!")
 
         elif self.model_type == "mocogeo":
+            # Check before projection
+            if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
+                print("!!! UNET_MARIDA MOCGEO: NaN/Inf in x_embedding before projector !!!")
+
             x_embedding_flat = self.mocogeo_projection(x_embedding)
+            if torch.isnan(x_embedding_flat).any() or torch.isinf(x_embedding_flat).any():
+                print("!!! UNET_MARIDA MOCGEO: NaN/Inf detected after mocogeo_projection !!!")
+
+            # Original logic for squeezing
             if x_embedding_flat.shape[0] == 1 and x_embedding_flat.shape[1] == x5.shape[0]:
                 x_embedding_flat = x_embedding_flat.squeeze(0)
             processed_x_embedding = x_embedding_flat.view(
                 x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3]
             )
+            if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
+                print("!!! UNET_MARIDA MOCGEO: NaN/Inf detected after view operation for embedding !!!")
+        
+        # Check before concatenation
+        if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
+            print("!!! UNET_MARIDA: NaN/Inf in processed_x_embedding just before concatenation !!!")
+        if torch.isnan(x5).any() or torch.isinf(x5).any():
+            print("!!! UNET_MARIDA: NaN/Inf in x5 just before concatenation !!!")
 
         combined = torch.cat([processed_x_embedding, x5], dim=1)
+        if torch.isnan(combined).any() or torch.isinf(combined).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after concatenation !!!")
+
         batch_size, channels_combined, height, width = combined.shape
         # Reshape and project the combined tensor as input for up-sampling
         combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
+        if torch.isnan(combined_reshaped).any() or torch.isinf(combined_reshaped).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after combined_reshaped (permutation + reshape) !!!")
+
         combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
+        if torch.isnan(combined_projected).any() or torch.isinf(combined_projected).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after combined_projection (linear layer + reshape) !!!")
 
         x6 = self.up1(combined_projected, x4)
+        if torch.isnan(x6).any() or torch.isinf(x6).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.up1 (x6) !!!")
+
         x7 = self.up2(x6, x3)
+        if torch.isnan(x7).any() or torch.isinf(x7).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.up2 (x7) !!!")
+
         x8 = self.up3(x7, x2)
+        if torch.isnan(x8).any() or torch.isinf(x8).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.up3 (x8) !!!")
+
         x9 = self.up4(x8, x1)
+        if torch.isnan(x9).any() or torch.isinf(x9).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected after self.up4 (x9) !!!")
 
         logits = self.outc(x9)
+        if torch.isnan(logits).any() or torch.isinf(logits).any():
+            print("!!! UNET_MARIDA: NaN/Inf detected in final logits (self.outc output) !!!")
+
         return logits

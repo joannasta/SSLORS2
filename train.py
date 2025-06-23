@@ -20,7 +20,7 @@ models = {
     "mae": MAE,
     "moco": MoCo,
     "moco-geo": MoCoGeo,
-    "moco-geo-ocean": MoCoGeoOcean,  # Assuming MoCoGeo can handle ocean features
+    "moco-geo-ocean": MoCoOceanFeatures,  # Assuming MoCoGeo can handle ocean features
 }
 
 def set_seed(seed):
@@ -82,7 +82,7 @@ def main(args):
             transforms.RandomHorizontalFlip(),
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
-        model = MoCoGeoOcean(
+        model = MoCoOceanFeatures(
             src_channels=3 # Assuming 12 channels for Hydro data
         )
         datamodule = HydroOceanFeaturesDataModule( # Specific DataModule for MoCo-Geo

@@ -228,7 +228,13 @@ class MaridaDataset(Dataset):
         if isinstance(img, np.ndarray):
             img = torch.from_numpy(img)   
 
+
         print("self.mode", self.mode)
+        
+        if self.mode == 'test':
+            img = img
+        else:
+            img = img.permute(2, 0, 1)
         
         print(f"Image shape: {img.shape}, Target shape: {target.shape}, Embedding shape: {embedding.shape}")
         return img, target, embedding
