@@ -277,11 +277,11 @@ class MaridaDataset(Dataset):
             print("target_for_concat shape:", target_for_concat.shape)
             
             if img_for_concat.shape[2] == 11:
-                img_for_concat = np.transpose(img,(2, 0, 1))
+                img_for_concat = np.transpose(img_for_concat, (2, 0, 1))
             
             print("img shape after permute:", img_for_concat.shape)
     
-            stack = np.concatenate([img_for_concat, target_for_concat], axis=-1).astype('float32')
+            stack = np.concatenate([img_for_concat, target_for_concat], axis=0).astype('float32')
             stack = self.transform(stack)
             img = stack[:-1, :, :]
             target = stack[-1, :, :]
@@ -296,6 +296,7 @@ class MaridaDataset(Dataset):
         if self.standardization is not None:
             img = self.standardization(img)
         
+        print("img shape before mode check:", img.shape)
         if self.mode != 'test':
                 if img.shape[0] not in [3, 11] and img.shape[1] == 256:
                     img = img.permute(2, 0, 1)

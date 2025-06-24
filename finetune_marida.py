@@ -94,7 +94,7 @@ class MarineDebrisPredictor:
     
     
     
-    def train(self, max_epochs: int = 1) -> pl.Trainer:
+    def train(self, max_epochs: int = 50) -> pl.Trainer:
         # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
@@ -125,7 +125,7 @@ def main():
     parser.add_argument("--num-workers", type=int, default=8, help="Dataloader workers")
     parser.add_argument("--learning-rate", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--model", type=str, default="mae", help="Model type")
-    parser.add_argument("--epochs", type=int, default=1, help="Training epochs")
+    parser.add_argument("--epochs", type=int, default=50, help="Training epochs")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--weights", required=True, help="Path to pretrained weights")
     parser.add_argument("--data_dir", required=True, help="Path to data directory")
