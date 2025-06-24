@@ -64,9 +64,9 @@ class UNet_Marida(nn.Module):
         else:
             raise ValueError(f"Unknown model_type: {model_type}")
 
-        # Based on analysis, this expects self.embedding_dim (128) + 8*self.hidden_channels (128) = 256 input features
-        # And outputs 128 * 16 * 16 elements, which will be reshaped to (B, 128, 16, 16)
-        self.combined_projection = nn.Linear(self.embedding_dim + (8 * self.hidden_channels), 128 * 16 * 16)
+        # CORRECTED: The output features of the linear layer should be 128, not 128 * 16 * 16.
+        # The reshaping handles the spatial dimensions afterwards.
+        self.combined_projection = nn.Linear(self.embedding_dim + (8 * self.hidden_channels), 128)
 
         self.inc = nn.Sequential(
             nn.Conv2d(input_channels, self.hidden_channels, kernel_size=3, padding=1),
@@ -125,20 +125,17 @@ class UNet_Marida(nn.Module):
         combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
         print(f"Shape after permute and reshape: {combined_reshaped.shape}")
         
-        # Check the actual input size to the linear layer vs expected in_features
-        expected_in_features = self.embedding_dim + (8 * self.hidden_channels) # Should be 256
+        expected_in_features = self.embedding_dim + (8 * self.hidden_channels)
         print(f"Linear layer (self.combined_projection) expects in_features: {expected_in_features}")
         print(f"Actual input features to linear layer (combined_reshaped's last dim): {combined_reshaped.shape[1]}")
 
-        # Check the actual output size of the linear layer vs expected for reshape
-        expected_linear_output_elements = 128 * 16 * 16 # Should be 32768
-        print(f"Linear layer (self.combined_projection) expects to output {expected_linear_output_elements} elements")
-        
+        # The linear layer now outputs 128 features per spatial location
         linear_output = self.combined_projection(combined_reshaped)
         print(f"Shape after linear projection: {linear_output.shape}")
         
-        print(f"Attempting to reshape linear output: {linear_output.shape} to ({batch_size}, 128, 16, 16)")
-        combined_projected = linear_output.reshape(batch_size, 128, 16, 16)
+        # Reshape to (Batch, Channels, Height, Width)
+        print(f"Attempting to reshape linear output: {linear_output.shape} to ({batch_size}, 128, {height}, {width})")
+        combined_projected = linear_output.reshape(batch_size, 128, height, width)
         print(f"combined_projected (after linear and reshape) shape: {combined_projected.shape}")
 
         print(f"\n--- Decoder Path ---")
