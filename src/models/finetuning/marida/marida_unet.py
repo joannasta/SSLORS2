@@ -48,17 +48,25 @@ class Up(nn.Module):
         return out
 
 class UNet_Marida(nn.Module):
-    def __init__(self, input_channels=11, out_channels=11, hidden_channels=16, embedding_dim=128,model_type="mae"):
+    def __init__(self, input_channels=11, out_channels=11, hidden_channels=16, embedding_dim=128, model_type="mae"):
         super(UNet_Marida, self).__init__()
 
         self.hidden_channels = hidden_channels
         self.input_channels = input_channels
         self.out_channels = out_channels
         self.model_type = model_type
-        self.embedding_projector = nn.Linear(768, 256)
+        self.embedding_dim = embedding_dim
 
-        self.moco_projection =  nn.Linear(in_features=512, out_features=128 * 16 * 16)
-        self.mocogeo_projection =  nn.Linear(in_features=512, out_features=128 * 16 * 16)
+        if self.model_type == "mae":
+            self.embedding_projector = nn.Linear(768, self.embedding_dim)
+        elif self.model_type == "moco" or self.model_type == "mocogeo":
+            self.embedding_projector = nn.Linear(512, self.embedding_dim)
+        else:
+            raise ValueError(f"Unknown model_type: {model_type}")
+
+        # Based on analysis, this expects self.embedding_dim (128) + 8*self.hidden_channels (128) = 256 input features
+        # And outputs 128 * 16 * 16 elements, which will be reshaped to (B, 128, 16, 16)
+        self.combined_projection = nn.Linear(self.embedding_dim + (8 * self.hidden_channels), 128 * 16 * 16)
 
         self.inc = nn.Sequential(
             nn.Conv2d(input_channels, self.hidden_channels, kernel_size=3, padding=1),
@@ -73,156 +81,88 @@ class UNet_Marida(nn.Module):
         self.down3 = Down(4 * self.hidden_channels, 8 * self.hidden_channels)
         self.down4 = Down(8 * self.hidden_channels, 8 * self.hidden_channels)
 
-        self.up1 = Up(256 + (8 * self.hidden_channels), 4 * self.hidden_channels)
+        self.up1 = Up(128 + (8 * self.hidden_channels), 4 * self.hidden_channels)
         self.up2 = Up(8 * self.hidden_channels, 2 * self.hidden_channels)
         self.up3 = Up(4 * self.hidden_channels, self.hidden_channels)
         self.up4 = Up(2 * self.hidden_channels, self.hidden_channels)
 
         self.outc = nn.Conv2d(self.hidden_channels, out_channels, kernel_size=1)
 
-        self.embedding_dim = embedding_dim
-        self.combined_projection = nn.Linear(256, 256) # Corrected in_features to 256
-
-
     def forward(self, image, x_embedding):
-        # Initial image input check
-        if torch.isnan(image).any() or torch.isinf(image).any():
-            print("!!! UNET_MARIDA INPUT: NaN/Inf detected in 'image' input at start of forward !!!")
-            # print(f"Image problematic values: {image[torch.isnan(image) | torch.isinf(image)]}") # Uncomment for deeper debug
+        print(f"--- UNet_Marida Forward Pass ---")
+        print(f"Input image shape: {image.shape}")
+        print(f"Input x_embedding shape: {x_embedding.shape}")
 
-        #print("image shape forward unet:", image.shape)
         x1 = self.inc(image)
-        if torch.isnan(x1).any() or torch.isinf(x1).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.inc (x1) !!!")
-
+        print(f"x1 (inc output) shape: {x1.shape}")
         x2 = self.down1(x1)
-        if torch.isnan(x2).any() or torch.isinf(x2).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.down1 (x2) !!!")
-
+        print(f"x2 (down1 output) shape: {x2.shape}")
         x3 = self.down2(x2)
-        if torch.isnan(x3).any() or torch.isinf(x3).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.down2 (x3) !!!")
-
+        print(f"x3 (down2 output) shape: {x3.shape}")
         x4 = self.down3(x3)
-        if torch.isnan(x4).any() or torch.isinf(x4).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.down3 (x4) !!!")
-
+        print(f"x4 (down3 output) shape: {x4.shape}")
         x5 = self.down4(x4)
-        if torch.isnan(x5).any() or torch.isinf(x5).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.down4 (x5) !!!")
+        print(f"x5 (down4 output - bottleneck) shape: {x5.shape}")
         
-        #print("x5 shape forward unet:", x5.shape)
+        print(f"\n--- Embedding Processing ---")
+        print(f"x_embedding before projection: {x_embedding.shape}")
+        projected_embedding = self.embedding_projector(x_embedding)
+        print(f"projected_embedding (after embedding_projector) shape: {projected_embedding.shape}")
 
-        # Embedding input check
-        if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
-            print("!!! UNET_MARIDA INPUT: NaN/Inf detected in 'x_embedding' input at start of forward !!!")
-            # print(f"Embedding problematic values: {x_embedding[torch.isnan(x_embedding) | torch.isinf(x_embedding)]}") # Uncomment for deeper debug
-
-        processed_x_embedding = None
-
-        if self.model_type == "mae":
-            # Check before projection
-            if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
-                print("!!! UNET_MARIDA MAE: NaN/Inf in x_embedding before projector !!!")
-            
-            projected_embedding = self.embedding_projector(x_embedding)
-            if torch.isnan(projected_embedding).any() or torch.isinf(projected_embedding).any():
-                print("!!! UNET_MARIDA MAE: NaN/Inf detected after embedding_projector !!!")
-            
-            # Original logic for squeezing
-            if projected_embedding.shape[0] == 1 and projected_embedding.shape[1] == x5.shape[0]:
-                projected_embedding = projected_embedding.squeeze(0)
-                
-            patch_tokens = projected_embedding[:, 1:, :]
-            batch_size, num_patches, features = patch_tokens.shape
-            spatial_size = int(num_patches**0.5)
-            spatial_embedding = patch_tokens.permute(0, 2, 1).reshape(
-                batch_size, features, spatial_size, spatial_size
-            )
-            if torch.isnan(spatial_embedding).any() or torch.isinf(spatial_embedding).any():
-                print("!!! UNET_MARIDA MAE: NaN/Inf detected after reshaping spatial_embedding !!!")
-            
-            # Interpolate to match the spatial dimensions of x5
-            processed_x_embedding = F.interpolate(
-                spatial_embedding,
-                size=(x5.shape[2], x5.shape[3]),
-                mode='bilinear',
-                align_corners=False
-            )
-            if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
-                print("!!! UNET_MARIDA MAE: NaN/Inf detected after interpolation of embedding !!!")
-
-        elif self.model_type == "moco":
-            # Check before projection
-            if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
-                print("!!! UNET_MARIDA MOCO: NaN/Inf in x_embedding before projector !!!")
-
-            x_embedding_flat = self.moco_projection(x_embedding)
-            if torch.isnan(x_embedding_flat).any() or torch.isinf(x_embedding_flat).any():
-                print("!!! UNET_MARIDA MOCO: NaN/Inf detected after moco_projection !!!")
-
-            processed_x_embedding = x_embedding_flat.view(
-                x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3]
-            )
-            if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
-                print("!!! UNET_MARIDA MOCO: NaN/Inf detected after view operation for embedding !!!")
-
-        elif self.model_type == "mocogeo":
-            # Check before projection
-            if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():
-                print("!!! UNET_MARIDA MOCGEO: NaN/Inf in x_embedding before projector !!!")
-
-            x_embedding_flat = self.mocogeo_projection(x_embedding)
-            if torch.isnan(x_embedding_flat).any() or torch.isinf(x_embedding_flat).any():
-                print("!!! UNET_MARIDA MOCGEO: NaN/Inf detected after mocogeo_projection !!!")
-
-            # Original logic for squeezing
-            if x_embedding_flat.shape[0] == 1 and x_embedding_flat.shape[1] == x5.shape[0]:
-                x_embedding_flat = x_embedding_flat.squeeze(0)
-            processed_x_embedding = x_embedding_flat.view(
-                x5.shape[0], x5.shape[1], x5.shape[2], x5.shape[3]
-            )
-            if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
-                print("!!! UNET_MARIDA MOCGEO: NaN/Inf detected after view operation for embedding !!!")
+        projected_embedding_spatial = projected_embedding.unsqueeze(2).unsqueeze(3)
+        print(f"projected_embedding_spatial (unsqueeze to 4D) shape: {projected_embedding_spatial.shape}")
         
-        # Check before concatenation
-        if torch.isnan(processed_x_embedding).any() or torch.isinf(processed_x_embedding).any():
-            print("!!! UNET_MARIDA: NaN/Inf in processed_x_embedding just before concatenation !!!")
-        if torch.isnan(x5).any() or torch.isinf(x5).any():
-            print("!!! UNET_MARIDA: NaN/Inf in x5 just before concatenation !!!")
+        print(f"Attempting to interpolate projected_embedding_spatial: {projected_embedding_spatial.shape} to target size: {x5.shape[2:]}")
+        x_resized = torch.nn.functional.interpolate(projected_embedding_spatial, size=x5.shape[2:], mode='bilinear', align_corners=True)
+        print(f"x_resized (interpolated embedding) shape: {x_resized.shape}")
+        
+        print(f"Concatenating x_resized {x_resized.shape} and x5 {x5.shape}")
+        combined = torch.cat([x_resized, x5], dim=1)
+        print(f"Combined tensor after concat: {combined.shape}")
 
-        combined = torch.cat([processed_x_embedding, x5], dim=1)
-        if torch.isnan(combined).any() or torch.isinf(combined).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after concatenation !!!")
+        batch_size, channels, height, width = combined.shape
+        print(f"Reshaping combined for linear projection: {combined.shape} -> ({batch_size * height * width}, {channels})")
+        combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+        print(f"Shape after permute and reshape: {combined_reshaped.shape}")
+        
+        # Check the actual input size to the linear layer vs expected in_features
+        expected_in_features = self.embedding_dim + (8 * self.hidden_channels) # Should be 256
+        print(f"Linear layer (self.combined_projection) expects in_features: {expected_in_features}")
+        print(f"Actual input features to linear layer (combined_reshaped's last dim): {combined_reshaped.shape[1]}")
 
-        batch_size, channels_combined, height, width = combined.shape
-        # Reshape and project the combined tensor as input for up-sampling
-        combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
-        if torch.isnan(combined_reshaped).any() or torch.isinf(combined_reshaped).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after combined_reshaped (permutation + reshape) !!!")
+        # Check the actual output size of the linear layer vs expected for reshape
+        expected_linear_output_elements = 128 * 16 * 16 # Should be 32768
+        print(f"Linear layer (self.combined_projection) expects to output {expected_linear_output_elements} elements")
+        
+        linear_output = self.combined_projection(combined_reshaped)
+        print(f"Shape after linear projection: {linear_output.shape}")
+        
+        print(f"Attempting to reshape linear output: {linear_output.shape} to ({batch_size}, 128, 16, 16)")
+        combined_projected = linear_output.reshape(batch_size, 128, 16, 16)
+        print(f"combined_projected (after linear and reshape) shape: {combined_projected.shape}")
 
-        combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
-        if torch.isnan(combined_projected).any() or torch.isinf(combined_projected).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after combined_projection (linear layer + reshape) !!!")
-
+        print(f"\n--- Decoder Path ---")
+        print(f"up1 input (upsampled previous layer) shape: {combined_projected.shape}")
+        print(f"up1 skip connection (x4) shape: {x4.shape}")
         x6 = self.up1(combined_projected, x4)
-        if torch.isnan(x6).any() or torch.isinf(x6).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.up1 (x6) !!!")
+        print(f"x6 (up1 output) shape: {x6.shape}")
 
+        print(f"up2 input (upsampled x6) shape for Up class conv: {x6.shape} after upsample")
+        print(f"up2 skip connection (x3) shape: {x3.shape}")
         x7 = self.up2(x6, x3)
-        if torch.isnan(x7).any() or torch.isinf(x7).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.up2 (x7) !!!")
+        print(f"x7 (up2 output) shape: {x7.shape}")
 
+        print(f"up3 input (upsampled x7) shape for Up class conv: {x7.shape} after upsample")
+        print(f"up3 skip connection (x2) shape: {x2.shape}")
         x8 = self.up3(x7, x2)
-        if torch.isnan(x8).any() or torch.isinf(x8).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.up3 (x8) !!!")
+        print(f"x8 (up3 output) shape: {x8.shape}")
 
+        print(f"up4 input (upsampled x8) shape for Up class conv: {x8.shape} after upsample")
+        print(f"up4 skip connection (x1) shape: {x1.shape}")
         x9 = self.up4(x8, x1)
-        if torch.isnan(x9).any() or torch.isinf(x9).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected after self.up4 (x9) !!!")
+        print(f"x9 (up4 output) shape: {x9.shape}")
 
         logits = self.outc(x9)
-        if torch.isnan(logits).any() or torch.isinf(logits).any():
-            print("!!! UNET_MARIDA: NaN/Inf detected in final logits (self.outc output) !!!")
-
+        print(f"logits (final output) shape: {logits.shape}")
+        print(f"--- UNet_Marida Forward Pass End ---")
         return logits

@@ -21,8 +21,8 @@ NUM_WORKERS=32                             # Number of data loader workers
 MODEL=moco                                 # Model name
 TRAIN_BATCH_SIZE=16                     # Training batch size
 VAL_BATCH_SIZE=16                     # Validation batch size
-LEARNING_RATE=1e-5   #1e-6                  # Learning rate
-EPOCHS=10                               # Number of epochs
+LEARNING_RATE=1e-5                  # Learning rate
+EPOCHS=1                              # Number of epochs
 PRETRAINED_MODEL="./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"
 #"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
 #"./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"

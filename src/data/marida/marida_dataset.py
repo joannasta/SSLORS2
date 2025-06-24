@@ -38,6 +38,7 @@ class MaridaDataset(Dataset):
         elif mode == 'test': 
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'test_X.txt'), dtype='str')
             self.transform = transforms.Compose([transforms.ToTensor()]) 
+            print("test ROIS are used")
         elif mode == 'val':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'val_X.txt'), dtype='str')
             print("val ROIS are used")
@@ -271,13 +272,15 @@ class MaridaDataset(Dataset):
                 target_for_concat = np.expand_dims(target, axis=-1)
             else:
                 target_for_concat = target
-
+            print("mode:", self.mode)
             print("img_for_concat shape:", img_for_concat.shape)
             print("target_for_concat shape:", target_for_concat.shape)
             
-            if self.mode != 'test':
-                if img.shape[0] not in [3, 11] and img.shape[1] == 256:
-                    img = img.permute(2, 0, 1)
+            if img_for_concat.shape[2] == 11:
+                img_for_concat = np.transpose(img,(2, 0, 1))
+            
+            print("img shape after permute:", img_for_concat.shape)
+    
             stack = np.concatenate([img_for_concat, target_for_concat], axis=-1).astype('float32')
             stack = self.transform(stack)
             img = stack[:-1, :, :]
@@ -293,7 +296,10 @@ class MaridaDataset(Dataset):
         if self.standardization is not None:
             img = self.standardization(img)
         
-        
+        if self.mode != 'test':
+                if img.shape[0] not in [3, 11] and img.shape[1] == 256:
+                    img = img.permute(2, 0, 1)
+                    
         return img, target, embedding
 
 
