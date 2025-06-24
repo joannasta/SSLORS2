@@ -451,8 +451,8 @@ class MAEFineTuning(pl.LightningModule):
         img_for_display = torch.clamp(data.cpu(), min=0, max=1)
         rgb_display_np = np.transpose(img_for_display.numpy(), (1, 2, 0)) # First, convert C,H,W to H,W,C
         rgb_display_np = rgb_display_np[:, :, [2, 1, 0]]
-        reconstructed_images_display = reconstructed_images.astype(np.float32) * -self.norm_param_depth
-        depth_display = depth.astype(np.float32) * -self.norm_param_depth
+        reconstructed_images_display = reconstructed_images * -self.norm_param_depth
+        depth_display = depth * -self.norm_param_depth
 
         if reconstructed_images_display.ndim == 3 and reconstructed_images_display.shape[0] == 1:
             reconstructed_images_display = reconstructed_images_display.squeeze(0)

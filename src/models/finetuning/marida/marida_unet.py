@@ -90,7 +90,7 @@ class UNet_Marida(nn.Module):
             print("!!! UNET_MARIDA INPUT: NaN/Inf detected in 'image' input at start of forward !!!")
             # print(f"Image problematic values: {image[torch.isnan(image) | torch.isinf(image)]}") # Uncomment for deeper debug
 
-        print("image shape forward unet:", image.shape)
+        #print("image shape forward unet:", image.shape)
         x1 = self.inc(image)
         if torch.isnan(x1).any() or torch.isinf(x1).any():
             print("!!! UNET_MARIDA: NaN/Inf detected after self.inc (x1) !!!")
@@ -111,7 +111,7 @@ class UNet_Marida(nn.Module):
         if torch.isnan(x5).any() or torch.isinf(x5).any():
             print("!!! UNET_MARIDA: NaN/Inf detected after self.down4 (x5) !!!")
         
-        print("x5 shape forward unet:", x5.shape)
+        #print("x5 shape forward unet:", x5.shape)
 
         # Embedding input check
         if torch.isnan(x_embedding).any() or torch.isinf(x_embedding).any():

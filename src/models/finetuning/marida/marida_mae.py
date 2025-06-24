@@ -105,9 +105,6 @@ class MAEFineTuning(pl.LightningModule):
 
         # Adapt input images channels for UNet's encoder path
         #images = self.input_adapter(images) 
-        print("images shape", images.shape)
-        print("self.full_finetune", self.full_finetune)
-        print("self.model_type", self.model_type)
         
         if torch.isnan(images).any() or torch.isinf(images).any():
             print("!!! WARNING: NaN/Inf detected in 'images' at start of forward pass!")
@@ -121,19 +118,20 @@ class MAEFineTuning(pl.LightningModule):
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
                 processed_embedding = processed_embedding.unsqueeze(0)
             elif self.model_type == "moco":
-                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
+                # Add check specifically for the backbone output
+                backbone_output = self.pretrained_model.backbone(embedding)
+                if torch.isnan(backbone_output).any() or torch.isinf(backbone_output).any():
+                    print("!!! MAEFineTuning.forward: NaN/Inf detected in MoCo backbone output BEFORE flattening !!!")
+                    # print(f"Problematic backbone output: {backbone_output[torch.isnan(backbone_output) | torch.isinf(backbone_output)]}")
+                processed_embedding = backbone_output.flatten(start_dim=1)
             elif self.model_type == "mocogeo":
                 embedding = embedding.squeeze(0)
-                print("embedding shape before backbone:", embedding.shape)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-                print("embedding shape after backbone:", processed_embedding.shape)
-        else:
-            processed_embedding = embedding
-            
-        # Check processed_embedding for NaNs/Infs
+
+        # Your existing check that confirmed the issue
         if torch.isnan(processed_embedding).any() or torch.isinf(processed_embedding).any():
             print("!!! WARNING: NaN/Inf detected in 'processed_embedding' after backbone!")
-            # Debug: print(processed_embedding[torch.isnan(processed_embedding)])
+         # Debug: print(processed_embedding[torch.isnan(processed_embedding)])
 
 
         return self.projection_head(images, processed_embedding)
@@ -215,20 +213,11 @@ class MAEFineTuning(pl.LightningModule):
         logits = self(data, embedding)
         target = target.long()
 
-        # --- Debugging steps ---
-        print(f"Logits shape before loss: {logits.shape}")
-        print(f"Target shape before loss: {target.shape}")
-        print(f"Logits dtypes: {logits.dtype}")
-        print(f"Target dtypes: {target.dtype}")
-
         # Check for NaN/Inf in logits
         if torch.isnan(logits).any():
             print("!!! NaN detected in logits before loss calculation !!!")
         if torch.isinf(logits).any():
             print("!!! Inf detected in logits before loss calculation !!!")
-
-        # Check value range of logits (especially min/max)
-        print(f"Logits min: {logits.min()}, Logits max: {logits.max()}")
 
         # Check the actual values of target where it's not -1
         unique_valid_targets = torch.unique(target[target != -1])
@@ -387,7 +376,6 @@ class MAEFineTuning(pl.LightningModule):
         self.writer.close()
     
     def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,dir) -> None:
-        print("log images")
         self.log_results()
         img= original_images.cpu().numpy()
         target = target.detach().cpu().numpy()
