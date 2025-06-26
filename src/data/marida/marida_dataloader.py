@@ -14,15 +14,15 @@ from .marida_dataset import MaridaDataset # Update the path as per your project 
 import numpy as np
 
 class MaridaDataModule(pl.LightningDataModule):
-    def __init__(self, batch_size=32, root_dir="/faststorage/joanna/marida/MARIDA", transform=None, standardization=None,
+    def __init__(self, batch_size=32, root_dir="/home/jovyan/SSLORS/marida", transform=None, standardization=None,
                  full_finetune=True, random=False, ssl=False, pretrained_model=None,model_type='mae'):
         super().__init__()
         self.batch_size = batch_size
         self.root_dir = root_dir
-        self.path ="/faststorage/joanna/marida/MARIDA/"
+        self.path ="/home/jovyan/SSLORS/marida"
         self.transform = transform
         self.standardization = standardization
-        self.img_only_dir = "/faststorage/joanna/marida/MARIDA/roi_data"
+        self.img_only_dir = "/home/jovyan/SSLORS/marida/roi_data"
         self.full_finetune = full_finetune
         self.random = random
         self.ssl = ssl
