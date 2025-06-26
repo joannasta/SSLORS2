@@ -13,6 +13,7 @@ from torchvision.transforms import RandomCrop
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DoubleConv, self).__init__()
+        print(f"Initializing DoubleConv ({in_channels} -> {out_channels})...")  # Print initialization info
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
@@ -21,118 +22,125 @@ class DoubleConv(nn.Module):
         )
 
     def forward(self, x):
-        return self.double_conv(x)
+        output = self.double_conv(x)
+        return output
 
 
 class Down(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Down, self).__init__()
+        print(f"Initializing Down ({in_channels} -> {out_channels})...")  # Print initialization info
+
         self.maxpool_conv = nn.Sequential(
             nn.MaxPool2d(2),
             DoubleConv(in_channels, out_channels)
         )
-
+        
     def forward(self, x):
-        return self.maxpool_conv(x)
+        output = self.maxpool_conv(x)
+        return output
 
 
 class Up(nn.Module):
-    def __init__(self, in_channels_from_prev_layer, in_channels_skip_connection, out_channels_for_this_block):
+    def __init__(self, in_channels, out_channels):
         super(Up, self).__init__()
-        self.up = nn.ConvTranspose2d(in_channels_from_prev_layer, out_channels_for_this_block, kernel_size=2, stride=2)
-        self.conv = DoubleConv(out_channels_for_this_block + in_channels_skip_connection, out_channels_for_this_block)
-
-    def forward(self, x_upsampled, x_skip):
-        x_upsampled = self.up(x_upsampled)
-        diffY = x_skip.size()[2] - x_upsampled.size()[2]
-        diffX = x_skip.size()[3] - x_upsampled.size()[3]
-        x_upsampled = F.pad(x_upsampled, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
-        x = torch.cat([x_skip, x_upsampled], dim=1)
-        return self.conv(x)
+        self.up = nn.ConvTranspose2d(in_channels, out_channels, kernel_size=2, stride=2)
+        self.conv = DoubleConv(in_channels, out_channels)
+        
+    def forward(self, x1, x2):
+        x1 = self.up(x1)
+        # Calculate the difference in shape and pad x1 if needed
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
+        x = torch.cat([x2, x1], dim=1)
+        output = self.conv(x)
+        return output
 
 
 class UNet_bathy(nn.Module):
-    def __init__(self, in_channels, out_channels, model_type="mae", full_finetune=False):
+    def __init__(self, in_channels, out_channels, latent_channels=192, latent_size=32,model_type="mae", full_finetune=False):
         super().__init__()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model_type = model_type
         self.full_finetune = full_finetune
 
-        self.n_channels = in_channels
-        self.n_outputs = out_channels
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.latent_channels = latent_channels  
+        self.latent_size = latent_size  
 
-        self.inc = DoubleConv(in_channels, 32)
-        self.down1 = Down(32, 64)
-        self.down2 = Down(64, 128)
-        self.down3 = Down(128, 256)
+        self.channel_projection = nn.Conv2d(in_channels=128, out_channels=256, kernel_size=1)  # Projection for x4
+        self.combined_projection = nn.Linear(257, 256)  # Linear projection layer, adjusted input channels
 
-        # Calculate channels for concatenation before final projection
-        cat_channels_in = 256 # From x4
+        self.encoder = nn.Sequential(
+            DoubleConv(in_channels, 32),
+            Down(32, 64),
+            Down(64, 128),
+            Down(128, 256)
+        )
+
+        self.decoder = nn.Sequential(
+            Up(256, 128),
+            Up(128, 64),
+            Up(64, 32),
+            nn.Conv2d(32, out_channels, kernel_size=1)
+        )
+
+        
 
         if model_type in ["mae", "moco"]:
-            cat_channels_in += 256 # Channels from projected embedding
-            self.emb_proj = nn.Linear(512, 256 * 32 * 32) # Projects 512-dim embedding to 256 channels spatially
+            self.bottleneck_input_channels = 256 + 256
+            # Change the input features for the linear projector to match the embedding dimension (768)
+            self.mae_embedding_projector = nn.Linear(768, 256 * 32 * 32)
+            self.moco_embedding_projector = nn.Linear(768, 256 * 32 * 32)
         elif model_type == "mocogeo":
-            cat_channels_in += 512 # Channels from expanded embedding
-        else:
-            raise NotImplementedError(f"Model type '{model_type}' not supported for embedding processing in UNet_bathy.")
+            self.bottleneck_input_channels = 256 + 512
 
-        # Linear projection after concatenation, before bottleneck convolution
-        self.cat_to_bot_proj = nn.Linear(cat_channels_in, 512)
+        self.bottleneck_conv = DoubleConv(self.bottleneck_input_channels, 512)
 
-        # Bottleneck convolution
-        self.bottleneck = DoubleConv(512, 512)
-
-        self.up1 = Up(512, 128, 128)
-        self.up2 = Up(128, 64, 64)
-        self.up3 = Up(64, 32, 32)
-
-        self.outc = nn.Conv2d(32, out_channels, kernel_size=1)
+        
 
     def forward(self, x_embedding, images):
         images = images.to(self.device)
-        print(f"x_embedding initial shape: {x_embedding.shape}")
-        print(f"images initial shape: {images.shape}")
-
-        x1 = self.inc(images)
-        print(f"Encoder: x1 (inc output) shape: {x1.shape}")
-        x2 = self.down1(x1)
-        print(f"Encoder: x2 (down1 output) shape: {x2.shape}")
-        x3 = self.down2(x2)
-        print(f"Encoder: x3 (down2 output) shape: {x3.shape}")
-        x4 = self.down3(x3) # x4 is the output of the final downsampling block
-        print(f"Encoder: x4 (down3 output - bottleneck input) shape: {x4.shape}")
-
-        fused_features = None # Features after incorporating embedding and before bottleneck conv
+        print(f"DEBUG: x_embedding initial shape: {x_embedding.shape}") # ADD THIS LINE
+        print(f"DEBUG: images initial shape: {images.shape}") # ADD THIS LINE
         
-        if self.model_type in ["mae", "moco"]:
-            emb_spat_proj = self.emb_proj(x_embedding).view(x_embedding.shape[0], 256, 32, 32)
-            emb_interp = F.interpolate(emb_spat_proj, size=x4.shape[2:], mode='bilinear', align_corners=False)
-            fused_features = torch.cat([x4, emb_interp], dim=1)
+        images = images.float()  # Ensure images are float type
+
+        x1 = self.encoder[0](images)
+        x2 = self.encoder[1](x1)
+        x3 = self.encoder[2](x2)
+        x4 = self.encoder[3](x3)
+
+
+        if self.model_type == "mae":
+            x_resized = F.interpolate(x_embedding, size=x4.shape[2:], mode='bilinear', align_corners=False)
+            combined = torch.cat([x_resized, x4], dim=1)  # Concatenate along channel dimension
+    
+            batch_size, channels, height, width = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+            combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
+
+        elif self.model_type == "moco":
+            embedding = self.moco_embedding_projector(x_embedding)
+            processed_embedding = embedding.view(embedding.shape[0], 256, 32, 32)
+            combined = torch.cat([x4, processed_embedding], dim=1)
+            batch_size, channels, height, width = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+            combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
 
         elif self.model_type == "mocogeo":
-            emb_expanded = x_embedding.unsqueeze(2).unsqueeze(3).expand(-1, -1, x4.shape[2], x4.shape[3])
-            fused_features = torch.cat([x4, emb_expanded], dim=1)
-        else:
-            raise NotImplementedError(f"Model type '{self.model_type}' not supported during forward pass.")
+            embedding = x_embedding.unsqueeze(2).unsqueeze(3).expand(-1, -1, x4.shape[2], x4.shape[3])
+            combined = torch.cat([x4, embedding], dim=1)
+            batch_size, channels, height, width = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+            combined_projected = self.combined_projection(combined_reshaped).reshape(batch_size, 256, height, width)
 
-        # Apply linear projection and reshape for bottleneck convolution
-        bs, ch_fused, h_fused, w_fused = fused_features.shape
-        fused_reshaped = fused_features.permute(0, 2, 3, 1).reshape(bs * h_fused * w_fused, ch_fused)
-        
-        bottleneck_in = self.cat_to_bot_proj(fused_reshaped).reshape(bs, 512, h_fused, w_fused)
-        
-        bottleneck_out = self.bottleneck(bottleneck_in)
-        print(f"bottleneck_out shape: {bottleneck_out.shape}")
+        #x = self.decoder[0](combined_projected, x3)
+        x = self.decoder[0](x4, x3)
+        x = self.decoder[1](x, x2)
+        x = self.decoder[2](x, x1)
+        output = self.decoder[3](x)
 
-        print("\nDecoder Path:")
-        x = self.up1(bottleneck_out, x3)
-        print(f"Decoder: x (up1 output) shape: {x.shape}")
-        x = self.up2(x, x2)
-        print(f"Decoder: x (up2 output) shape: {x.shape}")
-        x = self.up3(x, x1)
-        print(f"Decoder: x (up3 output) shape: {x.shape}")
-
-        output = self.outc(x)
-        print(f"Output: output shape: {output.shape}")
         return output
