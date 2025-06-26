@@ -23,10 +23,11 @@ class MaridaDataset(Dataset):
                  , full_finetune=True, random=False, ssl=False,model_type="mae"):
         self.mode = mode
         self.root_dir = Path(root_dir)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.X = []
         self.y = []
         self.transform = transform
-        self.means, self.stds, self.pos_weight = get_marida_means_and_stds()
+        self.means,self.stds, self.pos_weight = get_marida_means_and_stds()
         self.full_finetune = full_finetune
         self.random = random
         self.ssl = ssl
@@ -38,7 +39,6 @@ class MaridaDataset(Dataset):
         elif mode == 'test': 
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'test_X.txt'), dtype='str')
             self.transform = transforms.Compose([transforms.ToTensor()]) 
-            print("test ROIS are used")
         elif mode == 'val':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'val_X.txt'), dtype='str')
             print("val ROIS are used")
@@ -50,9 +50,9 @@ class MaridaDataset(Dataset):
         self.path = Path(path)
         self.embeddings = []
         self.pretrained_model = pretrained_model
-        self.standardization = transforms.Normalize(self.means, self.stds) if standardization else None
-        self.length = 0 
-        
+        self.mode = mode
+        self.standardization = transforms.Normalize(self.means[:11], self.stds[:11]) if standardization else None
+        self.length = len(self.y)
         self.agg_to_water = agg_to_water
         self.save_data = save_data
         
@@ -60,21 +60,17 @@ class MaridaDataset(Dataset):
             self.labels = json.load(inputfile)
 
         self._load_data()
-        self.length = len(self.y)
-
         if self.save_data:
             self._save_data_to_tiff()
-        if pretrained_model:
-            self._create_embeddings()
+        self._create_embeddings()
 
-
-    def getnames(self):
-        return self.ROIs
 
     def _load_data(self):
+        temp = None
         for roi in tqdm(self.ROIs, desc=f'Load {self.mode} set to memory'):
             roi_folder = '_'.join(['S2'] + roi.split('_')[:-1])
             roi_name = '_'.join(['S2'] + roi.split('_'))
+            cwd = os.getcwd()
             roi_file = os.path.join(self.path, 'patches', roi_folder, roi_name + '.tif')
             roi_file_cl = os.path.join(self.path, 'patches', roi_folder, roi_name + '_cl.tif')
             try:
@@ -91,20 +87,23 @@ class MaridaDataset(Dataset):
                 with rasterio.open(roi_file) as ds_x:
                     temp_x = np.copy(ds_x.read())
                     self.X.append(temp_x)
+                    temp = temp_x
+
             except rasterio.errors.RasterioIOError as e:
                 print(f"Error opening file for ROI {roi}: {e}")
-            except Exception as e:
-                print(f"An unexpected error occurred for ROI {roi}: {e}")
-    
-        if self.X: 
-            self.impute_nan = np.tile(self.means, (self.X[0].shape[1], self.X[0].shape[2], 1))
+        
+        if temp is not None:
+            print("impute nan tempshape",  (temp.shape[1],temp.shape[2],1))
+            self.impute_nan = np.tile(self.means, (temp.shape[1],temp.shape[2],1))
         else:
-            print("Warning: No ROIs loaded, `impute_nan` might not be correctly initialized. Assuming default (256, 256, 3) shape for safety.")
-            self.impute_nan = np.tile(self.means, (256, 256, 1))
+            print("Warning: No data loaded. `temp` is not defined.")
+            self.impute_nan = np.zeros((256, 256, 11)) 
+
+        self.length = len(self.y) 
 
 
     def _save_data_to_tiff(self):
-        print("Entering _save_data_to_tiff function.") 
+        print("Entering _save_data_to_tiff function...")
 
         output_folder = os.path.join(self.path, "roi_data", self.mode)
         os.makedirs(output_folder, exist_ok=True)
@@ -119,188 +118,98 @@ class MaridaDataset(Dataset):
             try:
                 img = self.X[i]
                 target = self.y[i]
-                if target.ndim == 3 and target.shape[0] == 1: 
-                    target = target.squeeze(0)
-                elif target.ndim != 2:
-                    raise ValueError(f"Target has unexpected dimensions: {target.shape}. Expected (H, W) or (1, H, W).")
-                
+                target = target.reshape(256, 256) 
                 roi_name = '_'.join(['S2'] + roi.split('_'))
 
                 img_filename = os.path.join(output_img_folder, f"X_{i:04d}_{roi_name}.tif")
-
-                if img.ndim == 3 and img.shape[0] > 4: 
-                    pass 
-                elif img.ndim == 3 and img.shape[2] > 4: 
-                    img = np.moveaxis(img, -1, 0)
-                elif img.ndim == 2: 
-                    img = np.expand_dims(img, axis=0)
-                else:
-                    raise ValueError(f"Image has unexpected dimensions: {img.shape}. Expected (C, H, W) or (H, W, C).")
-
                 with rasterio.open(img_filename, 'w', driver='GTiff', width=img.shape[2], height=img.shape[1], count=img.shape[0], dtype=img.dtype, crs=None, transform=None) as dst:
                     dst.write(img)
-  
-                target_filename = os.path.join(output_target_folder, f"y_{i:04d}_{roi_name}.tif")
+                print(f"Image saved successfully: {os.path.exists(img_filename)}")
+
+                target_filename = os.path.join(output_target_folder, f"y__{i:04d}_{roi_name}.tif")
                 with rasterio.open(target_filename, 'w', driver='GTiff', width=target.shape[1], height=target.shape[0], count=1, dtype=target.dtype, crs=None, transform=None) as dst:
-                    dst.write(target, 1) 
+                    dst.write(target, 1)
+                print(f"Target saved successfully: {os.path.exists(target_filename)}")
 
                 paired_filename = os.path.join(output_paired_folder, f"paired_{i:04d}_{roi_name}.tif")
-                if target.ndim == 2:
-                    target_for_concat = target[np.newaxis, :, :] 
-                else:
-                    target_for_concat = target
-
-                paired_data = np.concatenate([img, target_for_concat], axis=0) 
+                paired_data = np.concatenate([img, target[np.newaxis, :, :]], axis=0)
                 with rasterio.open(paired_filename, 'w', driver='GTiff', width=img.shape[2], height=img.shape[1], count=paired_data.shape[0], dtype=paired_data.dtype, crs=None, transform=None) as dst:
                     dst.write(paired_data)
+                print(f"Paired data saved successfully: {os.path.exists(paired_filename)}") 
 
             except Exception as e:
-                print(f"Error saving ROI {i}: {e}") 
-
-        print("Finished _save_data_to_tiff function.") 
+                print(f"Error saving data for ROI {roi}: {e}")
 
 
     def __len__(self):
         return self.length
 
+    def getnames(self):
+        return self.ROIs
+
     def _create_embeddings(self):
+        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
+        self.embeddings = []
+
         def weights_init(m):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
                 if m.bias is not None:
                     nn.init.zeros_(m.bias)
-        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01","B02", "B03", "B04","B05","B06","B07","B08","B8A","B09","B11"])
-        self.embeddings_list = []
-        
-        model_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.pretrained_model.to(model_device)
-        self.pretrained_model.eval() 
 
         if self.random:
-            print("Applying random weights initialization to pretrained model.")
+            print("Random weights initialization")
+            self.pretrained_model.cpu()
             self.pretrained_model.apply(weights_init)
 
-        for idx in tqdm(range(len(hydro_dataset)), desc=f'Creating embeddings for {self.mode} set'):
-            img_tensor = hydro_dataset[idx]
-            img_tensor = img_tensor.unsqueeze(0).to(model_device)
-            img_tensor = F.interpolate(img_tensor, size=(256,256), mode='bilinear', align_corners=False)
-            
-            if torch.isnan(img_tensor).any() or torch.isinf(img_tensor).any():
-                print(f"DEBUG: NaN/Inf detected in img_tensor for index {idx} during embedding creation. Imputing...")
-                
-                imputed_img_np = img_tensor.squeeze(0).cpu().numpy()
-                for c in range(imputed_img_np.shape[0]):
-                    channel_data = imputed_img_np[c, :, :]
-                    if np.isnan(channel_data).any() or np.isinf(channel_data).any():
-                        valid_pixels = channel_data[np.isfinite(channel_data)]
-                        if valid_pixels.size > 0:
-                            channel_mean = np.mean(valid_pixels)
-                            imputed_img_np[c, :, :][~np.isfinite(channel_data)] = channel_mean
-                        else:
-                            if self.means is not None and c < len(self.means):
-                                imputed_img_np[c, :, :] = self.means[c]
-                            else:
-                                imputed_img_np[c, :, :] = 0.0
+        for idx in range(len(hydro_dataset)):
+            img = hydro_dataset[idx]
+            img = img.unsqueeze(0)
 
-                img_tensor = torch.from_numpy(imputed_img_np).unsqueeze(0).to(model_device)
+            device = next(self.pretrained_model.parameters()).device
 
-            if self.full_finetune:
-                img_sliced = img_tensor[:,1:4,:,:]
-                if torch.isnan(img_sliced).any() or torch.isinf(img_sliced).any():
-                            print(f"!!! MaridaDataset._create_embeddings: NaN/Inf STILL detected after imputation for index {idx} !!!")
-                            
-                self.embeddings_list.append(img_sliced)
-            elif self.random or self.ssl:
+            img = img.to(device)
+
+            if not self.full_finetune:
                 with torch.no_grad():
                     if self.pretrained_model.__class__.__name__ == "MAE":
-                        embedding = self.pretrained_model.forward_encoder(img_tensor)
+                        embedding = self.pretrained_model.forward_encoder(img)
                     elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
-                        embedding = self.pretrained_model.backbone(img_tensor).flatten(start_dim=1)
-                        if torch.isnan(embedding).any() or torch.isinf(embedding).any():
-                            print(f"!!! MaridaDataset._create_embeddings: NaN/Inf detected in pretrained_model.backbone output for index {idx} even after input imputation!!!")
-                            
-                    else:
-                        raise ValueError(f"Model {self.pretrained_model.__class__.__name__} not configured for embedding creation.")
-                    self.embeddings_list.append(embedding)
-            
-        self.embeddings = torch.cat(self.embeddings_list, dim=0)
+                        img = img[:,1:4,:,:]
+                        embedding = self.pretrained_model.backbone(img).flatten(start_dim=1)
+            if self.full_finetune:
+                if self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
+                    img = img[:,1:4,:,:]
+                embedding = img
+            self.embeddings.append(embedding.cpu())
 
-        self.embeddings = self.embeddings.cpu()
+        self.embeddings = torch.stack(self.embeddings).cpu()
 
     def __getitem__(self, index):
         img = self.X[index]
         target = self.y[index]
-
         if self.pretrained_model:
             embedding = self.embeddings[index]
-        else:
-            embedding = torch.zeros(3, 256, 256)
+            
 
-        if img.ndim == 3 and (img.shape[0] == 11 or img.shape[0] == 3):
-            pass 
-        elif img.ndim == 3 and (img.shape[2] == 11 or img.shape[2] == 3):
-            img = np.moveaxis(img, -1, 0)
-        elif img.ndim == 2:
-            img = np.expand_dims(img, axis=0)
-        else:
-            raise ValueError(f"Image has unexpected dimensions in __getitem__: {img.shape}.")
-
-        if np.isnan(img).any() or np.isinf(img).any():
-            print(f"DEBUG: NaN/Inf detected in main image for index {index}. Imputing...")
-            for c in range(img.shape[0]):
-                channel_data = img[c, :, :]
-                if np.isnan(channel_data).any() or np.isinf(channel_data).any():
-                    valid_pixels = channel_data[np.isfinite(channel_data)]
-                    if valid_pixels.size > 0:
-                        channel_mean = np.mean(valid_pixels)
-                        img[c, :, :][~np.isfinite(channel_data)] = channel_mean
-                    else:
-                        if self.means is not None and c < len(self.means):
-                            img[c, :, :] = self.means[c]
-                        else:
-                            img[c, :, :] = 0.0
-        
-        img = img.astype('float32')
+        img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')
+        nan_mask = np.isnan(img)
+        img[nan_mask] = self.impute_nan[nan_mask]
 
         if self.transform is not None:
-            if img.ndim == 3 and img.shape[0] in [3, 11] and img.shape[1] == 256:
-                 img_for_concat = np.moveaxis(img, 0, -1)
-            else:
-                 img_for_concat = img
+            target = target.transpose(1, 2, 0)
+            stack = np.concatenate([img, target], axis=-1).astype('float32')
 
-            if target.ndim == 2:
-                target_for_concat = np.expand_dims(target, axis=-1)
-            else:
-                target_for_concat = target
-            print("mode:", self.mode)
-            print("img_for_concat shape:", img_for_concat.shape)
-            print("target_for_concat shape:", target_for_concat.shape)
-            
-            if img_for_concat.shape[2] == 11:
-                img_for_concat = np.transpose(img_for_concat, (2, 0, 1))
-            
-            print("img shape after permute:", img_for_concat.shape)
-    
-            stack = np.concatenate([img_for_concat, target_for_concat], axis=0).astype('float32')
             stack = self.transform(stack)
-            img = stack[:-1, :, :]
-            target = stack[-1, :, :]
-        else:
-            if isinstance(img, np.ndarray):
-                img = torch.from_numpy(img)
-            if isinstance(target, np.ndarray):
-                target = torch.from_numpy(target)
-                if target.ndim == 3 and target.shape[0] == 1:
-                    target = target.squeeze(0)
+            img = stack[:-1,:,:]
+            target = stack[-1,:,:]
 
         if self.standardization is not None:
             img = self.standardization(img)
-        
-        print("img shape before mode check:", img.shape)
+
         if self.mode != 'test':
-                if img.shape[0] not in [3, 11] and img.shape[1] == 256:
-                    img = img.permute(2, 0, 1)
-                    
+            if img.shape[0] not in [3, 11] and img.shape[1] == 256:
+                img = np.transpose(img,(2, 0, 1))
         return img, target, embedding
 
 
@@ -311,6 +220,6 @@ class RandomRotationTransform:
     def __call__(self, x):
         angle = random.choice(self.angles)
         return F.rotate(x, angle)
-
+    
 def gen_weights(class_distribution, c = 1.02):
     return 1/torch.log(c + class_distribution)
