@@ -40,9 +40,6 @@ class InputChannelAdapter(nn.Module):
     def forward(self, x):
         return self.conv(x)
     
-def gen_weights(class_distribution, c = 1.02):
-    return 1/torch.log(c + class_distribution)
-
 class MAEFineTuning(pl.LightningModule):
     def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,model_type="mae",full_finetune=True,location="agia_napa"):
         super().__init__()
@@ -77,22 +74,25 @@ class MAEFineTuning(pl.LightningModule):
 
         self.input_adapter = InputChannelAdapter(self.src_channels, self.pretrained_in_channels)
         self.projection_head = UNet_Marida(input_channels=self.pretrained_in_channels, 
-                                           out_channels=src_channels,model_type=self.model_type)
+                                           out_channels=11,model_type=self.model_type)
         
-        self.test_step_outputs = []
+        self.test_step_outputs = []#
+
+        global class_distr
 
         self.agg_to_water = True
         self.weight_param = 1.03
         self.class_distr = torch.Tensor([0.00452, 0.00203, 0.00254, 0.00168, 0.00766, 0.15206, 0.20232,
                                         0.35941, 0.00109, 0.20218, 0.03226, 0.00693, 0.01322, 0.01158, 0.00052])
         if self.agg_to_water:
-            agg_distr = sum(self.class_distr[-4:])
-            self.class_distr[6] += agg_distr       
-            self.class_distr = self.class_distr[:-4]    
+            agg_distr = sum(self.class_distr[-4:]) # Density of Mixed Water, Wakes, Cloud Shadows, Waves
+            self.class_distr[6] += agg_distr       # To Water
+            self.class_distr = self.class_distr[:-4]    # Drop Mixed Water, Wakes, Cloud Shadows, Waves  
 
-        self.weight = gen_weights(self.class_distr, c = self.weight_param)
-
+        self.weight =  gen_weights(self.class_distr, c = self.weight_param)
+        print("weights",self.weight)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
+
 
         self.total_train_loss = 0.0
         self.total_test_loss = 0.0
@@ -101,14 +101,26 @@ class MAEFineTuning(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
+    def preprocess_hydro(self, data):
+        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
+        self.embeddings = []
+
+        for idx in range(len(hydro_dataset)):
+            #print(f"Processing image index: {idx}") # print the index
+            img = hydro_dataset[idx].to(self.device)
+            img = img.unsqueeze(0).to(self.pretrained_model.device)
+            if not self.fully_finetuning:
+                with torch.no_grad():
+                    embedding = self.pretrained_model.forward_encoder(img)
+
+                    print("embeddings shape", embedding)
+
+                self.embeddings.append(embedding.cpu())
+
+        self.embeddings = torch.stack(self.embeddings).cpu()
+
     def forward(self, images, embedding):
 
-        # Adapt input images channels for UNet's encoder path
-        #images = self.input_adapter(images) 
-        
-        if torch.isnan(images).any() or torch.isinf(images).any():
-            print("!!! WARNING: NaN/Inf detected in 'images' at start of forward pass!")
-        # Debug: print(images[torch.isnan(images)]) to see specific NaN locations
         
         processed_embedding = None
 
@@ -118,31 +130,28 @@ class MAEFineTuning(pl.LightningModule):
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
                 processed_embedding = processed_embedding.unsqueeze(0)
             elif self.model_type == "moco":
-                # Add check specifically for the backbone output
-                backbone_output = self.pretrained_model.backbone(embedding)
-                if torch.isnan(backbone_output).any() or torch.isinf(backbone_output).any():
-                    print("!!! MAEFineTuning.forward: NaN/Inf detected in MoCo backbone output BEFORE flattening !!!")
-                    # print(f"Problematic backbone output: {backbone_output[torch.isnan(backbone_output) | torch.isinf(backbone_output)]}")
-                processed_embedding = backbone_output.flatten(start_dim=1)
+                embedding = embedding.squeeze(1)
+                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
             elif self.model_type == "mocogeo":
                 embedding = embedding.squeeze(0)
+                print("embedding shape before backbone:", embedding.shape)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-
-        # Your existing check that confirmed the issue
-        if torch.isnan(processed_embedding).any() or torch.isinf(processed_embedding).any():
-            print("!!! WARNING: NaN/Inf detected in 'processed_embedding' after backbone!")
-         # Debug: print(processed_embedding[torch.isnan(processed_embedding)])
-
+                print("embedding shape after backbone:", processed_embedding.shape)
+        else:
+            processed_embedding = embedding
 
         return self.projection_head(images, processed_embedding)
     
     def training_step(self, batch, batch_idx):
         train_dir = "train_results"
         data, target,embedding = batch
-        target = target.squeeze(1) 
+        images = data
         batch_size = data.shape[0]
+        #data = data.permute(0,3,1,2)
         logits = self(data,embedding)
+        data = images
         target = target.long()
+        target = target.squeeze(1)
         loss = self.criterion(logits, target)
 
 
@@ -151,7 +160,7 @@ class MAEFineTuning(pl.LightningModule):
                 data[0].cpu(),     
                 logits[0],    
                 target[0].cpu(),   
-                dir = train_dir 
+                log_dir = train_dir 
             )
 
         if not hasattr(self, 'total_train_loss'):
@@ -166,13 +175,15 @@ class MAEFineTuning(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
-        torch.autograd.set_detect_anomaly(True) 
         val_dir="val_results"
         data, target,embedding = batch
-        target = target.squeeze(1) 
+        images = data
         batch_size = data.shape[0]
+        #data = data.permute(0,3,1,2)
         logits = self(data,embedding)
+        data = images
         target = target.long()
+        target = target.squeeze(1)
         loss = self.criterion(logits, target)
 
         if batch_idx % 100 == 0:
@@ -180,7 +191,7 @@ class MAEFineTuning(pl.LightningModule):
                 data[0].cpu(),     
                 logits[0],    
                 target[0].cpu(),   
-                dir = val_dir 
+                log_dir = val_dir 
             )
 
         self.log('val_loss', loss)
@@ -196,40 +207,17 @@ class MAEFineTuning(pl.LightningModule):
     
     
     def test_step(self, batch, batch_idx):
-        torch.autograd.set_detect_anomaly(True) 
-
         test_dir = "test_results"
         data, target, embedding = batch
-        target = target.squeeze(1) 
         batch_size = data.shape[0]
         print(f"Batch {batch_idx}: Data shape: {data.shape}, Target shape: {target.shape}")
         print(f"Batch {batch_idx}: Unique target values: {torch.unique(target)}")
 
-        # --- NEW DEBUGGING ADDITION ---
-        problematic_target_values = target[~((target >= 0) & (target < self.src_channels)) & (target != -1)]
-        if problematic_target_values.numel() > 0:
-            print(f"!!! ALERT: Found unexpected target values (not in [0, {self.src_channels-1}] and not -1): {torch.unique(problematic_target_values)}")
-            
-        logits = self(data, embedding)
+        logits = self(data,embedding)
         target = target.long()
-
-        # Check for NaN/Inf in logits
-        if torch.isnan(logits).any():
-            print("!!! NaN detected in logits before loss calculation !!!")
-        if torch.isinf(logits).any():
-            print("!!! Inf detected in logits before loss calculation !!!")
-
-        # Check the actual values of target where it's not -1
-        unique_valid_targets = torch.unique(target[target != -1])
-        print(f"Unique valid targets: {unique_valid_targets}")
-
-        # --- End debugging steps ---
-
+        target = target.squeeze(1)
         loss = self.criterion(logits, target)
         self.log("test_loss", loss)
-        
-        print(f"Test Step {batch_idx}: Loss: {loss.item()}")
-
 
         # Accuracy metrics only on annotated pixels
         logits_moved = torch.movedim(logits, (0, 1, 2, 3), (0, 3, 1, 2))
@@ -261,12 +249,13 @@ class MAEFineTuning(pl.LightningModule):
             row = pixel_locations[0][i]
             col = pixel_locations[1][i]
             visual_image[row, col] = predicted_labels[i]
-        
+
+
         self.log_images(
                 data[0].cpu(),
                 logits[0],
                 target[0].cpu(),
-                dir=test_dir)
+                log_dir=test_dir)
 
         visual_target_image = np.zeros((256, 256))
         min_length = min(len(target_labels), len(pixel_locations[0]))
@@ -277,7 +266,7 @@ class MAEFineTuning(pl.LightningModule):
             visual_target_image[row, col] = target_labels[i]
 
         img = data[0].clone().cpu()
-        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None]) 
+        img = (img *self.stds[:,None, None]) + ( self.means[:,None, None]) 
         img = img[1:4, :, :]  
         img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
 
@@ -310,15 +299,19 @@ class MAEFineTuning(pl.LightningModule):
         keys = list(cat_mapping_marida.keys())[:-4]
         cbar.set_ticklabels(list(cat_mapping_marida.keys())[:-2]) # Set tick labels from category mapping
 
-        # Save and show
-        dir_rel = os.path.join(self.run_dir, test_dir)
-        dir_abs = os.path.abspath(dir_rel)
-        filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
-        self.test_image_count += 1
-        
-        plt.tight_layout()
+        dir_rel = os.path.join(self.run_dir, test_dir)  # Relative path
+        dir_abs = os.path.abspath(dir_rel)  # Absolute path
+
+        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
+        if test_dir == "test_results":
+            filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
+            self.test_image_count += 1
+        else:
+            filename = os.path.join(dir_abs, f"segmentation_comparison_epoch_{self.current_epoch}.png")
         plt.savefig(filename)  # Save using absolute path
-        plt.show()
+        print(f"Saving to: {filename}") # Print to check where you are saving
+
+        plt.close()
         return loss
 
 
@@ -335,23 +328,18 @@ class MAEFineTuning(pl.LightningModule):
         all_predictions = np.array(all_predictions)
         all_targets = np.array(all_targets)
 
-        unique_targets = np.unique(all_targets)
-        unique_predictions = np.unique(all_predictions)
-        
-        actual_labels_present = np.sort(np.unique(np.concatenate((unique_targets, unique_predictions))))
-
-        labels_for_confusion_matrix = [label for label in actual_labels_present if label != -1]
+        labels_for_cm = list(cat_mapping_marida.keys())[:-4]
 
         acc = metrics_marida(all_targets, all_predictions)
         for key, value in acc.items():
             prefix = "test"
             self.log(f"{prefix}_{key}", value)
-        print(f"Evaluation: {acc}")
-
-        conf_mat = confusion_matrix(all_targets, all_predictions, labels_for_confusion_matrix)
+        
+        conf_mat = confusion_matrix(all_targets, all_predictions, labels_for_cm)
         print("Confusion Matrix:  \n" + str(conf_mat.to_string()))
 
         self.test_step_outputs.clear()
+        
 
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
@@ -375,7 +363,8 @@ class MAEFineTuning(pl.LightningModule):
     def on_train_end(self):
         self.writer.close()
     
-    def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,dir) -> None:
+    def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,log_dir) -> None:
+        print("log images")
         self.log_results()
         img= original_images.cpu().numpy()
         target = target.detach().cpu().numpy()
@@ -405,7 +394,7 @@ class MAEFineTuning(pl.LightningModule):
         axes[2].set_title("Prediction")
         axes[2].axis('off')
 
-        dir_rel = os.path.join(self.run_dir, dir)  # Relative path
+        dir_rel = os.path.join(self.run_dir, log_dir)  # Relative path
         dir_abs = os.path.abspath(dir_rel)  # Absolute path
 
         os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
@@ -429,10 +418,7 @@ class MAEFineTuning(pl.LightningModule):
             os.makedirs(self.run_dir, exist_ok=True)
                 
     def configure_optimizers(self):
+        
         optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1, verbose=True)
-        
-        # Add gradient clipping
-        self.clip_gradients(optimizer, gradient_clip_val=1.0, gradient_clip_algorithm="norm") # Example values
-
         return [optimizer], [scheduler]
