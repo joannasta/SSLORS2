@@ -20,74 +20,48 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         self.full_finetune = full_finetune
         self.random = random
         self.ssl = ssl
-
-        # Removed: self.save_hyperparameters(...) - No hyperparameters saved by the DataModule
+        print("Dataloader location:",location)
 
     def setup(self, stage=None):
-        # Use the actual list of image IDs from config.py directly
-        all_train_ids = train_images
-        all_test_ids = test_images
-
-        print(f"DataModule: Training images: {len(all_train_ids)}")
-        print(f"DataModule: Test/Validation images: {len(all_test_ids)}")
-
         if stage == 'fit' or stage is None:
-            # Initialize train dataset using all_train_ids
+            # Initialize train and validation datasets for training
             self.train_dataset = MagicBathyNetDataset(
                 root_dir=self.root_dir,
                 transform=self.transform,
-                split_type='train', 
+                split_type='train',
                 cache=self.cache,
                 pretrained_model=self.pretrained_model,
-                location=self.location,
-                full_finetune=self.full_finetune,
-                random=self.random,
-                ssl=self.ssl,
-                image_ids_for_this_split=all_train_ids # Pass all training IDs
+                location=self.location
             )
             
-            # Initialize validation dataset using all_test_ids (as per your request)
             self.val_dataset = MagicBathyNetDataset(
                 root_dir=self.root_dir,
                 transform=self.transform,
-                split_type='val', 
+                split_type='val',
                 cache=self.cache,
                 pretrained_model=self.pretrained_model,
-                location=self.location,
-                full_finetune=self.full_finetune,
-                random=self.random,
-                ssl=self.ssl,
-                image_ids_for_this_split=all_train_ids # Pass all testing IDs for validation
+                location=self.location
             )
+            #self.val_dataset = self.train_dataset 
 
-        if stage == 'test' or stage is None:
-            # Initialize test dataset using all_test_ids
+        if stage == 'test' or stage is None: #'test'
+            #self.test_dataset = self.train_dataset
+            # Initialize test dataset for evaluation
             self.test_dataset = MagicBathyNetDataset(
                 root_dir=self.root_dir,
                 transform=self.transform,
-                split_type='test', # Label this as 'test'
+                split_type='test',
                 cache=self.cache,
                 pretrained_model=self.pretrained_model,
-                location=self.location,
-                full_finetune=self.full_finetune,
-                random=self.random,
-                ssl=self.ssl,
-                image_ids_for_this_split=all_test_ids # Pass all testing IDs
+                location=self.location
             )
 
 
-    def worker_init_fn(self, worker_id):
-        worker_seed = torch.initial_seed() % 2**32 + worker_id
-        np.random.seed(worker_seed)
-        random.seed(worker_seed)
-
     def train_dataloader(self):
-        
-        #self.test_dataset 
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)
 
     def val_dataloader(self):
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
-    
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+
     def test_dataloader(self):
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4, pin_memory=True)
+        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
