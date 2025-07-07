@@ -20,11 +20,12 @@ models = {
     "mae": MAE,
     "moco": MoCo,
     "moco-geo": MoCoGeo,
-    "moco-geo-ocean": MoCoOceanFeatures,  # Assuming MoCoGeo can handle ocean features
+    "moco-geo-ocean": MoCoOceanFeatures,
 }
 
 def set_seed(seed):
     """Set the random seed for reproducibility."""
+    print(f"DEBUG: Setting random seed to {seed}")
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -32,12 +33,14 @@ def set_seed(seed):
 
 def main(args):
     """Main training function."""
+    print("DEBUG: Starting main training function.")
     set_seed(args.seed)
 
     model = None
     datamodule = None
     transform = None # Initialize transform here to ensure scope
 
+    print(f"DEBUG: Initializing model and transform for model: {args.model}")
     # --- Initialize Model and Define Transform Pipeline based on selected model ---
     if args.model == "mae":
         transform = transforms.Compose([
@@ -56,10 +59,10 @@ def main(args):
             model_name = args.model,
             num_workers=args.num_workers
         )
+        print("DEBUG: MAE model and HydroDataModule initialized.")
     elif args.model == "moco-geo":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
-            # Removed: ColorJitter line as per request
             transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
             transforms.RandomHorizontalFlip(),
         ]
@@ -74,10 +77,10 @@ def main(args):
             model_name = args.model,
             num_workers=args.num_workers
         )
+        print("DEBUG: MoCoGeo model and HydroMoCoGeoDataModule initialized.")
     elif args.model == "moco-geo-ocean":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
-            # Removed: ColorJitter line as per request
             transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
             transforms.RandomHorizontalFlip(),
         ]
@@ -92,11 +95,11 @@ def main(args):
             model_name = args.model,
             num_workers=args.num_workers
         )
+        print("DEBUG: MoCoOceanFeatures model and HydroOceanFeaturesDataModule initialized.")
         
     elif args.model == "moco":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
-            # Removed: ColorJitter line as per request
             transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
             transforms.RandomHorizontalFlip(),
         ]
@@ -111,6 +114,7 @@ def main(args):
             model_name = args.model,
             num_workers=args.num_workers
         )
+        print("DEBUG: MoCo model and HydroMoCoDataModule initialized.")
     
     else:
         raise ValueError(f"Unknown model: {args.model}. Choose from {list(models.keys())}")
@@ -119,14 +123,18 @@ def main(args):
     if model is None or datamodule is None:
         raise RuntimeError("Model or DataModule could not be initialized. Check model argument.")
 
+    print("DEBUG: Calling datamodule.setup('fit').")
     datamodule.setup("fit") # Prepare datasets for training and validation
+    print("DEBUG: Getting train_dataloader.")
     train_dataloader = datamodule.train_dataloader()
+    print("DEBUG: Getting val_dataloader.")
     val_dataloader = datamodule.val_dataloader()
 
+    print("DEBUG: Setting up TensorBoardLogger.")
     # --- Setup Trainer and Run Fit ---
     logger = TensorBoardLogger("results/trains", name=args.model)
 
-    print(f"epochs: {args.epochs}")
+    print(f"DEBUG: Initializing Trainer with epochs: {args.epochs}")
     trainer = Trainer(
         accelerator=args.accelerator,
         devices=args.devices,
@@ -136,11 +144,14 @@ def main(args):
         enable_progress_bar=True,
         val_check_interval=1.0
     )
+    print("DEBUG: Calling trainer.fit().")
     trainer.fit(model, train_dataloader, val_dataloaders=val_dataloader)
+    print("DEBUG: Training finished.")
 
 # --- Argument Parsing ---
 def parse_args():
     """Parse command-line arguments."""
+    print("DEBUG: Parsing command-line arguments.")
     parser = argparse.ArgumentParser(description="Train script for SSL models.")
 
     # General training arguments
@@ -150,9 +161,10 @@ def parse_args():
     parser.add_argument("--val-batch-size", default=4, type=int, help="Batch size for validation")
     parser.add_argument("--num-workers", default=4, type=int, help="Number of workers for data loading")
     parser.add_argument("--learning-rate", default=1e-5, type=float, help="Learning rate")
-    parser.add_argument("--dataset", default="/faststorage/joanna/Hydro/raw_data", type=str, help="Path to dataset")
+    parser.add_argument("--dataset", default="/data/joanna/Hydro", type=str, help="Path to dataset")
     parser.add_argument("--model", type=str, choices=models.keys(), default="mae", help="Model architecture")
     parser.add_argument("--epochs", default=100, type=int, help="Number of epochs")
+    parser.add_argument("--ocean", default=False, type=bool, help="Flag to indicate ocean dataset")
 
     # MAE-specific arguments
     parser.add_argument("--mask-ratio", default=0.90, type=float, help="Masking ratio for MAE")
@@ -161,8 +173,10 @@ def parse_args():
     parser.add_argument("--seed", default=42, type=int, help="Random seed for reproducibility")
 
     args = parser.parse_args()
+    print("DEBUG: Arguments parsed.")
     return args
 
 if __name__ == "__main__":
+    print("DEBUG: Script started. Entering __main__ block.")
     args = parse_args()
     main(args)

@@ -59,3 +59,43 @@ results/
 runs/
 bathymetry_results/
 marine_debris_results/
+miniconda3/pkgs/ncurses-6.4-h6a678d5_0/share/terminfo/P/P14-M-W
+.gitignore
+miniconda3/pkgs/ncurses-6.4-h6a678d5_0/share/terminfo/Q/Q306-8-pc
+.gitignore
+.gitignore
+miniconda3/pkgs/ncurses-6.4-h6a678d5_0/share/terminfo/P/P12-M-W
+miniconda3/pkgs/ncurses-6.4-h6a678d5_0/share/terminfo/P/P14-M
+.gitignore
+.gitignore
+.gitignore
+.gitignore
+
+# Miniconda/Miniforge/Conda installations
+/home/joanna/miniforge3/
+/home/joanna/miniconda3/
+/home/joanna/anaconda3/
+
+# Conda environments (if not within the main installation dir, though usually they are)
+# If you create environments outside the default 'envs' folder, add them here.
+# For example, if you had an env directly in your home:
+# ~/my_custom_env/
+
+# Common environment-related files/folders
+.conda/
+.mamba/
+.venv/ # For Python virtual environments (venv)
+env/   # Common name for virtual environment folders
+venv/  # Another common name for virtual environment folders
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Logs from your script (if not already ignored)
+logs/
+slurm_logs/
+
+# Data files (if not already ignored)
+*.csv_temp # The temporary file you were copying
+*.tif # If your raw data is in .tif files and not tracked

@@ -8,8 +8,8 @@ NORM_PARAM_DEPTH = {
 
 # Paths
 NORM_PARAM_PATHS = {
-    "agia_napa": "/faststorage/joanna/magicbathynet/MagicBathyNet/agia_napa/norm_param_s2_an.npy",
-    "puck_lagoon": "/faststorage/joanna/magicbathynet/MagicBathyNet/puck_lagoon/norm_param_s2_pl.npy"
+    "agia_napa": "/data/joanna/MagicBathyNet/agia_napa/norm_param_s2_an.npy",
+    "puck_lagoon": "/data/joanna/MagicBathyNet/puck_lagoon/norm_param_s2_pl.npy"
 }
 
 # Common Model Parameters

@@ -6,7 +6,7 @@
 #SBATCH --time=4-00:00:00                   # Time limit (Corrected format for 4 days)
 #SBATCH --output=logs/train_moco_slurm.out     # Standard output log
 #SBATCH --error=logs/train_moco_slurm.err      # Error log
-#SBATCH --partition=rsim_member
+#SBATCH --partition=LocalQ
 
 # Set up the environment
 #source activate ssl_new # Activate your conda environment
@@ -21,7 +21,7 @@ TRAIN_BATCH_SIZE=64 # Training batch size
 VAL_BATCH_SIZE=64 # Validation batch size
 LEARNING_RATE=3e-3 # Learning rate
 EPOCHS=200 # Number of epochs Hydro uses 800
-DATASET_PATH="/faststorage/joanna/Hydro/raw_data" # Dataset path
+DATASET_PATH="/data/joanna/Hydro/" # Dataset path
 SEED=42 # Fixed assignment (removed spaces)
 
 # Run the training script

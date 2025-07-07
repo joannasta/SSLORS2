@@ -13,11 +13,10 @@ class HydroOceanFeaturesDataModule(LightningDataModule): # Renamed
             data_dir: str, 
             batch_size: int = 32, 
             num_workers: int = 4, 
-            transform: Optional[Callable] = None, # Make transform type explicit
-            model_name: str = "moco-ocean-features", # Changed default model_name
-            # Removed num_geo_clusters as it's not relevant for this task
-            csv_features_path: str = "/home/joanna/SSLORS/src/data/ocean_features_projected.csv", # New parameter
-            max_match_distance: float = 0.001 # New parameter
+            transform: Optional[Callable] = None, 
+            model_name: str = "moco-ocean-features", 
+            csv_features_path: str = "/mnt/storagecube/joanna/ocean_features_filtered.csv", 
+            max_match_distance: float = 0.001 
         ):
         super().__init__()
         self.data_dir = Path(data_dir)
