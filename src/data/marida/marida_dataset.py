@@ -1,424 +1,225 @@
-# Third-party libraries
 import os
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
-import matplotlib.colors as mcolors
-import scipy
-
-# PyTorch and related libraries
+import json
 import torch
+import numpy as np
+import random
+
+from tqdm import tqdm
+import rasterio
+from torch.utils.data import Dataset
+from pathlib import Path
+import torchvision.transforms as transforms
+import torch.nn.functional as F
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
-import pytorch_lightning as pl
 
-# Libraries for models and utilities
-import timm
-from lightly.models import utils
-from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
-import torchvision.transforms.functional as F
-import matplotlib.patches as mpatches
-
-# Project-specific imports
-from .marida_unet  import UNet_Marida
-from src.data.marida.marida_dataset import gen_weights
-from src.utils.finetuning_utils import calculate_metrics
-from config import get_marida_means_and_stds, labels_marida,cat_mapping_marida
-from src.utils.finetuning_utils import metrics_marida,confusion_matrix 
-from src.models.mae import MAE
-from src.models.moco import MoCo
-from src.models.moco_geo import MoCoGeo
 from src.data.hydro.hydro_dataset import HydroDataset
+from src.utils.data_processing_marida import DatasetProcessor
+from config import get_marida_means_and_stds
 
+dataset_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
 
-class InputChannelAdapter(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
-
-    def forward(self, x):
-        return self.conv(x)
-    
-class MAEFineTuning(pl.LightningModule):
-    def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,model_type="mae",full_finetune=True,location="agia_napa"):
-        super().__init__()
-        self.writer = SummaryWriter()
-        self.train_step_losses = []
-        self.total_train_loss = 0.0
-        self.train_batch_count = 0
-        self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self.save_hyperparameters()
-        self.run_dir = None 
-        self.location = location 
-        self.base_dir = "marine_debris_results"
-        self.pretrained_model=pretrained_model
-        self.model_type = model_type
+class MaridaDataset(Dataset):
+    def __init__(self, root_dir, mode='train', pretrained_model=None, transform=None, standardization=None, path=dataset_path, img_only_dir=None, agg_to_water=True, save_data=False
+                 , full_finetune=True, random=False, ssl=False,model_type="mae"):
+        self.mode = mode
+        self.root_dir = Path(root_dir)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.X = []
+        self.y = []
+        self.transform = transform
+        self.means,self.stds, self.pos_weight = get_marida_means_and_stds()
         self.full_finetune = full_finetune
+        self.random = random
+        self.ssl = ssl
+        self.model_type = model_type
         
-        if self.full_finetune:
-            for param in self.parameters():
-                param.requires_grad = True
-
-
-        self.src_channels = src_channels  
-        if self.pretrained_model is not None:
-            self.pretrained_in_channels = 11
+        if mode == 'train':
+            self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'train_X.txt'), dtype='str')
+            print("train ROIS are used")
+        elif mode == 'test': 
+            self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'test_X.txt'), dtype='str')
+            self.transform = transforms.Compose([transforms.ToTensor()]) 
+        elif mode == 'val':
+            self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'val_X.txt'), dtype='str')
+            print("val ROIS are used")
         else:
-            self.pretrained_in_channels = src_channels
-        self.learning_rate = learning_rate
-        self.mask_ratio = mask_ratio
-        self.means,self.stds,self.pos_weight = get_marida_means_and_stds()
-
-        self.test_image_count = 0
-
-        self.input_adapter = InputChannelAdapter(self.src_channels, self.pretrained_in_channels)
-        self.projection_head = UNet_Marida(input_channels=self.pretrained_in_channels, 
-                                           out_channels=11,model_type=self.model_type)
+            raise ValueError(f"Unknown mode {mode}")
         
-        self.test_step_outputs = []#
+        print("length of ROIs:", len(self.ROIs))
 
-        global class_distr
+        self.path = Path(path)
+        self.embeddings = []
+        self.pretrained_model = pretrained_model
+        self.mode = mode
+        self.standardization = transforms.Normalize(self.means[:11], self.stds[:11]) if standardization else None
+        self.length = len(self.y)
+        self.agg_to_water = agg_to_water
+        self.save_data = save_data
+        
+        with open(os.path.join(path, 'labels_mapping.txt'), 'r') as inputfile:
+            self.labels = json.load(inputfile)
 
-        self.agg_to_water = True
-        self.weight_param = 1.03
-        self.class_distr = torch.Tensor([0.00452, 0.00203, 0.00254, 0.00168, 0.00766, 0.15206, 0.20232,
-                                        0.35941, 0.00109, 0.20218, 0.03226, 0.00693, 0.01322, 0.01158, 0.00052])
-        if self.agg_to_water:
-            agg_distr = sum(self.class_distr[-4:]) # Density of Mixed Water, Wakes, Cloud Shadows, Waves
-            self.class_distr[6] += agg_distr       # To Water
-            self.class_distr = self.class_distr[:-4]    # Drop Mixed Water, Wakes, Cloud Shadows, Waves  
-
-        self.weight =  gen_weights(self.class_distr, c = self.weight_param)
-        print("weights",self.weight)
-        self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
+        self._load_data()
+        if self.save_data:
+            self._save_data_to_tiff()
+        self._create_embeddings()
 
 
-        self.total_train_loss = 0.0
-        self.total_test_loss = 0.0
-        self.train_batch_count = 0
-        self.test_batch_count = 0
-        self.total_val_loss = 0.0
-        self.val_batch_count = 0
+    def _load_data(self):
+        temp = None
+        for roi in tqdm(self.ROIs, desc=f'Load {self.mode} set to memory'):
+            roi_folder = '_'.join(['S2'] + roi.split('_')[:-1])
+            roi_name = '_'.join(['S2'] + roi.split('_'))
+            cwd = os.getcwd()
+            roi_file = os.path.join(self.path, 'patches', roi_folder, roi_name + '.tif')
+            roi_file_cl = os.path.join(self.path, 'patches', roi_folder, roi_name + '_cl.tif')
+            try:
+                with rasterio.open(roi_file_cl) as ds_y:
+                    temp_y = np.copy(ds_y.read().astype(np.int64))
+                    if self.agg_to_water:
+                        temp_y[temp_y == 15] = 7
+                        temp_y[temp_y == 14] = 7
+                        temp_y[temp_y == 13] = 7
+                        temp_y[temp_y == 12] = 7
+                    temp_y = np.copy(temp_y - 1)
+                    self.y.append(temp_y)
 
-    def preprocess_hydro(self, data):
+                with rasterio.open(roi_file) as ds_x:
+                    temp_x = np.copy(ds_x.read())
+                    self.X.append(temp_x)
+                    temp = temp_x
+
+            except rasterio.errors.RasterioIOError as e:
+                print(f"Error opening file for ROI {roi}: {e}")
+        
+        if temp is not None:
+            print("impute nan tempshape",  (temp.shape[1],temp.shape[2],1))
+            self.impute_nan = np.tile(self.means, (temp.shape[1],temp.shape[2],1))
+        else:
+            print("Warning: No data loaded. `temp` is not defined.")
+            self.impute_nan = np.zeros((256, 256, 11)) 
+
+        self.length = len(self.y) 
+
+
+    def _save_data_to_tiff(self):
+        print("Entering _save_data_to_tiff function...")
+
+        output_folder = os.path.join(self.path, "roi_data", self.mode)
+        os.makedirs(output_folder, exist_ok=True)
+        output_img_folder = os.path.join(output_folder, "_images")
+        os.makedirs(output_img_folder, exist_ok=True)
+        output_target_folder = os.path.join(output_folder, "_target")
+        os.makedirs(output_target_folder, exist_ok=True)
+        output_paired_folder = os.path.join(output_folder, "_paired")
+        os.makedirs(output_paired_folder, exist_ok=True)
+
+        for i, roi in enumerate(tqdm(self.ROIs, desc=f'Saving {self.mode} data to TIFFs')):
+            try:
+                img = self.X[i]
+                target = self.y[i]
+                target = target.reshape(256, 256) 
+                roi_name = '_'.join(['S2'] + roi.split('_'))
+
+                img_filename = os.path.join(output_img_folder, f"X_{i:04d}_{roi_name}.tif")
+                with rasterio.open(img_filename, 'w', driver='GTiff', width=img.shape[2], height=img.shape[1], count=img.shape[0], dtype=img.dtype, crs=None, transform=None) as dst:
+                    dst.write(img)
+                print(f"Image saved successfully: {os.path.exists(img_filename)}")
+
+                target_filename = os.path.join(output_target_folder, f"y__{i:04d}_{roi_name}.tif")
+                with rasterio.open(target_filename, 'w', driver='GTiff', width=target.shape[1], height=target.shape[0], count=1, dtype=target.dtype, crs=None, transform=None) as dst:
+                    dst.write(target, 1)
+                print(f"Target saved successfully: {os.path.exists(target_filename)}")
+
+                paired_filename = os.path.join(output_paired_folder, f"paired_{i:04d}_{roi_name}.tif")
+                paired_data = np.concatenate([img, target[np.newaxis, :, :]], axis=0)
+                with rasterio.open(paired_filename, 'w', driver='GTiff', width=img.shape[2], height=img.shape[1], count=paired_data.shape[0], dtype=paired_data.dtype, crs=None, transform=None) as dst:
+                    dst.write(paired_data)
+                print(f"Paired data saved successfully: {os.path.exists(paired_filename)}") 
+
+            except Exception as e:
+                print(f"Error saving data for ROI {roi}: {e}")
+
+
+    def __len__(self):
+        return self.length
+
+    def getnames(self):
+        return self.ROIs
+
+    def _create_embeddings(self):
         hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
         self.embeddings = []
 
+        def weights_init(m):
+            if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+
+        if self.random:
+            print("Random weights initialization")
+            self.pretrained_model.cpu()
+            self.pretrained_model.apply(weights_init)
+
         for idx in range(len(hydro_dataset)):
-            #print(f"Processing image index: {idx}") # print the index
-            img = hydro_dataset[idx].to(self.device)
-            img = img.unsqueeze(0).to(self.pretrained_model.device)
-            if not self.fully_finetuning:
+            img = hydro_dataset[idx]
+            img = img.unsqueeze(0)
+
+            device = next(self.pretrained_model.parameters()).device
+
+            img = img.to(device)
+
+            if not self.full_finetune:
                 with torch.no_grad():
-                    embedding = self.pretrained_model.forward_encoder(img)
-
-                    print("embeddings shape", embedding)
-
-                self.embeddings.append(embedding.cpu())
+                    if self.pretrained_model.__class__.__name__ == "MAE":
+                        embedding = self.pretrained_model.forward_encoder(img)
+                    elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
+                        img = img[:,1:4,:,:]
+                        embedding = self.pretrained_model.backbone(img).flatten(start_dim=1)
+            if self.full_finetune:
+                if self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
+                    img = img[:,1:4,:,:]
+                embedding = img
+            self.embeddings.append(embedding.cpu())
 
         self.embeddings = torch.stack(self.embeddings).cpu()
 
-    def forward(self, images, embedding):
-
-        
-        processed_embedding = None
-
-        if self.full_finetune:
-            if self.model_type == "mae":
-                embedding = embedding.squeeze(0)
-                processed_embedding = self.pretrained_model.forward_encoder(embedding)
-                processed_embedding = processed_embedding.unsqueeze(0)
-            elif self.model_type == "moco":
-                embedding = embedding.squeeze(1)
-                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-            elif self.model_type == "mocogeo":
-                embedding = embedding.squeeze(0)
-                print("embedding shape before backbone:", embedding.shape)
-                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-                print("embedding shape after backbone:", processed_embedding.shape)
-        else:
-            processed_embedding = embedding
-
-        return self.projection_head(images, processed_embedding)
-    
-    def training_step(self, batch, batch_idx):
-        train_dir = "train_results"
-        data, target,embedding = batch
-        images = data
-        batch_size = data.shape[0]
-        #data = data.permute(0,3,1,2)
-        logits = self(data,embedding)
-        data = images
-        target = target.long()
-        target = target.squeeze(1)
-        loss = self.criterion(logits, target)
-
-
-        if batch_idx % 100 == 0:
-            self.log_images(
-                data[0].cpu(),     
-                logits[0],    
-                target[0].cpu(),   
-                log_dir = train_dir 
-            )
-
-        if not hasattr(self, 'total_train_loss'):
-            self.total_train_loss = 0.0
-            self.train_batch_count = 0
-        self.total_train_loss += loss.item()
-        self.train_batch_count += 1
-        
-        print("training loss", loss)
-
-        return loss
-
-
-    def validation_step(self, batch, batch_idx):
-        val_dir="val_results"
-        data, target,embedding = batch
-        images = data
-        batch_size = data.shape[0]
-        #data = data.permute(0,3,1,2)
-        logits = self(data,embedding)
-        data = images
-        target = target.long()
-        target = target.squeeze(1)
-        loss = self.criterion(logits, target)
-
-        if batch_idx % 100 == 0:
-            self.log_images(
-                data[0].cpu(),     
-                logits[0],    
-                target[0].cpu(),   
-                log_dir = val_dir 
-            )
-
-        self.log('val_loss', loss)
-        if not hasattr(self, 'total_val_loss'):
-            self.total_val_loss = 0.0
-            self.val_batch_count = 0
-        self.total_val_loss += loss.item()
-        self.val_batch_count += 1
-        
-        print("validation loss", loss)
-
-        return loss
-    
-    
-    def test_step(self, batch, batch_idx):
-        test_dir = "test_results"
-        data, target, embedding = batch
-        batch_size = data.shape[0]
-        print(f"Batch {batch_idx}: Data shape: {data.shape}, Target shape: {target.shape}")
-        print(f"Batch {batch_idx}: Unique target values: {torch.unique(target)}")
-
-        logits = self(data,embedding)
-        target = target.long()
-        target = target.squeeze(1)
-        loss = self.criterion(logits, target)
-        self.log("test_loss", loss)
-
-        # Accuracy metrics only on annotated pixels
-        logits_moved = torch.movedim(logits, (0, 1, 2, 3), (0, 3, 1, 2))
-        logits_reshaped = logits_moved.reshape((-1, 11))  
-        target_reshaped = target.reshape(-1)
-        mask = target_reshaped != -1
-        logits_masked = logits_reshaped[mask]
-        target_masked = target_reshaped[mask]
-        probs = nn.functional.softmax(logits_masked, dim=1).cpu().numpy()
-        target_cpu = target_masked.cpu().numpy()
-
-        # Store predictions and ground truth in lists
-        self.test_step_outputs.append({
-            "predictions": probs.argmax(1).tolist(),
-            "targets": target_cpu.tolist(),
-        })
-
-        # Visualize pixel labels
-        mask_2d = target != -1
-        pixel_locations = np.where(mask_2d[0].cpu().numpy())
-
-        predicted_labels = probs.argmax(1)
-        target_labels = target_cpu
-
-        visual_image = np.zeros((256, 256))
-        min_length = min(len(predicted_labels), len(pixel_locations[0]))
-
-        for i in range(min_length):
-            row = pixel_locations[0][i]
-            col = pixel_locations[1][i]
-            visual_image[row, col] = predicted_labels[i]
-
-
-        self.log_images(
-                data[0].cpu(),
-                logits[0],
-                target[0].cpu(),
-                log_dir=test_dir)
-
-        visual_target_image = np.zeros((256, 256))
-        min_length = min(len(target_labels), len(pixel_locations[0]))
-
-        for i in range(min_length):
-            row = pixel_locations[0][i]
-            col = pixel_locations[1][i]
-            visual_target_image[row, col] = target_labels[i]
-
-        img = data[0].clone().cpu()
-        img = (img *self.stds[:,None, None]) + ( self.means[:,None, None]) 
-        img = img[1:4, :, :]  
-        img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
-
-        img = np.clip(img, 0, np.percentile(img, 99))
-        img = (img / img.max() * 255).to(torch.uint8)
-        fig, axes = plt.subplots(1, 3, figsize=(14, 6))  # Adjusted figure size
-        img = img.permute(1,2,0)
-        
-        axes[0].imshow(img)
-        axes[0].set_title("Original Image")
-        axes[0].axis('off')
-
-        axes[1].imshow(visual_target_image)
-        axes[1].set_title("Ground Truth")
-        axes[1].axis('off')
-
-        axes[2].imshow(visual_image)  # Use a colormap for labels
-        axes[2].set_title("Prediction")
-        axes[2].axis('off')
-
-        # Create a colormap
-        cmap = plt.cm.viridis
-        norm = mcolors.Normalize(vmin=0, vmax=12) # Use 12, because there are 13 classes 0-12
-
-        # Add colorbar
-        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])  # Required for matplotlib >= 3.1
-        cbar = fig.colorbar(sm, ax=axes[2], shrink=0.8, aspect=20) # Adjust shrink and aspect as needed
-        cbar.set_ticks(np.arange(0, 13)) # Set ticks for each class
-        keys = list(cat_mapping_marida.keys())[:-4]
-        cbar.set_ticklabels(list(cat_mapping_marida.keys())[:-2]) # Set tick labels from category mapping
-
-        dir_rel = os.path.join(self.run_dir, test_dir)  # Relative path
-        dir_abs = os.path.abspath(dir_rel)  # Absolute path
-
-        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
-        if test_dir == "test_results":
-            filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
-            self.test_image_count += 1
-        else:
-            filename = os.path.join(dir_abs, f"segmentation_comparison_epoch_{self.current_epoch}.png")
-        plt.savefig(filename)  # Save using absolute path
-        print(f"Saving to: {filename}") # Print to check where you are saving
-
-        plt.close()
-        return loss
-
-
-    def on_train_start(self):
-        self.log_results()
-
-    def on_test_epoch_end(self):
-        all_predictions = []
-        all_targets = []
-        for output in self.test_step_outputs:
-            all_predictions.extend(output["predictions"])
-            all_targets.extend(output["targets"])
-
-        all_predictions = np.array(all_predictions)
-        all_targets = np.array(all_targets)
-
-        labels_for_cm = list(cat_mapping_marida.keys())[:-4]
-
-        acc = metrics_marida(all_targets, all_predictions)
-        for key, value in acc.items():
-            prefix = "test"
-            self.log(f"{prefix}_{key}", value)
-        
-        conf_mat = confusion_matrix(all_targets, all_predictions, labels_for_cm)
-        print("Confusion Matrix:  \n" + str(conf_mat.to_string()))
-
-        self.test_step_outputs.clear()
-        
-
-    def on_train_epoch_start(self):
-        current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
-        self.log('learning_rate', current_lr)
-        print(f"Starting epoch - Current learning rate: {current_lr}")
-    
-    def on_validation_epoch_end(self):
-        avg_val_loss = self.total_val_loss / self.val_batch_count
-        self.log('val_loss', avg_val_loss, on_epoch=True)
-        self.total_val_loss = 0.0
-        self.val_batch_count = 0
-        print(f"Validation Loss (Epoch {self.current_epoch}): {avg_val_loss}")
-
-    def on_train_epoch_end(self):
-        avg_train_loss = self.total_train_loss / self.train_batch_count
-        self.log('train_loss', avg_train_loss)
-        self.total_train_loss = 0.0
-        self.train_batch_count = 0
-        print(f"Train Loss (Epoch {self.current_epoch}): {avg_train_loss}")
-
-    def on_train_end(self):
-        self.writer.close()
-    
-    def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,log_dir) -> None:
-        print("log images")
-        self.log_results()
-        img= original_images.cpu().numpy()
-        target = target.detach().cpu().numpy()
-        prediction = torch.argmax(prediction, dim=0).detach().cpu().numpy()
-
-        img = (img *self.stds[:, None, None]) + ( self.means[:, None, None]) 
-        img = img[1:4, :, :]  
-        img = img[[2, 1, 0], :, :]  # Swap BGR to RGB
-
-        img = np.clip(img, 0, np.percentile(img, 99))
-        img = (img / img.max() * 255).astype('uint8')
-        
-        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
-        img = img.transpose(1,2,0)
-        # Plot original image
-        axes[0].imshow(img)
-        axes[0].set_title("Original Image")
-        axes[0].axis('off')
-
-        # Plot original image
-        axes[1].imshow(target)
-        axes[1].set_title("Ground Truth")
-        axes[1].axis('off')
-
-        # Plot prediction (as class labels)
-        axes[2].imshow(prediction)  # Use a colormap for labels
-        axes[2].set_title("Prediction")
-        axes[2].axis('off')
-
-        dir_rel = os.path.join(self.run_dir, log_dir)  # Relative path
-        dir_abs = os.path.abspath(dir_rel)  # Absolute path
-
-        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
-        if dir == "test_results":
-            filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
-            self.test_image_count += 1
-        else:
-            filename = os.path.join(dir_abs, f"segmentation_comparison_epoch_{self.current_epoch}.png")
-        plt.savefig(filename)  # Save using absolute path
-        print(f"Saving to: {filename}") # Print to check where you are saving
-
-        plt.close()
-
-    def log_results(self):
-        if self.run_dir is None:  
-            run_index = 0
-            while os.path.exists(os.path.join(self.base_dir, f"run_{run_index}")):
-                run_index += 1
+    def __getitem__(self, index):
+        img = self.X[index]
+        target = self.y[index]
+        if self.pretrained_model:
+            embedding = self.embeddings[index]
             
-            self.run_dir = os.path.join(self.base_dir, f"run_{run_index}")
-            os.makedirs(self.run_dir, exist_ok=True)
-                
-    def configure_optimizers(self):
-        
-        optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1, verbose=True)
-        return [optimizer], [scheduler]
+
+        img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')
+        nan_mask = np.isnan(img)
+        img[nan_mask] = self.impute_nan[nan_mask]
+
+        if self.transform is not None:
+            target = target.transpose(1, 2, 0)
+            stack = np.concatenate([img, target], axis=-1).astype('float32')
+
+            stack = self.transform(stack)
+            img = stack[:-1,:,:]
+            target = stack[-1,:,:]
+
+        if self.standardization is not None:
+            img = self.standardization(img)
+
+        if self.mode != 'test':
+            if img.shape[0] not in [3, 11] and img.shape[1] == 256:
+                img = np.transpose(img,(2, 0, 1))
+        return img, target, embedding
+
+
+class RandomRotationTransform:
+    def __init__(self, angles):
+        self.angles = angles
+
+    def __call__(self, x):
+        angle = random.choice(self.angles)
+        return F.rotate(x, angle)
+    
+def gen_weights(class_distribution, c = 1.02):
+    return 1/torch.log(c + class_distribution)

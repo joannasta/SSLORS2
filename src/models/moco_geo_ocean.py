@@ -121,7 +121,7 @@ class MoCoOceanFeatures(pl.LightningModule): # Renamed class for clarity
         loss_regression = self.regression_criterion(predicted_ocean_features, ocean_features_labels)
 
         # Combine losses
-        total_loss = loss_contrastive + loss_regression
+        total_loss = 0.1 *loss_contrastive + loss_regression
 
         # Log training metrics
         self.log("train_loss_total", total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
