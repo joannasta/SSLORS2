@@ -1,12 +1,12 @@
 #!/bin/bash
 #SBATCH --job-name=Mbn_MG_FineTune           # Job name
-#SBATCH --partition=rsim_member       # Partition name
+#SBATCH --partition=small_job      # Partition name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
-#SBATCH --time=4-00:00:00              # Time limit
-#SBATCH --output=logs/finetune_slurm_mbn_mocogeo_puck_lagoon.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_mbn_mocogeo_puck_lagoon.err   # Error log
+#SBATCH --time=1-00:00:00              # Time limit
+#SBATCH --output=logs/finetune_slurm_mbn_mocogeo_ocean_puck_lagoon.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_mbn_mocogeo_ocean_puck_lagoon.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -24,12 +24,14 @@ VAL_BATCH_SIZE=1                     # Validation batch size
 LEARNING_RATE=1e-4 #1e-5                  # Learning rate
 EPOCHS=10                              # Number of epochs
 PRETRAINED_MODEL="./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
+#"./results/trains/moco-geo-ocean/version_1/checkpoints/epoch=199-step=27400.ckpt"
+#"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
 #"./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"
 #"./results/trains/moco-geo/version_27/checkpoints/epoch=199-step=331600.ckpt"
 #"./results/trains/training_logs/3-channels/checkpoints/epoch=99-step=132700.ckpt" 
 #"./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"
 #"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
-DATASET_PATH="/faststorage/joanna/magicbathynet/MagicBathyNet"  # Dataset path
+DATASET_PATH="/data/joanna/MagicBathyNet"  # Dataset path
 SEED=42                                   # Seed for reproducibility
 LOCATION="puck_lagoon"
 

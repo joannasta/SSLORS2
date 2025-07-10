@@ -3,11 +3,11 @@
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
-#SBATCH --time=4-00:00:00
+#SBATCH --time=1-00:00:00
 #SBATCH --mem=128G 
 #SBATCH --output=/home/joanna/SSLORS2/logs/train_mocogeo_ocean_slurm.out 
 #SBATCH --error=/home/joanna/SSLORS2/logs/train_mocogeo_ocean_slurm.err  
-#SBATCH --partition=LocalQ
+#SBATCH --partition=small_job 
 
 
 echo "DEBUG (Shell): Script started."

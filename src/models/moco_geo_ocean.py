@@ -126,7 +126,7 @@ class MoCoOceanFeatures(pl.LightningModule): # Renamed class for clarity
         # Log training metrics
         self.log("train_loss_total", total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_loss_contrastive", loss_contrastive, on_step=False, on_epoch=True, logger=True)
-        self.log("train_loss_regression", loss_regression, on_step=False, on_epoch=True, logger=True)
+        self.log("train_loss", loss_regression, on_step=False, on_epoch=True, logger=True)
         
         # Log training regression metric (e.g., MSE)
         train_regression_metric = self.regression_metric(predicted_ocean_features, ocean_features_labels)
@@ -153,10 +153,10 @@ class MoCoOceanFeatures(pl.LightningModule): # Renamed class for clarity
         val_regression_metric = self.regression_metric(predicted_ocean_features, ocean_features_labels)
 
         # Log validation metrics
-        self.log("val_loss_regression", loss_regression, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val_loss", loss_regression, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_regression_metric", val_regression_metric, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
-        return {"val_loss_regression": loss_regression, "val_regression_metric": val_regression_metric}
+        return {"val_loss": loss_regression, "val_regression_metric": val_regression_metric}
 
     def configure_optimizers(self):
         """
