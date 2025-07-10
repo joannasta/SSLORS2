@@ -31,7 +31,7 @@ PRETRAINED_MODEL="./results/trains/moco-geo/version_28/checkpoints/epoch=199-ste
 #"./results/trains/training_logs/3-channels/checkpoints/epoch=99-step=132700.ckpt" 
 #"./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"
 #"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
-DATASET_PATH="/data/joanna/MagicBathyNet"  # Dataset path
+DATASET_PATH="/mnt/storagecube/joanna/MagicBathyNet/"  # Dataset path
 SEED=42                                   # Seed for reproducibility
 LOCATION="puck_lagoon"
 

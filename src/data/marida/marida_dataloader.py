@@ -56,7 +56,7 @@ if __name__ == "__main__":
         std=[1/s for s in MARIDA_IMAGE_STD]
     )
 
-    data_module = MaridaDataModule(batch_size=64, root_dir="/faststorage/joanna/marida/MARIDA")
+    data_module = MaridaDataModule(batch_size=64, root_dir="/data/joanna/MARIDA")
     data_module.setup()
     print(f"Train dataset size: {len(data_module.train_dataset)}")
 

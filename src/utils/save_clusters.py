@@ -7,13 +7,13 @@ import csv # Added explicitly for saving to CSV
 
 # --- Configuration ---
 # Define the path to your training dataset
-path_dataset = Path("/faststorage/joanna/Hydro/raw_data/train")
+path_dataset = Path("/data/joanna/Hydro/")
 
 # Number of clusters (can be made a command-line argument or variable)
-n_clusters = 100
+n_clusters = 10
 
 # Path where the generated CSV will be saved
-output_csv_path = Path(f"train_geo_labels{n_clusters}_projected.csv") # Example output name
+output_csv_path = Path(f"train_ocean_labels{n_clusters}_projected.csv") # Example output name
 
 # --- Data Extraction ---
 # Get all tif file paths within the dataset directory

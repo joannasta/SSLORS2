@@ -20,7 +20,7 @@ TRAIN_BATCH_SIZE=64 # Training batch size
 VAL_BATCH_SIZE=64 # Validation batch size
 LEARNING_RATE=3e-3 # Learning rate
 EPOCHS=200 # Number of epochs Hydro uses 800
-DATASET_PATH="/faststorage/joanna/Hydro/raw_data" # Dataset path
+DATASET_PATH="/data/joanna/Hydro/raw_data" # Dataset path
 SEED=42 # Random seed
 NUM_CLUSTERS=10 # Number of clusters for clustering
 

@@ -51,7 +51,7 @@ class DatasetProcessor:
 
 
     def match_files(self):
-        path = '/home/faststorage/joanna/marida/MARIDA'
+        path = '/data/joanna/MARIDA'
         for roi in tqdm(self.ROIs, desc='Load ' + self.mode + ' set to memory'):
             roi_folder = '_'.join(['S2'] + roi.split('_')[:-1])
             roi_name = '_'.join(['S2'] + roi.split('_'))

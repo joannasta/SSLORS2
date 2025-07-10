@@ -29,11 +29,16 @@ class CustomLoss(nn.Module):
         super(CustomLoss, self).__init__()
 
     def forward(self, output, depth, mask):
+        # Mask out areas with no annotations
         mse_loss = nn.MSELoss(reduction='none')
+
         loss = mse_loss(output, depth)
         loss = (loss * mask.float()).sum() # gives \sigma_euclidean over unmasked elements
+
         non_zero_elements = mask.sum()
         rmse_loss_val = torch.sqrt(loss / non_zero_elements)
+
+
         return rmse_loss_val
 
 class MAEFineTuning(pl.LightningModule):
@@ -101,55 +106,54 @@ class MAEFineTuning(pl.LightningModule):
 
         if self.full_finetune:
             if self.model_type == "mae":
-                embedding = embedding.squeeze(0)
-                embedding = self.pretrained_model.forward_encoder(embedding)
-                embedding = embedding.unsqueeze(0)
+                processed_embedding = self.pretrained_model.forward_encoder(embedding)
             elif self.model_type in ["moco", "mocogeo"]:
                 print("embedding shape:", embedding.shape)
-                embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1) 
+                embedding = embedding.squeeze(0)  # Remove batch dimension if present
+                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1) 
         
-        return self.projection_head(embedding, images)
+        return self.projection_head(processed_embedding, images)
 
     def training_step(self, batch,batch_idx):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         train_dir = "training_results"
+        size=(256, 256)
         data, target, embedding = batch
-        data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
-        size = (256, 256)
-        batch_size = data.size(0)
+        data, target,embedding = Variable(data.to(device)), Variable(target.to(device)), Variable(embedding.to(device))
+
+        
         # Standardize resize for all images to self.crop_size (256x256)
-        #data = F.interpolate(data, size=size, mode='nearest')
-        #target = F.interpolate(target.unsqueeze(1), size=size, mode='nearest')
-
-        data = F.interpolate(data, size=size, mode='bilinear', align_corners=False)
-        target = F.interpolate(target.unsqueeze(1), size=size, mode='bilinear', align_corners=False)
-
+        data = F.interpolate(data, size=size, mode='nearest')
+        target = F.interpolate(target.unsqueeze(0), size=size, mode='nearest')
         data_size = data.size()[2:]
         
-        if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
+        if data_size[0] > self.crop_size and data_size[1] > crop_size:
+                    # Use RandomCrop transformation for data and target
                 data_transform = RandomCrop(size=self.crop_size)
                 target_transform = RandomCrop(size=self.crop_size)
+    
+                    # Apply RandomCrop transformation to data and target
                 data = data_transform(data)
                 target = target_transform(target)
-            
+                
+        # Generate mask for non-annotated pixels in depth data
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)  
-        target_mask = torch.from_numpy(target_mask).to(self.device)  
-        
-        for i in range(target_mask.shape[0]):
-            target_mask[i] = target_mask[i].reshape(self.crop_size, self.crop_size)
-        
-        target_mask = target_mask.squeeze(1)
-            
-        data_mask = (data.cpu().numpy() != 0).astype(np.float32)
+        target_mask = torch.from_numpy(target_mask)  
+        target_mask = target_mask.reshape(self.crop_size, self.crop_size)
+        target_mask = target_mask.to(device)   
+
+
+        data_mask = (data.cpu().numpy() != 0).astype(np.float32)  
         data_mask = np.mean(data_mask, axis=1)
-        data_mask = torch.from_numpy(data_mask).to(self.device)
-        
-        # Combine the masks
+        data_mask = torch.from_numpy(data_mask) 
+        #data_mask = data_mask.reshape(crop_size, crop_size)
+        data_mask = data_mask.to(device) 
+            
+            # Combine the masks
         combined_mask = target_mask * data_mask
         combined_mask = (combined_mask >= 0.5).float()
-        
         if torch.sum(combined_mask) == 0:
-            return torch.tensor(0.0, device=self.device, requires_grad=True)
+            return None
 
         data = torch.clamp(data, min=0, max=1)
         
@@ -158,132 +162,116 @@ class MAEFineTuning(pl.LightningModule):
 
         loss = self.criterion(output, target, combined_mask)
 
+        rgb = np.asarray(np.transpose(data.data.cpu().numpy()[0],(1,2,0)), dtype='float32')
         pred = output.data.cpu().numpy()[0]
         gt = target.data.cpu().numpy()[0]
-
-        # Apply the mask to the predictions and ground truth
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
-        
         if batch_idx % 100 == 0:
             self.log_images(
-                data[0].cpu(),   
-                masked_pred[0],    
-                gt[0],
-                train_dir   
+                rgb,
+                masked_pred[0,:,:],
+                gt[0,:,:],
+                train_dir
             )
 
         rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt.ravel())
 
         self.log('train_rmse_step', (rmse * -self.norm_param_depth), on_step=True)
-        self.log('train_mae_step', (mae * -self.norm_param_depth), on_step=True) 
-        self.log('train_std_dev_step', (std_dev * -self.norm_param_depth), on_step=True) 
+        self.log('train_mae_step', (mae * -self.norm_param_depth), on_step=True)
+        self.log('train_std_dev_step', (std_dev * -self.norm_param_depth), on_step=True)
 
-        # Append to the lists for epoch-level calculation
         self.epoch_rmse_list.append(rmse * -self.norm_param_depth)
         self.epoch_mae_list.append(mae * -self.norm_param_depth)
         self.epoch_std_dev_list.append(std_dev * -self.norm_param_depth)
-        
-        # Logging (train function example - adjust as needed):
+
         print('Mean RMSE (per image):', rmse * -self.norm_param_depth)
         print('Mean MAE (per image):', mae * -self.norm_param_depth)
         print('Mean Std Dev (per image):', std_dev * -self.norm_param_depth)
-        self.log('train_loss', loss)
 
-        if not hasattr(self, 'total_train_loss'):
-            self.total_train_loss = 0.0
-            self.train_batch_count = 0
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
+
         return loss
 
     def validation_step(self, batch, batch_idx):
         val_dir = "validation_results"
         data, target, embedding = batch
-        data, target,embedding  = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
-        size = (256, 256)
-        #data = F.interpolate(data, size=size, mode='nearest')
-        #target = F.interpolate(target.unsqueeze(1), size=size, mode='nearest')
 
-        data = F.interpolate(data, size=size, mode='bilinear', align_corners=False)
-        target = F.interpolate(target.unsqueeze(1), size=size, mode='bilinear', align_corners=False)
-            
+        data, target,embedding = data.to(self.device), target.to(self.device), embedding.to(self.device)
+        device = self.device
+        size=(256, 256)
+        data, target, embedding = batch
+        data, target,embedding = Variable(data.to(device)), Variable(target.to(device)), Variable(embedding.to(device))
+
+        
+        # Standardize resize for all images to self.crop_size (256x256)
+        data = F.interpolate(data, size=size, mode='nearest')
+        target = F.interpolate(target.unsqueeze(0), size=size, mode='nearest')
         data_size = data.size()[2:]
         
-        if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
+        if data_size[0] > self.crop_size and data_size[1] > crop_size:
+                    # Use RandomCrop transformation for data and target
                 data_transform = RandomCrop(size=self.crop_size)
                 target_transform = RandomCrop(size=self.crop_size)
+    
+                    # Apply RandomCrop transformation to data and target
                 data = data_transform(data)
                 target = target_transform(target)
                 
+        # Generate mask for non-annotated pixels in depth data
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)  
-        target_mask = torch.from_numpy(target_mask).to(self.device)  
-        
-        for i in range(target_mask.shape[0]):
-            target_mask[i] = target_mask[i].reshape(self.crop_size, self.crop_size)
-        
-        target_mask = target_mask.squeeze(1)
-            
-        data_mask = (data.cpu().numpy() != 0).astype(np.float32)
+        target_mask = torch.from_numpy(target_mask)  
+        target_mask = target_mask.reshape(self.crop_size, self.crop_size)
+        target_mask = target_mask.to(device)   
+
+
+        data_mask = (data.cpu().numpy() != 0).astype(np.float32)  
         data_mask = np.mean(data_mask, axis=1)
-        data_mask = torch.from_numpy(data_mask).to(self.device)
-        
-        # Combine the masks
+        data_mask = torch.from_numpy(data_mask) 
+        #data_mask = data_mask.reshape(crop_size, crop_size)
+        data_mask = data_mask.to(device) 
+            
+            # Combine the masks
         combined_mask = target_mask * data_mask
-        print(f"DEBUG: combined_mask (pre-threshold) sum: {torch.sum(combined_mask)}")
         combined_mask = (combined_mask >= 0.5).float()
-
-        print(f"DEBUG: Batch {batch_idx}")
-        print(f"DEBUG: target_mask sum: {torch.sum(target_mask)}")
-        print(f"DEBUG: data_mask sum: {torch.sum(data_mask)}")
-        
-        print(f"DEBUG: combined_mask (post-threshold) sum: {torch.sum(combined_mask)}")
-
-        
         if torch.sum(combined_mask) == 0:
-            print("sum of combined mask is 0")
-            return torch.tensor(0.0, device=self.device, requires_grad=True)
+            return None
 
         data = torch.clamp(data, min=0, max=1)
         
         output = self(data.float(),embedding.float()) 
-        print(f"DEBUG: output sum: {torch.sum(output)}")
         output = output.to(self.device)
 
         val_loss = self.criterion(output, target, combined_mask)
 
+        rgb = np.asarray(np.transpose(data.data.cpu().numpy()[0],(1,2,0)), dtype='float32')
         pred = output.data.cpu().numpy()[0]
         gt = target.data.cpu().numpy()[0]
-        
-        # Apply the mask to the predictions and ground truth
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
-        
+
         if batch_idx % 100 == 0:
             self.log_images(
-                data[0].cpu(),   
-                masked_pred[0],    
-                gt[0],
-                val_dir   
+                rgb,
+                masked_pred[0,:,:],
+                gt[0,:,:],
+                val_dir
             )
 
-        rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt.ravel()) # Assuming you have masking in validation too
+        rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt.ravel())
 
-        self.log('val_rmse', (rmse * -self.norm_param_depth), on_step=True) 
-        self.log('val_mae', (mae * -self.norm_param_depth), on_step=True)  
-        self.log('val_std_dev', (std_dev * -self.norm_param_depth), on_step=True) 
+        self.log('val_rmse', (rmse * -self.norm_param_depth), on_step=True)
+        self.log('val_mae', (mae * -self.norm_param_depth), on_step=True)
+        self.log('val_std_dev', (std_dev * -self.norm_param_depth), on_step=True)
 
-        # Append to lists
         self.val_rmse_list.append(rmse * -self.norm_param_depth)
         self.val_mae_list.append(mae * -self.norm_param_depth)
         self.val_std_dev_list.append(std_dev * -self.norm_param_depth)
 
-        # Logging (train function example - adjust as needed):
         print('Mean RMSE (per image):', rmse * -self.norm_param_depth)
         print('Mean MAE (per image):', mae * -self.norm_param_depth)
         print('Mean Std Dev (per image):', std_dev * -self.norm_param_depth)
-
-        self.log('val_loss', val_loss)
 
         self.total_val_loss += val_loss.item()
         self.val_batch_count += 1
@@ -291,89 +279,93 @@ class MAEFineTuning(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         test_dir = "test_results"
+        test_data_batch, targets_batch, embeddings_batch = batch # Batch contains lists of tensors
+        
+        self.crop_size = 256
         pad_size = 32
-        crop_size = 256
-        ratio = crop_size / self.window_size[0]
-
-        test_data, targets, embeddings = batch
-        size = (256, 256)
-        idx = 0
-
-        for data, target,embedding in zip(test_data, targets,embeddings):
-            data = data.unsqueeze(0)
-            target = target.unsqueeze(0)
+        ratio = self.crop_size / self.window_size[0]
+        # Process each individual sample in the test batch
+        for img, gt,gt_e, embedding in zip(test_data_batch, targets_batch,targets_batch, embeddings_batch):
+            img = img.cpu()
+            gt = gt.cpu()
+            gt_e = gt_e.cpu()
             embedding = embedding.unsqueeze(0)
+            
+            img = scipy.ndimage.zoom(img, (1,ratio, ratio), order=1)
+            gt = scipy.ndimage.zoom(gt, (ratio, ratio), order=1)
+            gt_e = scipy.ndimage.zoom(gt_e, (ratio, ratio), order=1)
+            
+            # Pad the image, ground truth, and eroded ground truth with reflection
+            #img = np.pad(img, ((0, 0),(pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
+            #gt = np.pad(gt, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
+            #gt_e = np.pad(gt_e, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
+            img = torch.from_numpy(img)
+            img = torch.clamp(img, min=0, max=1)
+            
+            gt = torch.from_numpy(gt).float()
+            #gt = gt.unsqueeze(0) # Add batch dim
 
-            target_e = target.clone()
-            data, target,embedding = Variable(data.to(self.device)), Variable(target.to(self.device)), Variable(embedding.to(self.device))
+            gt_e = torch.from_numpy(gt_e).float()
+            #gt_e = gt_e.unsqueeze(0)
 
-            data = scipy.ndimage.zoom(data.cpu().numpy(), (1,1,ratio, ratio), order=1)
-            target = scipy.ndimage.zoom(target.cpu(), (1, ratio, ratio), order=1)
-            target_e = scipy.ndimage.zoom(target_e.cpu(), (1, ratio, ratio), order=1)
-
-            data = np.pad(data, ((0, 0),(0, 0),(pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
-            target = np.pad(target, ((0,0),(pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
-            target_e = np.pad(target_e, ((0,0),(pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
-
-            data = data.transpose((1, 2, 3, 0)).squeeze(3)
-            data = np.expand_dims(data, axis=0)
-            data = torch.from_numpy(data).cuda()
-
-            # Do the inference on the whole image
-            with torch.no_grad():
-                outs = self(data.float(),embedding.float())
+            with torch.no_grad():#
+                img = img.float()
+                img = img.unsqueeze(0)  # Add batch dimension and move to device
+                print("self.full_finetune", self.full_finetune)
+                outs = self(img, embedding)
                 pred = outs.data.cpu().numpy().squeeze()
 
-            # Remove padding from prediction
-            pred = pred[pad_size:-pad_size, pad_size:-pad_size]
-            data = data[:,:,pad_size:-pad_size, pad_size:-pad_size]
-            target = target[:,pad_size:-pad_size, pad_size:-pad_size]
-            target_e = target_e[:,pad_size:-pad_size, pad_size:-pad_size]
+            gt_mask = (gt_e != 0)
+            gt_mask = gt_mask.unsqueeze(0)
+            gt_mask = gt_mask.reshape(self.crop_size, self.crop_size)
+            gt_mask = gt_mask.to(self.device) 
+            
+            img_mask = (img != 0).float()
+            #img_mask = torch.mean(img_mask, dim=2)
+            #img_mask = img_mask.reshape(crop_size, crop_size)
+            img_mask = img_mask.to(self.device) 
 
-            # Generate mask for non-annotated pixels in depth data
-            target_mask = (target_e != 0).astype(np.float32)
-            target_mask = torch.from_numpy(target_mask).unsqueeze(0)
-            target_mask = target_mask.reshape(crop_size, crop_size)
-            target_mask = target_mask.to(self.device)
-
-            data_mask = (data.cpu().numpy()!= 0).astype(np.float32)
-            data_mask = np.mean(data_mask, axis=1)
-            data_mask = torch.from_numpy(data_mask)
-            data_mask = data_mask.to(self.device)
-
-            combined_mask = data_mask * target_mask
-
-            # Crucial check: only calculate metrics if there are valid pixels in the mask
-            if torch.sum(combined_mask) == 0:
-                print(f"Warning: Combined mask is empty for image {idx} in batch {batch_idx}. Skipping metric calculation.")
-                rmse, mae, std_dev = 0.0, 0.0, 0.0 # Or some other placeholder value like -1 or log a specific message
-            else:
-                masked_pred = pred * combined_mask.cpu().numpy()
-                masked_gt_e = target_e * combined_mask.cpu().numpy()
-                rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt_e.ravel())
-
-
+            self.test_image_count += 1 # Increment for unique logging per image
+            print("img_mask shape:", img_mask.shape)
+            print("gt_mask shape:", gt_mask.shape)
+            combined_mask = img_mask*gt_mask
+            
+            print("combined_mask shape:", combined_mask.shape)
+      
+            masked_pred = pred * combined_mask.cpu().numpy()
+            masked_gt_e = gt_e * combined_mask.cpu().numpy()
+            
+            pred = torch.from_numpy(pred).unsqueeze(0) 
+            gt_e = gt_e.unsqueeze(0)  
+            # Log images for visualization
+            img = np.asarray(255 * img[0,:,:,:], dtype='uint8').transpose(1,2,0)
+            print("img",img.shape)
             self.log_images(
-                    data.cpu().numpy()[0],
-                    masked_pred[0] if 'masked_pred' in locals() else np.zeros_like(pred[0]), # Handle case where masked_pred might not be defined
-                    masked_gt_e[0] if 'masked_gt_e' in locals() else np.zeros_like(target_e[0]),
+                    img,
+                    masked_pred[0,0,:,:],
+                    gt_e[0,:,:],
                     test_dir
                 )
 
-            idx +=1
-            self.log(f'test_rmse_step for image {idx} ', (rmse * -self.norm_param_depth), on_step=True)
-            self.log(f'test_mae_step for image {idx} ', (mae * -self.norm_param_depth), on_step=True)
-            self.log(f'test_std_dev_step for image {idx} ', (std_dev * -self.norm_param_depth), on_step=True)
+            rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt_e.numpy().ravel())
+            
+            # Log metrics for each image in the test batch
+            self.log(f'test_rmse_step_image_{self.test_image_count}', (rmse * -self.norm_param_depth), on_step=True)
+            self.log(f'test_mae_step_image_{self.test_image_count}', (mae * -self.norm_param_depth), on_step=True)
+            self.log(f'test_std_dev_step_image_{self.test_image_count}', (std_dev * -self.norm_param_depth), on_step=True)
 
-            # Append to lists (if you want to calculate metrics on the entire test set at the end)
+            # Log epoch-level metrics (will be averaged over the epoch by PyTorch Lightning)
+            self.log('test_rmse_epoch', (rmse * -self.norm_param_depth), on_step=False, on_epoch=True)
+            self.log('test_mae_epoch', (mae * -self.norm_param_depth), on_step=False, on_epoch=True)
+            self.log('test_std_dev_epoch', (std_dev * -self.norm_param_depth), on_step=False, on_epoch=True)
+
             self.test_rmse_list.append(rmse * -self.norm_param_depth)
             self.test_mae_list.append(mae * -self.norm_param_depth)
             self.test_std_dev_list.append(std_dev * -self.norm_param_depth)
 
-            # Logging (train function example - adjust as needed):
-            print(f'Mean RMSE for image {idx} :', rmse * -self.norm_param_depth)
-            print(f'Mean MAE for image {idx} :', mae * -self.norm_param_depth)
-            print(f'Mean Std Dev for image {idx} :', std_dev * -self.norm_param_depth)
+            print(f'Mean RMSE for image {self.test_image_count} :', rmse * -self.norm_param_depth)
+            print(f'Mean MAE for image {self.test_image_count} :', mae * -self.norm_param_depth)
+            print(f'Mean Std Dev for image {self.test_image_count} :', std_dev * -self.norm_param_depth)
 
     def on_train_start(self):
         self.log_results()
@@ -381,9 +373,8 @@ class MAEFineTuning(pl.LightningModule):
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
-        print(f"Starting epoch {self.current_epoch} - Current learning rate: {current_lr}") # Include epoch number
+        print(f"Starting epoch {self.current_epoch} - Current learning rate: {current_lr}")
 
-        # Initialize lists to store metrics for the epoch
         self.epoch_rmse_list = []
         self.epoch_mae_list = []
         self.epoch_std_dev_list = []
@@ -406,16 +397,14 @@ class MAEFineTuning(pl.LightningModule):
         self.train_batch_count = 0
         print(f"Train Loss (Epoch {self.current_epoch}): {avg_train_loss}")
 
-        # Calculate and log epoch-level metrics
-        avg_rmse = torch.tensor(self.epoch_rmse_list).mean()
-        avg_mae = torch.tensor(self.epoch_mae_list).mean()
-        avg_std_dev = torch.tensor(self.epoch_std_dev_list).mean()
+        avg_rmse = torch.tensor(self.epoch_rmse_list).mean() if self.epoch_rmse_list else torch.tensor(0.0)
+        avg_mae = torch.tensor(self.epoch_mae_list).mean() if self.epoch_mae_list else torch.tensor(0.0)
+        avg_std_dev = torch.tensor(self.epoch_std_dev_list).mean() if self.epoch_std_dev_list else torch.tensor(0.0)
 
         self.log('avg_train_rmse', avg_rmse)
         self.log('avg_train_mae', avg_mae)
         self.log('avg_train_std_dev', avg_std_dev)
 
-        # Clear the lists for the next epoch - CRUCIAL
         self.epoch_rmse_list = []
         self.epoch_mae_list = []
         self.epoch_std_dev_list = []
@@ -427,10 +416,9 @@ class MAEFineTuning(pl.LightningModule):
         self.val_batch_count = 0
         print(f"Validation Loss (Epoch {self.current_epoch}): {avg_val_loss}")
 
-        # Calculate and log epoch-level validation metrics
-        avg_rmse = torch.tensor(self.val_rmse_list).mean()
-        avg_mae = torch.tensor(self.val_mae_list).mean()
-        avg_std_dev = torch.tensor(self.val_std_dev_list).mean()
+        avg_rmse = torch.tensor(self.val_rmse_list).mean() if self.val_rmse_list else torch.tensor(0.0)
+        avg_mae = torch.tensor(self.val_mae_list).mean() if self.val_mae_list else torch.tensor(0.0)
+        avg_std_dev = torch.tensor(self.val_std_dev_list).mean() if self.val_std_dev_list else torch.tensor(0.0)
 
         self.log('avg_val_rmse', avg_rmse)
         self.log('avg_val_mae', avg_mae)
@@ -440,12 +428,10 @@ class MAEFineTuning(pl.LightningModule):
         self.val_mae_list = []
         self.val_std_dev_list = []
 
-
-    def on_test_epoch_end(self): 
-        
-        avg_rmse = torch.tensor(self.test_rmse_list).mean()
-        avg_mae = torch.tensor(self.test_mae_list).mean()
-        avg_std_dev = torch.tensor(self.test_std_dev_list).mean()
+    def on_test_epoch_end(self):
+        avg_rmse = torch.tensor(self.test_rmse_list).mean() if self.test_rmse_list else torch.tensor(0.0)
+        avg_mae = torch.tensor(self.test_mae_list).mean() if self.test_mae_list else torch.tensor(0.0)
+        avg_std_dev = torch.tensor(self.test_std_dev_list).mean() if self.test_std_dev_list else torch.tensor(0.0)
 
         self.log('avg_test_rmse', avg_rmse)
         self.log('avg_test_mae', avg_mae)
@@ -455,76 +441,96 @@ class MAEFineTuning(pl.LightningModule):
         self.test_mae_list = []
         self.test_std_dev_list = []
 
-
     def on_train_end(self):
         self.writer.close()
 
-    def log_images(self, data: torch.Tensor, reconstructed_images: torch.Tensor, depth: torch.Tensor,dir) -> None:
+    def log_images(self, data: torch.Tensor, predicted_depth: np.ndarray, depth: np.ndarray, dir: str) -> None:
         self.log_results()
-        bgr = np.asarray(np.transpose(data,(1,2,0)), dtype='float32') #data.cpu().numpy()
-        rgb = bgr[:, :, [2, 1, 0]] 
-        depth_denorm = depth * self.norm_param_depth
-        ratio = self.crop_size / self.window_size[0]
-        pred_normalized = reconstructed_images#.squeeze(0)
-        pred_denormalized = pred_normalized * self.norm_param_depth 
-        pred_processed = scipy.ndimage.zoom(pred_normalized, (1/ratio, 1/ratio), order=1)
 
+        print("data",data.shape)
+        print("predicted_depth",predicted_depth.shape)
+        print("depth",depth.shape)
+    
+        if data.ndim == 4:
+            data = data[0,[2,1,0],:,:]
+        else:
+            data = data[[2,1,0],:,:]
+    
+        data = np.clip(data, 0, 1)
+        data = np.transpose(data, (0,1,2))
+    
+        predicted_depth = predicted_depth * -self.norm_param_depth
+        gt_depth = depth * -self.norm_param_depth
+    
+        """if reconstructed_images.ndim == 3 and reconstructed_images.shape[0] == 1:
+            reconstructed_images = reconstructed_images.squeeze(0)
+        if reconstructed_images.ndim == 3 and reconstructed_images.shape[0] == 1:
+            reconstructed_images = reconstructed_images.squeeze(0)"""
+    
+        combined_min = min(predicted_depth.min(), gt_depth.min())
+        combined_max = max(predicted_depth.max(), gt_depth.max())
+    
+        if combined_max - combined_min < 1e-6:
+            combined_max = combined_min + 1.0
+        
+        display_vmin = combined_min
+        display_vmax = combined_max
+    
         plt.figure(figsize=(15, 5))
+    
         plt.subplot(131)
-        plt.imshow(rgb)
+        plt.imshow(data)
         plt.title("Original RGB")
         plt.axis("off")
-
+    
         plt.subplot(132)
-        plt.imshow(depth)#, cmap="viridis",vmin=0, vmax=1)
+        plt.imshow(gt_depth, cmap='viridis_r', vmin=display_vmin, vmax=display_vmax)
         plt.title("Ground Truth Depth")
-        plt.colorbar()
+        plt.colorbar(fraction=0.046, pad=0.04)
         plt.axis("off")
 
+        print("predicted_depth_display",predicted_depth.shape)
         plt.subplot(133)
-        plt.imshow(pred_processed)#, cmap="viridis", vmin=0, vmax=1)
+        plt.imshow(predicted_depth, cmap='viridis_r', vmin=display_vmin, vmax=display_vmax)
         plt.title("Predicted Depth")
-        plt.colorbar()
+        plt.colorbar(fraction=0.046, pad=0.04)
         plt.axis("off")
     
-        dir_rel = os.path.join(self.run_dir, dir)  # Relative path
-        dir_abs = os.path.abspath(dir_rel)  # Absolute path
-
-        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
+        abs_save_dir = os.path.abspath(os.path.join(self.run_dir, dir))
+        os.makedirs(abs_save_dir, exist_ok=True)
+    
+        filename = ""
         if dir == "test_results":
-            filename = os.path.join(dir_abs, f"depth_comparison_epoch_{self.current_epoch}_image_{self.test_image_count}.png")
-            self.test_image_count += 1
+            filename = os.path.join(abs_save_dir, f"depth_comparison_epoch_{self.current_epoch}_image_{self.test_image_count}.png")
         else:
-            filename = os.path.join(dir_abs, f"depth_comparison_epoch_{self.current_epoch}.png")
-        plt.savefig(filename)  # Save using absolute path
-        print(f"Saving to: {filename}") # Print to check where you are saving
-
+            filename = os.path.join(abs_save_dir, f"depth_comparison_epoch_{self.current_epoch}_batch_{self.global_step}.png")
+    
+        plt.savefig(filename, bbox_inches='tight', dpi=300)
         plt.close()
 
-
     def log_results(self):
-        if self.run_dir is None:  # Only create the directory if it doesn't exist
-            # Find the next available folder for the training run
+        if self.run_dir is None:
             run_index = 0
             while os.path.exists(os.path.join(self.base_dir, f"run_{run_index}")):
                 run_index += 1
-            
-            # Create the directory for the training run
             self.run_dir = os.path.join(self.base_dir, f"run_{run_index}")
             os.makedirs(self.run_dir, exist_ok=True)
 
     def configure_optimizers(self):
-        # 1. Parameter-specific learning rates (if needed):
         params_dict = dict(self.projection_head.named_parameters())
         params = []
-        lr = 0.0001
+        base_lr = self.base_lr
+    
         for key, value in params_dict.items():
-            if '_D' in key: 
-                params+= [{'params': [value], 'lr': lr}]
+            # Your original logic to potentially apply different LRs for '_D' layers
+            # For now, it's just `base_lr` for all, but the structure is there.
+            if '_D' in key:
+                params.append({'params':[value],'lr': base_lr})
             else:
-                params += [{'params':[value],'lr': lr}] 
-
-        optimizer = optim.Adam(params, lr=lr) # Pass the list of parameter dicts
+                params.append({'params':[value],'lr': base_lr})
+    
+        optimizer = optim.Adam(params, lr=self.base_lr) 
         scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [10], gamma=0.1)
 
-        return {"optimizer": optimizer, "lr_scheduler": scheduler}
+
+        return [optimizer], [scheduler]

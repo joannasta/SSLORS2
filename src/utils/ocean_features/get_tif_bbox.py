@@ -41,7 +41,7 @@ def get_bbox_from_tifs(tif_dir: Path) -> Tuple[float, float, float, float]:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Calculate bounding box of TIF files.")
     parser.add_argument("--tif_dir", type=str, required=True,
-                        help="Path to the directory containing TIF files (e.g., /faststorage/joanna/Hydro/raw_data).")
+                        help="Path to the directory containing TIF files (e.g., /data/joanna/Hydro).")
     args = parser.parse_args()
 
     try:

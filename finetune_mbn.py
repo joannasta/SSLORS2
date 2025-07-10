@@ -135,6 +135,7 @@ def main():
     args = parser.parse_args()
     model_type = args.model.lower()
     location = args.location
+    print("data_dir:", args.data_dir)
     # Pass the new 'model_type' argument to BathymetryPredictor
     predictor = BathymetryPredictor(
         pretrained_weights_path=args.weights,

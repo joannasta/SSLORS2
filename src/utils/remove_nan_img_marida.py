@@ -5,7 +5,7 @@ from tqdm import tqdm # Import tqdm for progress bars
 
 # --- Configuration: IMPORTANT! Adjust this path to your MARIDA dataset's root ---
 # This should point to the directory containing 'data', 'src', etc.
-project_root = "/faststorage/joanna/marida/MARIDA" 
+project_root = "/data/joanna/MARIDA" 
 
 # Derived path for the 'data' directory, which contains 'splits' and 'patches'
 # Keeping your provided data_path = project_root

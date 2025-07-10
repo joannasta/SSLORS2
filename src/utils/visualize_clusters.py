@@ -5,7 +5,7 @@ from pathlib import Path
 import rasterio
 
 # Define the path to your training dataset
-path_dataset = Path("/faststorage/joanna/Hydro/raw_data/train")
+path_dataset = Path("/data/joanna/Hydro/")
 # Get all tif file paths
 file_paths = sorted(list(path_dataset.glob("*.tif")))
 

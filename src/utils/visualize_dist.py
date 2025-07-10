@@ -2,10 +2,12 @@ import geopandas as gpd
 import rasterio
 from rasterio.warp import transform_bounds
 from shapely.geometry import box, Point
+import matplotlib
+matplotlib.use('Agg') 
 import matplotlib.pyplot as plt
 import cartopy 
 import cartopy.crs as ccrs
-import cartopy.feature # <-- This is already there, but you also need 'import cartopy'
+import cartopy.feature
 import os
 import pandas as pd
 from tqdm import tqdm
@@ -126,37 +128,37 @@ for i, tif_row in tqdm(tif_gdf.iterrows(), total=len(tif_gdf), desc="Checking ma
 
 print(f"Matched TIFs for plotting: {tif_gdf['matched'].sum()} out of {len(tif_gdf)}")
 
-# --- 5. Plotting ---
-fig, ax = plt.subplots(1, 1, figsize=(15, 10),
-                       subplot_kw={'projection': ccrs.PlateCarree()})
+try:
+    fig, ax = plt.subplots(1, 1, figsize=(15, 10),
+                           subplot_kw={'projection': ccrs.PlateCarree()})
 
-ax.add_feature(cartopy.feature.LAND, edgecolor='black', facecolor='lightgray', zorder=1)
-ax.add_feature(cartopy.feature.OCEAN, facecolor='lightblue', zorder=0)
-ax.add_feature(cartopy.feature.COASTLINE, zorder=2)
-ax.add_feature(cartopy.feature.BORDERS, linestyle=':', zorder=2)
+    ax.add_feature(cartopy.feature.LAND, edgecolor='black', facecolor='lightgray', zorder=1)
+    ax.add_feature(cartopy.feature.OCEAN, facecolor='lightblue', zorder=0)
+    ax.add_feature(cartopy.feature.COASTLINE, zorder=2)
+    ax.add_feature(cartopy.feature.BORDERS, linestyle=':', zorder=2)
 
-ax.set_global()
+    ax.set_global()
 
-ocean_features.plot(ax=ax, marker='.', markersize=2, color='blue', alpha=0.5, label='Ocean Features', zorder=3)
+    ocean_features.plot(ax=ax, marker='.', markersize=2, color='blue', alpha=0.5, label='Ocean Features', zorder=3)
 
-tif_gdf[tif_gdf['matched']].plot(ax=ax, marker='o', color='green', markersize=10, label='Matched TIFs', zorder=4)
-tif_gdf[~tif_gdf['matched']].plot(ax=ax, marker='x', color='red', markersize=20, label='Unmatched TIFs', zorder=5)
+    tif_gdf[tif_gdf['matched']].plot(ax=ax, marker='o', color='green', markersize=10, label='Matched TIFs', zorder=4)
+    tif_gdf[~tif_gdf['matched']].plot(ax=ax, marker='x', color='red', markersize=20, label='Unmatched TIFs', zorder=5)
 
-ax.gridlines(draw_labels=True, linestyle='--', alpha=0.7)
+    ax.gridlines(draw_labels=True, linestyle='--', alpha=0.7)
 
-ax.set_title('Distribution of TIF Files and Ocean Features (WGS84)')
-ax.legend(loc='lower left')
+    ax.set_title('Distribution of TIF Files and Ocean Features (WGS84)')
+    ax.legend(loc='lower left')
 
-plt.savefig(OUTPUT_PLOT_PATH, dpi=300, bbox_inches='tight')
-plt.show()
+    plt.savefig(OUTPUT_PLOT_PATH, dpi=300, bbox_inches='tight')
+    print(f"Plot successfully saved to: {OUTPUT_PLOT_PATH}") # Moved this print BEFORE plt.show()
 
-print(f"Plot saved to: {OUTPUT_PLOT_PATH}")
-print("\n--- Interpretation Guide ---")
+    # plt.show() 
+except Exception as e:
+    print(f"\n--- ERROR during plotting ---")
+    print(f"An error occurred while trying to generate or save the plot: {e}")
+    import traceback
+    traceback.print_exc() # Print full traceback for more details
+    print(f"--- End of plotting error ---")
+
+print("\n--- Interpretation Guide ---") # This will now print even if there's a plotting error
 print("1. Are red 'X' markers (unmatched TIFs) mostly over land or areas without any blue 'Ocean Features'?")
-print("   -> This would indicate TIFs are in irrelevant areas or your ocean feature data is incomplete.")
-print("2. Are red 'X' markers very close to blue 'Ocean Features' but not overlapping?")
-print("   -> This suggests misalignment or strict matching criteria. Consider buffering or adjusting tolerance.")
-print("3. Are blue 'Ocean Features' densely clustered in some areas, while TIFs are elsewhere?")
-print("   -> You might be trying to match TIFs from regions where ocean features are sparse or non-existent in your current dataset.")
-print("4. Do the green 'O' markers (matched TIFs) appear mostly within or directly on the blue 'Ocean Features'?")
-print("   -> This validates your current matching logic for successful cases.")
