@@ -12,9 +12,9 @@ import os
 import pandas as pd
 from tqdm import tqdm
 # --- Configuration ---
-OCEAN_FEATURES_PATH = '/mnt/storagecube/joanna/ocean_features_filtered.csv'
-TIF_DIRECTORY = '/data/joanna/Hydro'
-OUTPUT_PLOT_PATH = 'world_distribution_hydro_ocean_plot.png'
+OCEAN_FEATURES_PATH = '/mnt/storagecube/joanna/ocean_features_projected.csv'
+TIF_DIRECTORY = '/mnt/storagecube/joanna/Hydro'
+OUTPUT_PLOT_PATH = 'world_distribution_hydro_ocean_plot_proj.png'
 
 # --- 1. Load Ocean Features from CSV ---
 try:

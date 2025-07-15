@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --time=1-00:00:00
 #SBATCH --mem=128G 
-#SBATCH --output=/home/joanna/SSLORS2/logs/train_mocogeo_ocean_slurm.out 
-#SBATCH --error=/home/joanna/SSLORS2/logs/train_mocogeo_ocean_slurm.err  
+#SBATCH --output=/home/joanna/SSLORS2/logs/train_mocogeo_ocean_3_slurm.out 
+#SBATCH --error=/home/joanna/SSLORS2/logs/train_mocogeo_ocean_3_slurm.err  
 #SBATCH --partition=small_job 
 
 
@@ -37,7 +37,7 @@ TRAIN_BATCH_SIZE=64
 VAL_BATCH_SIZE=64
 LEARNING_RATE=3e-3
 EPOCHS=200
-DATASET_PATH="/data/joanna/Hydro/"
+DATASET_PATH="/mnt/storagecube/joanna/Hydro/"
 SEED=42
 NUM_CLUSTERS=10
 OCEAN=TRUE

@@ -167,7 +167,7 @@ class MAEFineTuning(pl.LightningModule):
         gt = target.data.cpu().numpy()[0]
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
-        if batch_idx % 100 == 0:
+        if batch_idx % 1000 == 0:
             self.log_images(
                 rgb,
                 masked_pred[0,:,:],
@@ -251,7 +251,7 @@ class MAEFineTuning(pl.LightningModule):
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
 
-        if batch_idx % 100 == 0:
+        if batch_idx % 1000 == 0:
             self.log_images(
                 rgb,
                 masked_pred[0,:,:],

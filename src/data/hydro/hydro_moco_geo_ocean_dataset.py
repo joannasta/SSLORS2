@@ -23,7 +23,7 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
         transforms: Optional[Callable] = None,
         location: str = "agia_napa",
         model_name: str = "moco-ocean-features",
-        csv_features_path: str = "/mnt/storagecube/joanna/ocean_features_filtered.csv",
+        csv_features_path: str = "/home/joanna/SSLORS/src/utils/train_ocean_labels_3_clusters.csv",
         max_match_distance: float = 0.001
     ):
         self.path_dataset = Path(path_dataset)
