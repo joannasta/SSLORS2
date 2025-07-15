@@ -1,10 +1,8 @@
-# Third-party libraries
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy
 
-# PyTorch and related libraries
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -13,13 +11,11 @@ from torch.autograd import Variable
 import pytorch_lightning as pl
 from torch.utils.tensorboard import SummaryWriter
 
-# Libraries for models and utilities
 import timm
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 from torchvision.transforms import RandomCrop
 
-# Project-specific imports
 from .magicbathynet_unet import UNet_bathy
 from src.utils.finetuning_utils import calculate_metrics
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
@@ -29,15 +25,13 @@ class CustomLoss(nn.Module):
         super(CustomLoss, self).__init__()
 
     def forward(self, output, depth, mask):
-        # Mask out areas with no annotations
         mse_loss = nn.MSELoss(reduction='none')
 
         loss = mse_loss(output, depth)
-        loss = (loss * mask.float()).sum() # gives \sigma_euclidean over unmasked elements
+        loss = (loss * mask.float()).sum()
 
         non_zero_elements = mask.sum()
         rmse_loss_val = torch.sqrt(loss / non_zero_elements)
-
 
         return rmse_loss_val
 
@@ -65,10 +59,9 @@ class MAEFineTuning(pl.LightningModule):
         self.stride = MODEL_CONFIG["stride"]
         self.full_finetune = full_finetune
 
-        self.projection_head = UNet_bathy(in_channels=3, out_channels=1, model_type=self.model_type, full_finetune=self.full_finetune) 
+        self.projection_head = UNet_bathy(in_channels=3, out_channels=1, model_type=self.model_type, full_finetune=self.full_finetune)
         self.criterion = CustomLoss()
 
-        # Metrics and Loss Tracking
         self.total_train_loss = 0.0
         self.train_batch_count = 0
         self.total_val_loss = 0.0
@@ -82,26 +75,13 @@ class MAEFineTuning(pl.LightningModule):
         self.test_rmse_list = []
         self.test_mae_list = []
         self.test_std_dev_list = []
-        self.test_image_count = 0 # Counter for logging test images uniquely
+        self.test_image_count = 0
 
-        # Enable gradient tracking for all parameters if full_finetune is True
         if self.full_finetune:
             for param in self.parameters():
                 param.requires_grad = True
- 
-    def forward(self, images, embedding):
-        """
-        Forward pass for the MAEFineTuning module.
-        Processes the embedding through the pretrained model if full_finetune is enabled,
-        then passes the processed embedding and input images to the UNet (projection_head).
 
-        Args:
-            images (torch.Tensor): The input image tensor for the UNet encoder.
-            embedding (torch.Tensor): The embedding tensor from the dataset.
-                                      This can be an image (full finetune) or a feature vector (SSL).
-        Returns:
-            torch.Tensor: The output depth prediction from the UNet.
-        """
+    def forward(self, images, embedding):
         processed_embedding = embedding
 
         if self.full_finetune:
@@ -109,9 +89,9 @@ class MAEFineTuning(pl.LightningModule):
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
             elif self.model_type in ["moco", "mocogeo"]:
                 print("embedding shape:", embedding.shape)
-                embedding = embedding.squeeze(0)  # Remove batch dimension if present
-                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1) 
-        
+                embedding = embedding.squeeze(0)
+                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
+
         return self.projection_head(processed_embedding, images)
 
     def training_step(self, batch,batch_idx):
@@ -121,43 +101,35 @@ class MAEFineTuning(pl.LightningModule):
         data, target, embedding = batch
         data, target,embedding = Variable(data.to(device)), Variable(target.to(device)), Variable(embedding.to(device))
 
-        
-        # Standardize resize for all images to self.crop_size (256x256)
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(0), size=size, mode='nearest')
         data_size = data.size()[2:]
-        
-        if data_size[0] > self.crop_size and data_size[1] > crop_size:
-                    # Use RandomCrop transformation for data and target
-                data_transform = RandomCrop(size=self.crop_size)
-                target_transform = RandomCrop(size=self.crop_size)
-    
-                    # Apply RandomCrop transformation to data and target
-                data = data_transform(data)
-                target = target_transform(target)
-                
-        # Generate mask for non-annotated pixels in depth data
-        target_mask = (target.cpu().numpy() != 0).astype(np.float32)  
-        target_mask = torch.from_numpy(target_mask)  
+
+        if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
+            data_transform = RandomCrop(size=self.crop_size)
+            target_transform = RandomCrop(size=self.crop_size)
+
+            data = data_transform(data)
+            target = target_transform(target)
+
+        target_mask = (target.cpu().numpy() != 0).astype(np.float32)
+        target_mask = torch.from_numpy(target_mask)
         target_mask = target_mask.reshape(self.crop_size, self.crop_size)
-        target_mask = target_mask.to(device)   
+        target_mask = target_mask.to(device)
 
-
-        data_mask = (data.cpu().numpy() != 0).astype(np.float32)  
+        data_mask = (data.cpu().numpy() != 0).astype(np.float32)
         data_mask = np.mean(data_mask, axis=1)
-        data_mask = torch.from_numpy(data_mask) 
-        #data_mask = data_mask.reshape(crop_size, crop_size)
-        data_mask = data_mask.to(device) 
-            
-            # Combine the masks
+        data_mask = torch.from_numpy(data_mask)
+        data_mask = data_mask.to(device)
+
         combined_mask = target_mask * data_mask
         combined_mask = (combined_mask >= 0.5).float()
         if torch.sum(combined_mask) == 0:
             return None
 
         data = torch.clamp(data, min=0, max=1)
-        
-        output = self(data.float(),embedding.float()) 
+
+        output = self(data.float(),embedding.float())
         output = output.to(self.device)
 
         loss = self.criterion(output, target, combined_mask)
@@ -167,7 +139,8 @@ class MAEFineTuning(pl.LightningModule):
         gt = target.data.cpu().numpy()[0]
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
-        if batch_idx % 1000 == 0:
+
+        if batch_idx == 0:
             self.log_images(
                 rgb,
                 masked_pred[0,:,:],
@@ -204,43 +177,35 @@ class MAEFineTuning(pl.LightningModule):
         data, target, embedding = batch
         data, target,embedding = Variable(data.to(device)), Variable(target.to(device)), Variable(embedding.to(device))
 
-        
-        # Standardize resize for all images to self.crop_size (256x256)
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(0), size=size, mode='nearest')
         data_size = data.size()[2:]
-        
-        if data_size[0] > self.crop_size and data_size[1] > crop_size:
-                    # Use RandomCrop transformation for data and target
-                data_transform = RandomCrop(size=self.crop_size)
-                target_transform = RandomCrop(size=self.crop_size)
-    
-                    # Apply RandomCrop transformation to data and target
-                data = data_transform(data)
-                target = target_transform(target)
-                
-        # Generate mask for non-annotated pixels in depth data
-        target_mask = (target.cpu().numpy() != 0).astype(np.float32)  
-        target_mask = torch.from_numpy(target_mask)  
+
+        if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
+            data_transform = RandomCrop(size=self.crop_size)
+            target_transform = RandomCrop(size=self.crop_size)
+
+            data = data_transform(data)
+            target = target_transform(target)
+
+        target_mask = (target.cpu().numpy() != 0).astype(np.float32)
+        target_mask = torch.from_numpy(target_mask)
         target_mask = target_mask.reshape(self.crop_size, self.crop_size)
-        target_mask = target_mask.to(device)   
+        target_mask = target_mask.to(device)
 
-
-        data_mask = (data.cpu().numpy() != 0).astype(np.float32)  
+        data_mask = (data.cpu().numpy() != 0).astype(np.float32)
         data_mask = np.mean(data_mask, axis=1)
-        data_mask = torch.from_numpy(data_mask) 
-        #data_mask = data_mask.reshape(crop_size, crop_size)
-        data_mask = data_mask.to(device) 
-            
-            # Combine the masks
+        data_mask = torch.from_numpy(data_mask)
+        data_mask = data_mask.to(device)
+
         combined_mask = target_mask * data_mask
         combined_mask = (combined_mask >= 0.5).float()
         if torch.sum(combined_mask) == 0:
             return None
 
         data = torch.clamp(data, min=0, max=1)
-        
-        output = self(data.float(),embedding.float()) 
+
+        output = self(data.float(),embedding.float())
         output = output.to(self.device)
 
         val_loss = self.criterion(output, target, combined_mask)
@@ -251,7 +216,7 @@ class MAEFineTuning(pl.LightningModule):
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
 
-        if batch_idx % 1000 == 0:
+        if batch_idx == 0:
             self.log_images(
                 rgb,
                 masked_pred[0,:,:],
@@ -279,38 +244,31 @@ class MAEFineTuning(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         test_dir = "test_results"
-        test_data_batch, targets_batch, embeddings_batch = batch # Batch contains lists of tensors
-        
+        test_data_batch, targets_batch, embeddings_batch = batch
+
         self.crop_size = 256
         pad_size = 32
         ratio = self.crop_size / self.window_size[0]
-        # Process each individual sample in the test batch
+
         for img, gt,gt_e, embedding in zip(test_data_batch, targets_batch,targets_batch, embeddings_batch):
             img = img.cpu()
             gt = gt.cpu()
             gt_e = gt_e.cpu()
             embedding = embedding.unsqueeze(0)
-            
+
             img = scipy.ndimage.zoom(img, (1,ratio, ratio), order=1)
             gt = scipy.ndimage.zoom(gt, (ratio, ratio), order=1)
             gt_e = scipy.ndimage.zoom(gt_e, (ratio, ratio), order=1)
-            
-            # Pad the image, ground truth, and eroded ground truth with reflection
-            #img = np.pad(img, ((0, 0),(pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
-            #gt = np.pad(gt, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
-            #gt_e = np.pad(gt_e, ((pad_size, pad_size), (pad_size, pad_size)), mode='reflect')
+
             img = torch.from_numpy(img)
             img = torch.clamp(img, min=0, max=1)
-            
+
             gt = torch.from_numpy(gt).float()
-            #gt = gt.unsqueeze(0) # Add batch dim
-
             gt_e = torch.from_numpy(gt_e).float()
-            #gt_e = gt_e.unsqueeze(0)
 
-            with torch.no_grad():#
+            with torch.no_grad():
                 img = img.float()
-                img = img.unsqueeze(0)  # Add batch dimension and move to device
+                img = img.unsqueeze(0)
                 print("self.full_finetune", self.full_finetune)
                 outs = self(img, embedding)
                 pred = outs.data.cpu().numpy().squeeze()
@@ -318,43 +276,39 @@ class MAEFineTuning(pl.LightningModule):
             gt_mask = (gt_e != 0)
             gt_mask = gt_mask.unsqueeze(0)
             gt_mask = gt_mask.reshape(self.crop_size, self.crop_size)
-            gt_mask = gt_mask.to(self.device) 
-            
-            img_mask = (img != 0).float()
-            #img_mask = torch.mean(img_mask, dim=2)
-            #img_mask = img_mask.reshape(crop_size, crop_size)
-            img_mask = img_mask.to(self.device) 
+            gt_mask = gt_mask.to(self.device)
 
-            self.test_image_count += 1 # Increment for unique logging per image
-            print("img_mask shape:", img_mask.shape)
-            print("gt_mask shape:", gt_mask.shape)
-            combined_mask = img_mask*gt_mask
-            
-            print("combined_mask shape:", combined_mask.shape)
-      
-            masked_pred = pred * combined_mask.cpu().numpy()
-            masked_gt_e = gt_e * combined_mask.cpu().numpy()
-            
-            pred = torch.from_numpy(pred).unsqueeze(0) 
-            gt_e = gt_e.unsqueeze(0)  
-            # Log images for visualization
-            img = np.asarray(255 * img[0,:,:,:], dtype='uint8').transpose(1,2,0)
-            print("img",img.shape)
-            self.log_images(
-                    img,
-                    masked_pred[0,0,:,:],
-                    gt_e[0,:,:],
-                    test_dir
-                )
+            img_mask = (img != 0).float()
+            img_mask = img_mask.to(self.device)
+
+            if self.test_image_count < 5:
+                print("img_mask shape:", img_mask.shape)
+                print("gt_mask shape:", gt_mask.shape)
+                combined_mask = img_mask*gt_mask
+
+                print("combined_mask shape:", combined_mask.shape)
+
+                masked_pred = pred * combined_mask.cpu().numpy()
+                masked_gt_e = gt_e * combined_mask.cpu().numpy()
+
+                pred = torch.from_numpy(pred).unsqueeze(0)
+                gt_e = gt_e.unsqueeze(0)
+                img = np.asarray(255 * img[0,:,:,:], dtype='uint8').transpose(1,2,0)
+                print("img",img.shape)
+                self.log_images(
+                        img,
+                        masked_pred[0,0,:,:],
+                        gt_e[0,:,:],
+                        test_dir
+                    )
+            self.test_image_count += 1
 
             rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt_e.numpy().ravel())
-            
-            # Log metrics for each image in the test batch
+
             self.log(f'test_rmse_step_image_{self.test_image_count}', (rmse * -self.norm_param_depth), on_step=True)
             self.log(f'test_mae_step_image_{self.test_image_count}', (mae * -self.norm_param_depth), on_step=True)
             self.log(f'test_std_dev_step_image_{self.test_image_count}', (std_dev * -self.norm_param_depth), on_step=True)
 
-            # Log epoch-level metrics (will be averaged over the epoch by PyTorch Lightning)
             self.log('test_rmse_epoch', (rmse * -self.norm_param_depth), on_step=False, on_epoch=True)
             self.log('test_mae_epoch', (mae * -self.norm_param_depth), on_step=False, on_epoch=True)
             self.log('test_std_dev_epoch', (std_dev * -self.norm_param_depth), on_step=False, on_epoch=True)
@@ -450,39 +404,36 @@ class MAEFineTuning(pl.LightningModule):
         print("data",data.shape)
         print("predicted_depth",predicted_depth.shape)
         print("depth",depth.shape)
-    
-        if data.ndim == 4:
-            data = data[0,[2,1,0],:,:]
-        else:
-            data = data[[2,1,0],:,:]
-    
+
+        if data.ndim == 3 and data.shape[0] == 3:
+            data = np.transpose(data, (1, 2, 0))
+        elif data.ndim == 4 and data.shape[1] == 3:
+            data = np.transpose(data[0], (1, 2, 0))
+
         data = np.clip(data, 0, 1)
-        data = np.transpose(data, (0,1,2))
-    
+
+        predicted_depth = predicted_depth.squeeze()
+        gt_depth = depth.squeeze()
+
         predicted_depth = predicted_depth * -self.norm_param_depth
-        gt_depth = depth * -self.norm_param_depth
-    
-        """if reconstructed_images.ndim == 3 and reconstructed_images.shape[0] == 1:
-            reconstructed_images = reconstructed_images.squeeze(0)
-        if reconstructed_images.ndim == 3 and reconstructed_images.shape[0] == 1:
-            reconstructed_images = reconstructed_images.squeeze(0)"""
-    
+        gt_depth = gt_depth * -self.norm_param_depth
+
         combined_min = min(predicted_depth.min(), gt_depth.min())
         combined_max = max(predicted_depth.max(), gt_depth.max())
-    
+
         if combined_max - combined_min < 1e-6:
             combined_max = combined_min + 1.0
-        
+
         display_vmin = combined_min
         display_vmax = combined_max
-    
+
         plt.figure(figsize=(15, 5))
-    
+
         plt.subplot(131)
         plt.imshow(data)
         plt.title("Original RGB")
         plt.axis("off")
-    
+
         plt.subplot(132)
         plt.imshow(gt_depth, cmap='viridis_r', vmin=display_vmin, vmax=display_vmax)
         plt.title("Ground Truth Depth")
@@ -495,16 +446,16 @@ class MAEFineTuning(pl.LightningModule):
         plt.title("Predicted Depth")
         plt.colorbar(fraction=0.046, pad=0.04)
         plt.axis("off")
-    
+
         abs_save_dir = os.path.abspath(os.path.join(self.run_dir, dir))
         os.makedirs(abs_save_dir, exist_ok=True)
-    
+
         filename = ""
         if dir == "test_results":
             filename = os.path.join(abs_save_dir, f"depth_comparison_epoch_{self.current_epoch}_image_{self.test_image_count}.png")
         else:
             filename = os.path.join(abs_save_dir, f"depth_comparison_epoch_{self.current_epoch}_batch_{self.global_step}.png")
-    
+
         plt.savefig(filename, bbox_inches='tight', dpi=300)
         plt.close()
 
@@ -520,17 +471,14 @@ class MAEFineTuning(pl.LightningModule):
         params_dict = dict(self.projection_head.named_parameters())
         params = []
         base_lr = self.base_lr
-    
+
         for key, value in params_dict.items():
-            # Your original logic to potentially apply different LRs for '_D' layers
-            # For now, it's just `base_lr` for all, but the structure is there.
             if '_D' in key:
                 params.append({'params':[value],'lr': base_lr})
             else:
                 params.append({'params':[value],'lr': base_lr})
-    
-        optimizer = optim.Adam(params, lr=self.base_lr) 
-        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [10], gamma=0.1)
 
+        optimizer = optim.Adam(params, lr=self.base_lr)
+        scheduler = optim.lr_scheduler.MultiStepLR(optimizer, [10], gamma=0.1)
 
         return [optimizer], [scheduler]

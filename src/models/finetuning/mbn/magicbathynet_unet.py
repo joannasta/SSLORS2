@@ -66,21 +66,18 @@ class UNet_bathy(nn.Module):
         self.down2 = Down(64, 128)
         self.down3 = Down(128, 256)
 
-        # Calculate channels for concatenation before final projection
-        cat_channels_in = 256 # From x4
+        cat_channels_in = 256
 
         if model_type in ["mae", "moco"]:
-            cat_channels_in += 256 # Channels from projected embedding
-            self.emb_proj = nn.Linear(512, 256 * 32 * 32) # Projects 512-dim embedding to 256 channels spatially
+            cat_channels_in += 256
+            self.emb_proj = nn.Linear(512, 256 * 32 * 32)
         elif model_type == "mocogeo":
-            cat_channels_in += 512 # Channels from expanded embedding
+            cat_channels_in += 512
         else:
             raise NotImplementedError(f"Model type '{model_type}' not supported for embedding processing in UNet_bathy.")
 
-        # Linear projection after concatenation, before bottleneck convolution
         self.cat_to_bot_proj = nn.Linear(cat_channels_in, 512)
 
-        # Bottleneck convolution
         self.bottleneck = DoubleConv(512, 512)
 
         self.up1 = Up(512, 128, 128)
@@ -91,20 +88,14 @@ class UNet_bathy(nn.Module):
 
     def forward(self, x_embedding, images):
         images = images.to(self.device)
-        print(f"x_embedding initial shape: {x_embedding.shape}")
-        print(f"images initial shape: {images.shape}")
 
         x1 = self.inc(images)
-        print(f"Encoder: x1 (inc output) shape: {x1.shape}")
         x2 = self.down1(x1)
-        print(f"Encoder: x2 (down1 output) shape: {x2.shape}")
         x3 = self.down2(x2)
-        print(f"Encoder: x3 (down2 output) shape: {x3.shape}")
-        x4 = self.down3(x3) # x4 is the output of the final downsampling block
-        print(f"Encoder: x4 (down3 output - bottleneck input) shape: {x4.shape}")
+        x4 = self.down3(x3)
 
-        fused_features = None # Features after incorporating embedding and before bottleneck conv
-        
+        fused_features = None
+
         if self.model_type in ["mae", "moco"]:
             emb_spat_proj = self.emb_proj(x_embedding).view(x_embedding.shape[0], 256, 32, 32)
             emb_interp = F.interpolate(emb_spat_proj, size=x4.shape[2:], mode='bilinear', align_corners=False)
@@ -116,23 +107,16 @@ class UNet_bathy(nn.Module):
         else:
             raise NotImplementedError(f"Model type '{self.model_type}' not supported during forward pass.")
 
-        # Apply linear projection and reshape for bottleneck convolution
         bs, ch_fused, h_fused, w_fused = fused_features.shape
         fused_reshaped = fused_features.permute(0, 2, 3, 1).reshape(bs * h_fused * w_fused, ch_fused)
-        
-        bottleneck_in = self.cat_to_bot_proj(fused_reshaped).reshape(bs, 512, h_fused, w_fused)
-        
-        bottleneck_out = self.bottleneck(bottleneck_in)
-        print(f"bottleneck_out shape: {bottleneck_out.shape}")
 
-        print("\nDecoder Path:")
+        bottleneck_in = self.cat_to_bot_proj(fused_reshaped).reshape(bs, 512, h_fused, w_fused)
+
+        bottleneck_out = self.bottleneck(bottleneck_in)
+
         x = self.up1(bottleneck_out, x3)
-        print(f"Decoder: x (up1 output) shape: {x.shape}")
         x = self.up2(x, x2)
-        print(f"Decoder: x (up2 output) shape: {x.shape}")
         x = self.up3(x, x1)
-        print(f"Decoder: x (up3 output) shape: {x.shape}")
 
         output = self.outc(x)
-        print(f"Output: output shape: {output.shape}")
         return output

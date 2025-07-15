@@ -88,7 +88,6 @@ class MoCo(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         x_q, x_k = batch
-
         # update momentum
         update_momentum(self.backbone, self.backbone_momentum, 0.99)
         update_momentum(self.projection_head, self.projection_head_momentum, 0.99)

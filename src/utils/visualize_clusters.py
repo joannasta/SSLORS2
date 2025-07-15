@@ -5,7 +5,7 @@ from pathlib import Path
 import rasterio
 
 # Define the path to your training dataset
-path_dataset = Path("/data/joanna/Hydro/")
+path_dataset = Path("/mnt/storagecube/joanna/Hydro/")
 # Get all tif file paths
 file_paths = sorted(list(path_dataset.glob("*.tif")))
 
@@ -28,7 +28,7 @@ for file_path in file_paths:
 geo_coords = np.array(list(zip(longitudes, latitudes)))
 
 # Number of clusters (same as your num_geo_clusters)
-n_clusters = 100
+n_clusters = 3
 
 # Apply K-means clustering
 kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
@@ -42,7 +42,7 @@ plt.ylabel("Latitude")
 plt.title(f"K-means Clustering of Geo-coordinates (K={n_clusters})")
 plt.colorbar(scatter, label="Cluster ID")
 plt.grid(True)
-plt.show()
+plt.savefig(f"Geolocation_clusters_{n_clusters}")
 
 # You can also print some statistics about the clusters
 unique_clusters, counts = np.unique(cluster_assignments, return_counts=True)
