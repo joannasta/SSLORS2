@@ -3,11 +3,11 @@ from torch.utils.data import Dataset, DataLoader, default_collate # Import defau
 from torchvision import transforms as T
 from pathlib import Path
 from typing import Optional, List, Callable, Dict, Any
-# IMPORTANT: Update the import path to your new dataset class
+
 from src.data.hydro.hydro_moco_geo_ocean_dataset import HydroMocoGeoOceanFeaturesDataset 
 from pytorch_lightning import LightningDataModule
 
-class HydroOceanFeaturesDataModule(LightningDataModule): # Renamed
+class HydroOceanFeaturesDataModule(LightningDataModule): 
     def __init__(
             self, 
             data_dir: str, 
@@ -15,8 +15,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule): # Renamed
             num_workers: int = 4, 
             transform: Optional[Callable] = None, 
             model_name: str = "moco-ocean-features", 
-            csv_features_path: str = "/mnt/storagecube/joanna/ocean_features_filtered.csv", 
-            max_match_distance: float = 0.001 
+            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters.csv"
         ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -25,41 +24,30 @@ class HydroOceanFeaturesDataModule(LightningDataModule): # Renamed
         self.transform = transform
         self.model_name = model_name
         self.csv_features_path = csv_features_path
-        self.max_match_distance = max_match_distance
         
-    # --- Custom collate_fn to filter out None values ---
-    def custom_collate_fn(self, batch: List[Any]): # Added type hint for batch
+    def custom_collate_fn(self, batch: List[Any]): 
         # Filter out None values from the batch
         batch = [item for item in batch if item is not None]
-        if not batch: # If the batch is empty after filtering, return None or an empty list
-            # Return an empty list or raise an error if an empty batch is not desired.
-            # Returning None can cause issues with DataLoader. Best to return empty tensors or skip.
-            # For PyTorch Lightning, returning an empty list might cause issues in training_step/validation_step.
-            # Consider filtering files more strictly in the dataset's __init__ instead of returning None from __getitem__.
+        if not batch: 
             print("Warning: Batch is empty after filtering None values. This batch will be skipped.")
-            return None # Or raise ValueError("Empty batch after filtering None values.")
+            return None 
         return default_collate(batch)
-    # --- End custom collate_fn ---
+
 
     def setup(self, stage: Optional[str] = None):
-        # Instantiate HydroOceanFeaturesDataset instead of HydroMoCoGeoDataset
-        # Pass the new parameters: csv_features_path and max_match_distance
         if stage == 'fit' or stage is None:
             self.train_dataset = HydroMocoGeoOceanFeaturesDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                max_match_distance=self.max_match_distance
+                csv_features_path=self.csv_features_path
             )
-            # You might want separate validation data. For simplicity, reusing data_dir here.
-            # In a real scenario, you'd have train_data_dir and val_data_dir.
+
             self.val_dataset = HydroMocoGeoOceanFeaturesDataset(
                 path_dataset=self.data_dir, 
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                max_match_distance=self.max_match_distance
+                csv_features_path=self.csv_features_path
             )
 
         if stage == 'test' or stage is None:
@@ -67,8 +55,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule): # Renamed
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                max_match_distance=self.max_match_distance
+                csv_features_path=self.csv_features_path
             )
 
         if stage == 'predict':
@@ -76,8 +63,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule): # Renamed
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                max_match_distance=self.max_match_distance
+                csv_features_path=self.csv_features_path
             )
 
     def train_dataloader(self):

@@ -9,7 +9,6 @@ import warnings
 from typing import Optional, List, Callable, Tuple
 from torch.utils.data import Dataset
 from torchvision import transforms as T
-from scipy.spatial import KDTree
 from rasterio.warp import transform as rasterio_transform
 import pyproj
 
@@ -24,11 +23,10 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
         location: str = "agia_napa",
         model_name: str = "moco-ocean-features",
         csv_features_path: str = "/home/joanna/SSLORS/src/utils/train_ocean_labels_3_clusters.csv",
-        max_match_distance: float = 0.001
     ):
         self.path_dataset = Path(path_dataset)
         all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))
-        print(f"DEBUG: Found {len(all_file_paths)} TIF files initially.")
+        print(f"Found {len(all_file_paths)} TIF files initially.")
         self.bands = bands if bands is not None else [
             "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"
         ]
@@ -36,24 +34,22 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
         self.model_name = model_name
         self.location = location
         self.csv_features_path = Path(csv_features_path)
-        self.max_match_distance = max_match_distance
 
         self._load_normalization_params()
 
-        self.file_path_to_csv_index_map = {}
+        self.file_path_to_csv_row_map = {}
         self.file_paths = []
 
         self.csv_df = None
-        self.csv_kdtree = None
 
         self._load_ocean_features_and_map(all_file_paths)
 
         if not self.file_paths and self.csv_features_path.exists():
             raise ValueError(
-                "No TIF files could be matched to ocean features in the CSV. "
-                "Check TIF file validity, CSV data, `max_match_distance`, or if there are TIF files at all."
+                "No TIF files from the dataset directory could be matched by file path in the CSV. "
+                "Check TIF file validity, CSV 'file_dir' column, or if there are TIF files at all."
             )
-        print(f"DEBUG: Dataset initialization complete. Total matched files: {len(self.file_paths)}")
+        print(f"Dataset initialization complete. Total matched files: {len(self.file_paths)}")
 
 
     def _load_normalization_params(self):
@@ -81,7 +77,7 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
 
 
     def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
-        print(f"DEBUG: Starting _load_ocean_features_and_map. CSV path: {self.csv_features_path}")
+        print(f"Starting data mapping. CSV path: {self.csv_features_path}")
         if not self.csv_features_path.exists():
             raise FileNotFoundError(
                 f"Ocean features CSV not found at '{self.csv_features_path}'. "
@@ -89,74 +85,34 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
             )
         try:
             self.csv_df = pd.read_csv(self.csv_features_path)
-            print(f"DEBUG: Loaded CSV with {len(self.csv_df)} rows.")
-            print(f"DEBUG: Memory usage of self.csv_df: {self.csv_df.memory_usage(deep=True).sum() / (1024**3):.2f} GB")
+            print(f"Loaded CSV with {len(self.csv_df)} rows.")
 
-            csv_coords = self.csv_df[['lat', 'lon']].values.astype(np.float32)
-            self.csv_kdtree = KDTree(csv_coords)
-            print(f"DEBUG: Built KDTree from CSV coordinates.")
-            print(f"DEBUG: Memory usage of KDTree data (csv_coords): {csv_coords.nbytes / (1024**3):.2f} GB")
+            if 'file_dir' not in self.csv_df.columns:
+                raise ValueError("CSV must contain a 'file_dir' column for direct file path mapping.")
+            
+            csv_file_dir_map = {Path(p).resolve(): row for p, row in self.csv_df.set_index('file_dir').iterrows()}
+            print(f"Created CSV file_dir to row map with {len(csv_file_dir_map)} entries.")
 
             successful_matches = []
-            print(f"DEBUG: Starting matching process for {len(all_file_paths)} TIF files.")
+            print(f"Starting direct mapping process for {len(all_file_paths)} TIF files.")
             
             for i, file_path in enumerate(all_file_paths):
-                if i < 10 or i % 1000 == 0: 
-                    print(f"DEBUG: Processing TIF file {i}/{len(all_file_paths)}: {file_path.name}")
-                try:
-                    with rasterio.open(file_path) as src:
-                        if i < 10 or i % 1000 == 0:
-                            print(f"  DEBUG: TIF CRS for {file_path.name}: {src.crs}")
-
-                        left, bottom, right, top = src.bounds.left, src.bounds.bottom, src.bounds.right, src.bounds.top
-                        
-                        native_center_lon = (left + right) / 2
-                        native_center_lat = (bottom + top) / 2
-
-                        transformed_lon, transformed_lat = rasterio_transform(
-                            src.crs,
-                            'EPSG:4326',
-                            [native_center_lon],
-                            [native_center_lat]
-                        )
-                        tif_center_lon = transformed_lon[0]
-                        tif_center_lat = transformed_lat[0]
-
-                        query_point = np.array([tif_center_lat, tif_center_lon], dtype=np.float32)
-
-                        if i < 10 or i % 1000 == 0:
-                            print(f"  DEBUG: Transformed TIF center (lat, lon): ({tif_center_lat:.6f}, {tif_center_lon:.6f})")
-
-                        distance, index = self.csv_kdtree.query(query_point, k=1, distance_upper_bound=self.max_match_distance)
-
-                        if distance <= self.max_match_distance and index != self.csv_kdtree.n:
-                            self.file_path_to_csv_index_map[file_path] = index
-                            successful_matches.append(file_path)
-                            if i < 10 or i % 1000 == 0:
-                                print(f"  DEBUG: MATCH FOUND! Distance: {distance:.6f}, CSV Index: {index}")
-                        else:
-                            if i < 10 or i % 1000 == 0:
-                                print(f"  DEBUG: NO MATCH! Distance: {distance:.6f} (vs max {self.max_match_distance}), Index: {index} (Index 'n' means no match within distance)")
-                                if index != self.csv_kdtree.n:
-                                    nearest_csv_lat = self.csv_df.iloc[index]['lat']
-                                    nearest_csv_lon = self.csv_df.iloc[index]['lon']
-                                    print(f"    DEBUG: Nearest CSV point found (but too far): ({nearest_csv_lat:.6f}, {nearest_csv_lon:.6f})")
-                                else:
-                                    print(f"    DEBUG: No nearest CSV point found within KDTree search space (likely means beyond max distance entirely).")
-
-                except rasterio.errors.RasterioIOError as e:
-                    print(f"ERROR: Error reading TIF file {file_path}: {e}. Skipping this file.")
-                except Exception as e:
-                    print(f"ERROR: An unexpected error occurred while processing {file_path}: {e}. Skipping this file.")
+                if i % 1000 == 0:
+                    print(f"Matching TIF file {i}/{len(all_file_paths)}")
+                
+                resolved_file_path = file_path.resolve()
+                if resolved_file_path in csv_file_dir_map:
+                    matched_row = csv_file_dir_map[resolved_file_path]
+                    self.file_path_to_csv_row_map[file_path] = matched_row
+                    successful_matches.append(file_path)
             
             self.file_paths = successful_matches
-            print(f"DEBUG: Finished matching and mapping. Successfully matched {len(self.file_paths)} TIF files.")
-            print(f"DEBUG: Memory usage of file_path_to_csv_index_map (approx): {sys.getsizeof(self.file_path_to_csv_index_map) / (1024**2):.2f} MB")
+            print(f"Finished direct mapping. Successfully matched {len(self.file_paths)} TIF files.")
 
         except Exception as e:
             raise RuntimeError(
                 f"Error loading or processing ocean features from '{self.csv_features_path}': {e}. "
-                "Please ensure the CSV format (lat,lon,bathy,chlorophyll,secchi) is correct and 'scipy' is installed."
+                "Please ensure the CSV format includes a 'file_dir' column with correct paths."
             ) from e
 
     def __len__(self) -> int:
@@ -198,53 +154,24 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
             raise ValueError(f"Cannot slice channels [1:4]. Normalized tensor only has {normalized_tensor.shape[0]} channels. Check `self.bands` configuration or `_normalize_tensor` logic.")
         return normalized_tensor[1:4, :, :]
 
-    def __getitem__(self, idx: int) -> Optional[Tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
+    def __getitem__(self, idx: int) -> Optional[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor]]:
         file_path = self.file_paths[idx]
         sample = self._read_and_process_image(file_path)
-
-        if sample is None:
-            return None
 
         if self.transforms is not None:
             sample = self.transforms(sample)
 
-        csv_row_index = self.file_path_to_csv_index_map.get(file_path)
-        if csv_row_index is None:
+        features_row = self.file_path_to_csv_row_map.get(file_path)
+        if features_row is None:
             return None
 
         try:
-            features_row = self.csv_df.iloc[csv_row_index]
-            ocean_features = torch.tensor([
-                features_row['bathy'],
-                features_row['chlorophyll'],
-                features_row['secchi']
-            ], dtype=torch.float32)
+            cluster_label = torch.tensor(features_row['label'], dtype=torch.long)
         except KeyError as e:
-            raise KeyError(f"Missing expected ocean feature column in CSV at index {csv_row_index} for file {file_path}: {e}")
-        except Exception as e:
-            return None
+            raise KeyError(f"Missing expected column 'label' in CSV for file {file_path}: {e}")
 
-        # Simplified logic for __getitem__ based on model_name
         if self.model_name == "moco-geo-ocean":
-            # For MoCo, 'sample' MUST be a list of two Tensors after transforms.
-            # If not, the transforms are configured incorrectly.
-            if not (isinstance(sample, list) and len(sample) == 2 and 
-                    isinstance(sample[0], torch.Tensor) and isinstance(sample[1], torch.Tensor)):
-                raise TypeError(
-                    f"For 'moco-ocean-features' model, transforms must return a list of two Tensors, "
-                    f"but got type {type(sample)} with content {sample}"
-                )
-            
             q_raw, k_raw = sample
             q_normalized = self._normalize_tensor(q_raw)
             k_normalized = self._normalize_tensor(k_raw)
-            return (q_normalized, k_normalized, ocean_features)
-        else:
-            # For other models, 'sample' should be a single Tensor after transforms.
-            if not isinstance(sample, torch.Tensor):
-                raise TypeError(
-                    f"For '{self.model_name}' model, transforms must return a single Tensor, "
-                    f"but got type {type(sample)}"
-                )
-            sample_normalized = self._normalize_tensor(sample)
-            return sample_normalized.float(), ocean_features
+            return (q_normalized, k_normalized, cluster_label)
