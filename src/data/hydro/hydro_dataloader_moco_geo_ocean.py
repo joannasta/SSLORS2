@@ -15,7 +15,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
             num_workers: int = 4, 
             transform: Optional[Callable] = None, 
             model_name: str = "moco-ocean-features", 
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters.csv"
+            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv"
         ):
         super().__init__()
         self.data_dir = Path(data_dir)

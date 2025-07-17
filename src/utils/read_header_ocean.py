@@ -21,6 +21,6 @@ def print_first_n_rows_csv(filepath, n=5):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-print("Printing first 5 rows of 'ocean_features_projected.csv':")
-print_first_n_rows_csv("/mnt/storagecube/joanna/ocean_features/ocean_features_projected.csv", n=5)
-
+print("Printing first 5 rows of 'ocean_features':")
+print_first_n_rows_csv("/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv", n=5)
+#"/mnt/storagecube/joanna/ocean_features/ocean_features_projected.csv"

@@ -38,6 +38,13 @@ class Up(nn.Module):
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
+        # Pad x1 if its spatial dimensions don't match x2 due to upsampling or initial image size
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+
+        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
+                        diffY // 2, diffY - diffY // 2])
+        
         x = torch.cat([x2, x1], dim=1)
         return self.conv(x)
 
@@ -58,14 +65,20 @@ class UNet_Marida(nn.Module):
         self.moco_projection = nn.Linear(in_features=512, out_features=embedding_dim * 16 * 16)
         self.mocogeo_projection = nn.Linear(in_features=512, out_features=embedding_dim * 16 * 16)
 
-        self.combined_projection = nn.Linear(256, 256)
+        # Adjusted combined_projection for mocogeo branch
+        # Input features: embedding_dim (from processed_x_embedding) + 8*hidden_channels (from x5)
+        # Output features: embedding_dim (to match the target reshape and align with UNet decoder path)
+        self.combined_projection = nn.Linear(embedding_dim + (8 * hidden_channels), embedding_dim)
+
 
         self.down1 = Down(hidden_channels, 2 * hidden_channels)
         self.down2 = Down(2 * hidden_channels, 4 * hidden_channels)
         self.down3 = Down(4 * hidden_channels, 8 * hidden_channels)
         self.down4 = Down(8 * hidden_channels, 8 * hidden_channels)
 
-        self.up1 = Up(256 + (8 * hidden_channels), 4 * hidden_channels)
+        # Ensure input channels for Up layers are correct after fusion
+        # For up1, it receives combined_projected (embedding_dim channels) and x4 (8 * hidden_channels)
+        self.up1 = Up(embedding_dim + (8 * hidden_channels), 4 * hidden_channels)
         self.up2 = Up((4 * hidden_channels) + (4 * hidden_channels), 2 * hidden_channels)
         self.up3 = Up((2 * hidden_channels) + (2 * hidden_channels), hidden_channels)
         self.up4 = Up(hidden_channels + hidden_channels, hidden_channels)
@@ -77,7 +90,7 @@ class UNet_Marida(nn.Module):
         self.out_channels = out_channels
         self.model_type = model_type
         self.embedding_dim = embedding_dim
-        
+            
     def forward(self, image, x_embedding):
         x1 = self.inc(image)
         x2 = self.down1(x1)
@@ -94,9 +107,9 @@ class UNet_Marida(nn.Module):
             batch_size, channels, height, width = combined.shape
             combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
             
-            processed_linear_output = self.combined_projection(combined_reshaped)
+            processed_linear_output = self.mae_feature_fusion_projection(combined_reshaped) # Use mae specific projection
             
-            combined_projected = processed_linear_output.reshape(batch_size, self.combined_projection.out_features, height, width)
+            combined_projected = processed_linear_output.reshape(batch_size, self.mae_feature_fusion_projection.out_features, height, width)
 
         elif self.model_type == "moco":
             x_embedding_flat_projected = self.moco_projection(x_embedding)
@@ -123,6 +136,7 @@ class UNet_Marida(nn.Module):
             combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
             
             processed_linear_output = self.combined_projection(combined_reshaped)
+            # This reshape is now correct because self.combined_projection.out_features is self.embedding_dim
             combined_projected = processed_linear_output.reshape(batch_size, self.embedding_dim, height, width)
 
 

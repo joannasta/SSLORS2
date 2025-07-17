@@ -14,13 +14,14 @@ import cartopy.feature as cfeature
 
 # --- Configuration Paths ---
 TIF_DIRECTORY = Path('/mnt/storagecube/joanna/Hydro')
-OCEAN_FEATURES_PATH = Path('/mnt/storagecube/joanna/ocean_features_projected.csv')
+#'/mnt/storagecube/joanna/ocean_features_projected.csv'
+OCEAN_FEATURES_PATH = Path("/home/joanna/SSLORS2/src/utils/ocean_features/ocean_features_combined.csv")
 
 # --- Clustering Parameters ---
-n_clusters = 3 # You can change this based on Elbow/Silhouette analysis
+n_clusters = 2 # You can change this based on Elbow/Silhouette analysis
 
 # --- Output Paths ---
-output_csv_path = Path(f"train_ocean_labels_{n_clusters}_clusters_proj.csv")
+output_csv_path = Path(f"train_ocean_labels_{n_clusters}_clusters_correct.csv")
 output_3d_plot_path = Path(f"3d_ocean_features_clusters_{n_clusters}_proj.png")
 output_map_plot_path = Path(f"geographic_clusters_map_{n_clusters}_proj.png")
 output_elbow_plot_path = Path("elbow_method_ocean_clusters.png") # New plot
@@ -214,12 +215,26 @@ else:
     ax_3d.set_ylabel("Chlorophyll Level")
     ax_3d.set_zlabel("Secchi Depth")
     ax_3d.set_title(f"K-means Clustering of Ocean Features (K={actual_n_clusters})")
-    fig_3d.colorbar(scatter_3d, label="Cluster ID")
+    
+    # Make the colorbar discrete for the 3D plot
+    # Get unique cluster IDs and their corresponding colors from the colormap
+    unique_cluster_ids = np.unique(cluster_assignments)
+    
+    # Create boundaries for the colorbar ticks to ensure discrete steps
+    bounds = np.arange(len(unique_cluster_ids) + 1) - 0.5 
+    
+    # Create the colorbar using the scatter plot and specify ticks and boundaries
+    cbar_3d = fig_3d.colorbar(scatter_3d, label="Cluster ID", 
+                              ticks=unique_cluster_ids, boundaries=bounds)
+    # Set the tick labels to be the integer cluster IDs
+    cbar_3d.set_ticklabels([str(int(i)) for i in unique_cluster_ids])
+
     ax_3d.grid(True)
     fig_3d.savefig(output_3d_plot_path, dpi=300, bbox_inches='tight')
     plt.close(fig_3d)
     print("3D plot saved.")
-
+    
+    
     # --- Map Plot of Clusters ---
     print(f"Generating geographic map of clusters and saving to {output_map_plot_path}...")
     fig_map = plt.figure(figsize=(15, 10))
@@ -244,7 +259,23 @@ else:
         linewidth=0.5
     )
 
-    fig_map.colorbar(scatter_map, label="Cluster ID", orientation='vertical', pad=0.05)
+    # Make the colorbar discrete
+    # Get unique cluster IDs and their corresponding colors from the colormap
+    unique_cluster_ids = np.unique(cluster_assignments)
+    
+    # Create a norm that maps the unique cluster IDs to the colors distinctly
+    # The boundaries ensure that each integer ID gets its own unique color from the cmap.
+    # The lower_bound makes sure that cluster 0 is correctly mapped.
+    # The upper_bound accounts for the highest cluster ID.
+    bounds = np.arange(len(unique_cluster_ids) + 1) - 0.5 
+    norm = plt.Normalize(vmin=unique_cluster_ids.min() - 0.5, vmax=unique_cluster_ids.max() + 0.5)
+    
+    # Create the colorbar using the scatter plot and the discrete norm
+    cbar = fig_map.colorbar(scatter_map, label="Cluster ID", orientation='vertical', pad=0.05, 
+                            ticks=unique_cluster_ids, boundaries=bounds)
+    cbar.set_ticklabels([str(int(i)) for i in unique_cluster_ids])
+
+
     ax_map.set_title(f"K-means Clusters on Earth Map (K={actual_n_clusters})")
     
     gl = ax_map.gridlines(draw_labels=True, dms=True, x_inline=False, y_inline=False)
@@ -254,5 +285,3 @@ else:
     fig_map.savefig(output_map_plot_path, dpi=300, bbox_inches='tight')
     plt.close(fig_map)
     print("Geographic cluster map saved.")
-
-print("\nScript execution finished.")

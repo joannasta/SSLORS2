@@ -4,9 +4,9 @@
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
-#SBATCH --time=4-00:00:00              # Time limit
-#SBATCH --output=logs/finetune_slurm_marida_mocogeo_ocean.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_marida_mocogeo_ocean.err   # Error log
+#SBATCH --time=1-00:00:00              # Time limit
+#SBATCH --output=logs/finetune_slurm_marida_ocean.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_marida_ocean.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -23,7 +23,8 @@ TRAIN_BATCH_SIZE=16                     # Training batch size
 VAL_BATCH_SIZE=16                     # Validation batch size
 LEARNING_RATE=1e-5                  # Learning rate
 EPOCHS=50                              # Number of epochs
-PRETRAINED_MODEL="./results/trains/moco-geo-ocean/version_5/checkpoints/epoch=199-step=16800.ckpt"
+PRETRAINED_MODEL="./results/trains/moco-geo-ocean/version_6/checkpoints/epoch=199-step=19800.ckpt"
+#"./results/trains/moco-geo-ocean/version_5/checkpoints/epoch=199-step=16800.ckpt"
 #"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
 #"./results/trains/moco/version_38/checkpoints/epoch=31-step=53056.ckpt"
 #"./results/trains/training_logs/3-channels/checkpoints/epoch=99-step=132700.ckpt" # Path to pretrained model

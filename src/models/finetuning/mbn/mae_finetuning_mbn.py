@@ -281,24 +281,25 @@ class MAEFineTuning(pl.LightningModule):
             img_mask = (img != 0).float()
             img_mask = img_mask.to(self.device)
 
-            if self.test_image_count < 5:
-                print("img_mask shape:", img_mask.shape)
-                print("gt_mask shape:", gt_mask.shape)
-                combined_mask = img_mask*gt_mask
+        
+            print("img_mask shape:", img_mask.shape)
+            print("gt_mask shape:", gt_mask.shape)
+            combined_mask = img_mask*gt_mask
 
-                print("combined_mask shape:", combined_mask.shape)
+            print("combined_mask shape:", combined_mask.shape)
 
-                masked_pred = pred * combined_mask.cpu().numpy()
-                masked_gt_e = gt_e * combined_mask.cpu().numpy()
+            masked_pred = pred * combined_mask.cpu().numpy()
+            masked_gt_e = gt_e * combined_mask.cpu().numpy()
 
-                pred = torch.from_numpy(pred).unsqueeze(0)
-                gt_e = gt_e.unsqueeze(0)
-                img = np.asarray(255 * img[0,:,:,:], dtype='uint8').transpose(1,2,0)
-                print("img",img.shape)
+            pred = torch.from_numpy(pred).unsqueeze(0)
+            gt_e = gt_e.unsqueeze(0)
+            img = np.asarray(255 * img[0,:,:,:], dtype='uint8')#.transpose(1,2,0)
+            print("img",img.shape)
+            if self.test_image_count < 40:
                 self.log_images(
                         img,
                         masked_pred[0,0,:,:],
-                        gt_e[0,:,:],
+                         gt_e[0,:,:],
                         test_dir
                     )
             self.test_image_count += 1
@@ -409,6 +410,8 @@ class MAEFineTuning(pl.LightningModule):
             data = np.transpose(data, (1, 2, 0))
         elif data.ndim == 4 and data.shape[1] == 3:
             data = np.transpose(data[0], (1, 2, 0))
+            
+        data = data[:, :, [2, 1, 0]] 
 
         data = np.clip(data, 0, 1)
 

@@ -19,10 +19,10 @@ class MaridaDataModule(pl.LightningDataModule):
         super().__init__()
         self.batch_size = batch_size
         self.root_dir = root_dir
-        self.path ="/home/jovyan/SSLORS/marida"
+        self.path ="/mnt/storagecube/joanna/MARIDA"
         self.transform = transform
         self.standardization = standardization
-        self.img_only_dir = "/home/jovyan/SSLORS/marida/roi_data"
+        self.img_only_dir = "/mnt/storagecube/joanna/MARIDA/roi_data"
         self.full_finetune = full_finetune
         self.random = random
         self.ssl = ssl

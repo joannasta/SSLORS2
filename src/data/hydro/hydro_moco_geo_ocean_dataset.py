@@ -22,7 +22,7 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
         transforms: Optional[Callable] = None,
         location: str = "agia_napa",
         model_name: str = "moco-ocean-features",
-        csv_features_path: str = "/home/joanna/SSLORS/src/utils/train_ocean_labels_3_clusters.csv",
+        csv_features_path: str = "/home/joanna/SSLORS/src/utils/train_ocean_labels_3_clusters_correct.csv",
     ):
         self.path_dataset = Path(path_dataset)
         all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))

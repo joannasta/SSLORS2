@@ -133,7 +133,7 @@ class MAEFineTuning(pl.LightningModule):
                 embedding = embedding.squeeze(1)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
             elif self.model_type == "mocogeo":
-                embedding = embedding.squeeze(0)
+                embedding = embedding.squeeze(1)
                 print("embedding shape before backbone:", embedding.shape)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
                 print("embedding shape after backbone:", processed_embedding.shape)
@@ -420,5 +420,5 @@ class MAEFineTuning(pl.LightningModule):
     def configure_optimizers(self):
         
         optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
-        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1, verbose=True)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1)
         return [optimizer], [scheduler]
