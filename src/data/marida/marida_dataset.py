@@ -174,7 +174,6 @@ class MaridaDataset(Dataset):
                 with torch.no_grad():
                     if self.pretrained_model.__class__.__name__ == "MAE":
                         img = F.interpolate(img, size=(224,224), mode='nearest')
-                        print("img",img.shape)
                         embedding = self.pretrained_model.forward_encoder(img)
                     elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
                         img = img[:,1:4,:,:]

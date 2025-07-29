@@ -21,7 +21,7 @@ class HydroMaeOceanFeaturesDataset(Dataset):
         bands: Optional[List[str]] = None,
         transforms: Optional[Callable] = None,
         location: str = "agia_napa",
-        model_name: str = "mae",
+        model_name: str = "mae", 
         csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv",
         ocean_flag=True
     ):
@@ -125,5 +125,5 @@ class HydroMaeOceanFeaturesDataset(Dataset):
         chlorophyll = float(features_row['chlorophyll'])
             
         ocean_features = torch.tensor([secchi, bathy, chlorophyll], dtype=torch.float32)
-        sample = sample[1:4,:,:]    
+        sample = sample[0:11,:,:]    
         return sample, ocean_features

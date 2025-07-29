@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=1-00:00:00              # Time limit
-#SBATCH --output=logs/finetune_slurm_mbn_mae_ocean_puck_lagoon.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_mbn_mae_ocean_puck_lagoon.err   # Error log
+#SBATCH --output=logs/finetune_slurm_mbn_mae_ocean_agia_napa.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_mbn_mae_ocean_agia_napa.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -24,7 +24,9 @@ VAL_BATCH_SIZE=1                     # Validation batch size
 LEARNING_RATE=1e-4 #1e-5                  # Learning rate
 EPOCHS=10                              # Number of epochs
 
-PRETRAINED_MODEL="./results/trains/mae_ocean/version_6/checkpoints/epoch=99-step=9900.ckpt"
+PRETRAINED_MODEL="./results/trains/mae_ocean/version_8/checkpoints/epoch=99-step=2900.ckpt"
+
+#"./results/trains/mae_ocean/version_6/checkpoints/epoch=99-step=9900.ckpt"
 #"./results/trains/moco-geo-ocean/version_5/checkpoints/epoch=199-step=16800.ckpt"
 #"./results/trains/geo_aware/version_9/checkpoints/epoch=199-step=19800.ckpt"
 #"./results/trains/moco/version_55/checkpoints/epoch=99-step=9900.ckpt"
@@ -48,7 +50,7 @@ PRETRAINED_MODEL="./results/trains/mae_ocean/version_6/checkpoints/epoch=99-step
 #"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
 DATASET_PATH="/mnt/storagecube/joanna/MagicBathyNet/"  # Dataset path
 SEED=42                                   # Seed for reproducibility
-LOCATION=puck_lagoon
+LOCATION=agia_napa
 
 # --- Run Training ---
 srun python -u finetune_mbn.py \

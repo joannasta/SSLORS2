@@ -1,19 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import numpy as np
-import matplotlib.pyplot as plt
-import os
-import scipy
-import pytorch_lightning as pl
-from torch.utils.tensorboard import SummaryWriter
-from torchvision.transforms import RandomCrop
-
 
 class DoubleConv(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(DoubleConv, self).__init__()
-        self.double_conv = nn.Sequential(
+        self.conv_block = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
@@ -21,35 +13,36 @@ class DoubleConv(nn.Module):
         )
 
     def forward(self, x):
-        return self.double_conv(x)
-
+        return self.conv_block(x)
 
 class Down(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Down, self).__init__()
-        self.maxpool_conv = nn.Sequential(
+        self.down_conv = nn.Sequential(
             nn.MaxPool2d(2),
             DoubleConv(in_channels, out_channels)
         )
 
     def forward(self, x):
-        return self.maxpool_conv(x)
-
+        return self.down_conv(x)
 
 class Up(nn.Module):
-    def __init__(self, in_channels_from_prev_layer, in_channels_skip_connection, out_channels_for_this_block):
+    def __init__(self, in_channels_up, in_channels_skip, out_channels):
         super(Up, self).__init__()
-        self.up = nn.ConvTranspose2d(in_channels_from_prev_layer, out_channels_for_this_block, kernel_size=2, stride=2)
-        self.conv = DoubleConv(out_channels_for_this_block + in_channels_skip_connection, out_channels_for_this_block)
+        self.up = nn.ConvTranspose2d(in_channels_up, out_channels, kernel_size=2, stride=2)
+        self.conv = DoubleConv(out_channels + in_channels_skip, out_channels)
 
-    def forward(self, x_upsampled, x_skip):
-        x_upsampled = self.up(x_upsampled)
-        diffY = x_skip.size()[2] - x_upsampled.size()[2]
-        diffX = x_skip.size()[3] - x_upsampled.size()[3]
-        x_upsampled = F.pad(x_upsampled, [diffX // 2, diffX - diffX // 2, diffY // 2, diffY - diffY // 2])
-        x = torch.cat([x_skip, x_upsampled], dim=1)
+    def forward(self, x_up, x_skip):
+        x_up = self.up(x_up)
+        
+        diff_y = x_skip.size()[2] - x_up.size()[2]
+        diff_x = x_skip.size()[3] - x_up.size()[3]
+        
+        x_up = F.pad(x_up, [diff_x // 2, diff_x - diff_x // 2,
+                            diff_y // 2, diff_y - diff_y // 2])
+        
+        x = torch.cat([x_skip, x_up], dim=1)
         return self.conv(x)
-
 
 class UNet_bathy(nn.Module):
     def __init__(self, in_channels, out_channels, model_type="mae", full_finetune=False):
@@ -58,35 +51,31 @@ class UNet_bathy(nn.Module):
         self.model_type = model_type
         self.full_finetune = full_finetune
 
-        self.n_channels = in_channels
-        self.n_outputs = out_channels
-
         self.inc = DoubleConv(in_channels, 32)
         self.down1 = Down(32, 64)
         self.down2 = Down(64, 128)
         self.down3 = Down(128, 256)
 
-        cat_channels_in = 256
+        bottleneck_input_channels = 256
             
         if model_type == "mae":
-            cat_channels_in += 256
-            self.mae_pre_emb_proj = nn.Linear(768, 512) 
-            self.mae_emb_proj = nn.Linear(512, 256 * 32 * 32)
-        if model_type == "mae_ocean":
-            cat_channels_in += 256
-            self.mae_pre_emb_proj = nn.Linear(768, 512) 
-            self.mae_emb_proj = nn.Linear(512, 256 * 32 * 32)
+            bottleneck_input_channels += 256
+            self.mae_pre_proj = nn.Linear(768, 512) 
+            self.mae_spatial_proj = nn.Linear(512, 256 * 32 * 32)
+        elif model_type == "mae_ocean":
+            bottleneck_input_channels += 256
+            self.mae_ocean_pre_proj = nn.Linear(768, 512) 
+            self.mae_ocean_spatial_proj = nn.Linear(512, 256 * 32 * 32)
         elif model_type == "moco":
-            cat_channels_in += 256
-            # CHANGE THIS LINE: input features should be 512, not 2048
-            self.moco_pre_emb_proj = nn.Linear(512, 512) 
-            self.moco_emb_proj = nn.Linear(512, 256 * 32 * 32)
+            bottleneck_input_channels += 256
+            self.moco_pre_proj = nn.Linear(512, 512) 
+            self.moco_spatial_proj = nn.Linear(512, 256 * 32 * 32)
         elif model_type in ["geo_aware","ocean_aware"]:
-            cat_channels_in += 512
+            bottleneck_input_channels += 512
         else:
-            raise NotImplementedError(f"Model type '{model_type}' not supported for embedding processing in UNet_bathy.")
+            raise NotImplementedError(f"Model type '{model_type}' not supported.")
         
-        self.cat_to_bot_proj = nn.Linear(cat_channels_in, 512)
+        self.feature_linear = nn.Linear(bottleneck_input_channels, 512)
 
         self.bottleneck = DoubleConv(512, 512)
 
@@ -96,7 +85,7 @@ class UNet_bathy(nn.Module):
 
         self.outc = nn.Conv2d(32, out_channels, kernel_size=1)
 
-    def forward(self, x_embedding, images):
+    def forward(self, embedding, images):
         images = images.to(self.device)
 
         x1 = self.inc(images)
@@ -105,44 +94,50 @@ class UNet_bathy(nn.Module):
         x4 = self.down3(x3)
 
         fused_features = None
-
+        
         if self.model_type == "mae":
-            if x_embedding.dim() == 3 and x_embedding.shape[1] == 1:
-                cls_token = x_embedding.squeeze(1) 
-            elif x_embedding.dim() == 2:
-                cls_token = x_embedding
+            if embedding.dim() == 4:
+                cls_feat = embedding.squeeze(1)[:, 0, :]
+            elif embedding.dim() == 3:
+                cls_feat = embedding[:, 0, :]
+            elif embedding.dim() == 2 and embedding.shape[-1] == 768:
+                cls_feat = embedding
             else:
-                raise ValueError(f"Unexpected x_embedding dimensions for mae: {x_embedding.shape}")
+                raise ValueError(f"Unexpected embedding dimensions for {self.model_type}: {embedding.shape}.")
             
-            processed_embedding = self.mae_pre_emb_proj(cls_token)
+            proj_emb = self.mae_pre_proj(cls_feat)
+            spatial_flat = self.mae_spatial_proj(proj_emb)
             
-            output_of_emb_proj = self.mae_emb_proj(processed_embedding)
-            emb_spat_proj = output_of_emb_proj.view(processed_embedding.shape[0], 256, 32, 32)
+            spatial_2d = spatial_flat.view(embedding.shape[0], 256, 32, 32)
+            upsampled_emb = F.interpolate(spatial_2d, size=x4.shape[2:], mode='bilinear', align_corners=False)
+            fused_features = torch.cat([x4, upsampled_emb], dim=1)
+
+        elif self.model_type == "mae_ocean":
+            if embedding.dim() == 4:
+                cls_feat = embedding.squeeze(1)[:, 0, :]
+            elif embedding.dim() == 3:
+                cls_feat = embedding[:, 0, :]
+            elif embedding.dim() == 2 and embedding.shape[-1] == 768:
+                cls_feat = embedding
+            else:
+                raise ValueError(f"Unexpected embedding dimensions for {self.model_type}: {embedding.shape}.")
+
+            proj_emb = self.mae_ocean_pre_proj(cls_feat) 
+            spatial_flat = self.mae_ocean_spatial_proj(proj_emb)
             
-            emb_interp = F.interpolate(emb_spat_proj, size=x4.shape[2:], mode='bilinear', align_corners=False)
-            fused_features = torch.cat([x4, emb_interp], dim=1)
+            spatial_2d = spatial_flat.view(embedding.shape[0], 256, 32, 32)
+            upsampled_emb = F.interpolate(spatial_2d, size=x4.shape[2:], mode='bilinear', align_corners=False)
+            fused_features = torch.cat([x4, upsampled_emb], dim=1)
 
         elif self.model_type == "moco":
-            if x_embedding.dim() == 3 and x_embedding.shape[1] == 1:
-                moco_embedding = x_embedding.squeeze(1) 
-            elif x_embedding.dim() == 2:
-                moco_embedding = x_embedding
-            else:
-                raise ValueError(f"Unexpected x_embedding dimensions for moco: {x_embedding.shape}")
-            
-            processed_embedding = self.moco_pre_emb_proj(moco_embedding)
-            
-            output_of_emb_proj = self.moco_emb_proj(processed_embedding)
-            emb_spat_proj = output_of_emb_proj.view(processed_embedding.shape[0], 256, 32, 32)
-            
-            emb_interp = F.interpolate(emb_spat_proj, size=x4.shape[2:], mode='bilinear', align_corners=False)
-            fused_features = torch.cat([x4, emb_interp], dim=1)
+            proj_emb = self.moco_pre_proj(embedding)
+            spatial_flat = self.moco_spatial_proj(proj_emb)
+            spatial_2d = spatial_flat.view(embedding.shape[0], 256, 32, 32)
+            upsampled_emb = F.interpolate(spatial_2d, size=x4.shape[2:], mode='bilinear', align_corners=False)
+            fused_features = torch.cat([x4, upsampled_emb], dim=1)
 
         elif self.model_type in ["geo_aware","ocean_aware"]:
-            if x_embedding.dim() == 3 and x_embedding.shape[1] == 1:
-                x_embedding = x_embedding.squeeze(1)
-
-            emb_expanded = x_embedding.unsqueeze(2).unsqueeze(3)
+            emb_expanded = embedding.unsqueeze(2).unsqueeze(3)
             emb_expanded = emb_expanded.expand(-1, -1, x4.shape[2], x4.shape[3])
             fused_features = torch.cat([x4, emb_expanded], dim=1)
         else:
@@ -151,7 +146,7 @@ class UNet_bathy(nn.Module):
         bs, ch_fused, h_fused, w_fused = fused_features.shape
         fused_reshaped = fused_features.permute(0, 2, 3, 1).reshape(bs * h_fused * w_fused, ch_fused)
 
-        bottleneck_in = self.cat_to_bot_proj(fused_reshaped).reshape(bs, 512, h_fused, w_fused)
+        bottleneck_in = self.feature_linear(fused_reshaped).reshape(bs, 512, h_fused, w_fused)
 
         bottleneck_out = self.bottleneck(bottleneck_in)
 
