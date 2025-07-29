@@ -24,7 +24,7 @@ random.seed(1)
 
 class MagicBathyNetDataset(Dataset):
     def __init__(self, root_dir, transform=None, split_type='train', cache=True, augmentation=True, pretrained_model=None,location="agia_napa",
-                 full_finetune=True, random=False, ssl=False,
+                 full_finetune=False, random=False, ssl=True,
                  image_ids_for_this_split=None):
         print(f"Initializing MagicBathyNetDataset for split: {split_type}")
         self.root_dir = root_dir
@@ -44,6 +44,7 @@ class MagicBathyNetDataset(Dataset):
         self.full_finetune = full_finetune
         self.random = random
         self.ssl = ssl
+        
         
         self.processor = DatasetProcessor(
             img_dir=Path(self.root_dir) / location/ 'img' / 's2',
@@ -72,6 +73,10 @@ class MagicBathyNetDataset(Dataset):
         self.data_files = filtered_data_files
         self.label_files = filtered_label_files
         
+        print("full_finetune:", self.full_finetune)
+        print("random:",self.random)
+        print("ssl:",self.ssl)
+        
         self.embeddings = None
         print("Starting embedding creation...")
         if self.pretrained_model is not None:
@@ -97,7 +102,7 @@ class MagicBathyNetDataset(Dataset):
         return 10000
 
     def _create_embeddings(self):
-        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"],location=self.location)
+        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"],location=self.location,ocean_flag=False)
         print(f"Length of hydro_dataset: {len(hydro_dataset)}")
         self.embeddings = []
         def weights_init(m):
@@ -116,16 +121,19 @@ class MagicBathyNetDataset(Dataset):
 
         for idx in range(len(hydro_dataset)):
             img = hydro_dataset[idx]
-            img = img.unsqueeze(0)
-            img = F.interpolate(img, size=(256,256), mode='nearest')
             
             if self.full_finetune:
+                img = img.unsqueeze(0)
+                img = F.interpolate(img, size=(256,256), mode='nearest')
                 self.embeddings.append(img.cpu())
             elif self.random or self.ssl:
                 with torch.no_grad():
                     img = img.cuda()
+                    img = img.unsqueeze(0)
+                    img = F.interpolate(img, size=(224,224), mode='nearest')
                     self.pretrained_model.to(img.device)
-                    if self.pretrained_model.__class__.__name__ == "MAE":
+                    print("self.pretrained_model.__class__.__name__",self.pretrained_model.__class__.__name__)
+                    if self.pretrained_model.__class__.__name__ == "MAE" or self.pretrained_model.__class__.__name__  == 'MAE_Ocean':
                         embedding = self.pretrained_model.forward_encoder(img)
                     elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
                         embedding = self.pretrained_model.backbone(img).flatten(start_dim=1)

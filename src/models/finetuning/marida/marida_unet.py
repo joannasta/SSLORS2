@@ -38,7 +38,6 @@ class Up(nn.Module):
 
     def forward(self, x1, x2):
         x1 = self.up(x1)
-        # Pad x1 if its spatial dimensions don't match x2 due to upsampling or initial image size
         diffY = x2.size()[2] - x1.size()[2]
         diffX = x2.size()[3] - x1.size()[3]
 
@@ -50,7 +49,7 @@ class Up(nn.Module):
 
 
 class UNet_Marida(nn.Module):
-    def __init__(self, input_channels=11, out_channels=1, hidden_channels=16, embedding_dim=128,model_type="mae"):
+    def __init__(self, input_channels=11, out_channels=1, hidden_channels=16, embedding_dim=128, model_type="mae"):
         super(UNet_Marida, self).__init__()
 
         self.inc = nn.Sequential(
@@ -61,13 +60,16 @@ class UNet_Marida(nn.Module):
             nn.BatchNorm2d(hidden_channels),
             nn.ReLU(inplace=True))
 
-        self.mae_feature_fusion_projection = nn.Linear(8 * hidden_channels + embedding_dim, 8 * hidden_channels)
+        self.mae_spatial_projection = nn.Linear(embedding_dim, embedding_dim * 16 * 16)
+        
+        self.mae_input_embedding_transform = nn.Linear(768, embedding_dim) 
+
+
+        self.mae_feature_fusion_projection = nn.Linear(embedding_dim + (8 * hidden_channels), embedding_dim)
+
         self.moco_projection = nn.Linear(in_features=512, out_features=embedding_dim * 16 * 16)
         self.mocogeo_projection = nn.Linear(in_features=512, out_features=embedding_dim * 16 * 16)
 
-        # Adjusted combined_projection for mocogeo branch
-        # Input features: embedding_dim (from processed_x_embedding) + 8*hidden_channels (from x5)
-        # Output features: embedding_dim (to match the target reshape and align with UNet decoder path)
         self.combined_projection = nn.Linear(embedding_dim + (8 * hidden_channels), embedding_dim)
 
 
@@ -76,8 +78,6 @@ class UNet_Marida(nn.Module):
         self.down3 = Down(4 * hidden_channels, 8 * hidden_channels)
         self.down4 = Down(8 * hidden_channels, 8 * hidden_channels)
 
-        # Ensure input channels for Up layers are correct after fusion
-        # For up1, it receives combined_projected (embedding_dim channels) and x4 (8 * hidden_channels)
         self.up1 = Up(embedding_dim + (8 * hidden_channels), 4 * hidden_channels)
         self.up2 = Up((4 * hidden_channels) + (4 * hidden_channels), 2 * hidden_channels)
         self.up3 = Up((2 * hidden_channels) + (2 * hidden_channels), hidden_channels)
@@ -101,30 +101,62 @@ class UNet_Marida(nn.Module):
         combined_projected = None
 
         if self.model_type == "mae":
-            x_embedding_spatial = x_embedding
+            batch_size, _, H_x5, W_x5 = x5.shape 
+            
+            # Ensure x_embedding is 3D [batch_size, seq_len, features] before processing.
+            # If it's 4D [1, batch_size, seq_len, features], you need to remove the first dimension.
+            if x_embedding.dim() == 4 and x_embedding.shape[0] == 1:
+                x_embedding = x_embedding.squeeze(0) # Remove the extra 1st dimension
+
+            # Reduce `x_embedding` from [batch_size, seq_len, features] to [batch_size, features]
+            reduced_x_embedding = torch.mean(x_embedding, dim=1) 
+            
+            # Project the features from `768` to `embedding_dim`
+            transformed_x_embedding = self.mae_input_embedding_transform(reduced_x_embedding) 
+            
+            # Project the `embedding_dim` vector into a flattened spatial size
+            projected_embedding_flat = self.mae_spatial_projection(transformed_x_embedding)
+            
+            # Reshape into a 4D tensor with the same spatial dimensions as x5
+            x_embedding_spatial = projected_embedding_flat.view(batch_size, self.embedding_dim, H_x5, W_x5)
+
             combined = torch.cat([x_embedding_spatial, x5], dim=1)
             
-            batch_size, channels, height, width = combined.shape
-            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels)
+            batch_size_c, channels_c, height_c, width_c = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size_c * height_c * width_c, channels_c)
             
-            processed_linear_output = self.mae_feature_fusion_projection(combined_reshaped) # Use mae specific projection
+            processed_linear_output = self.mae_feature_fusion_projection(combined_reshaped)
             
-            combined_projected = processed_linear_output.reshape(batch_size, self.mae_feature_fusion_projection.out_features, height, width)
+            combined_projected = processed_linear_output.reshape(batch_size_c, self.mae_feature_fusion_projection.out_features, height_c, width_c)
 
         elif self.model_type == "moco":
+            # Handle x_embedding's potential 4D shape for consistency
+            if x_embedding.dim() == 4 and x_embedding.shape[0] == 1:
+                x_embedding = x_embedding.squeeze(0)
+            # If moco/mocogeo x_embedding is [batch_size, seq_len, 512], reduce it
+            if x_embedding.dim() == 3 and x_embedding.shape[2] == 512:
+                x_embedding = torch.mean(x_embedding, dim=1) # Reduce seq_len
+
             x_embedding_flat_projected = self.moco_projection(x_embedding)
             processed_x_embedding = x_embedding_flat_projected.view(
                 x5.shape[0], self.embedding_dim, x5.shape[2], x5.shape[3]
             )
             combined = torch.cat([processed_x_embedding, x5], dim=1)
 
-            batch_size, channels_combined, height, width = combined.shape
-            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
+            batch_size_c, channels_c, height_c, width_c = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size_c * height_c * width_c, channels_c)
             
             processed_linear_output = self.combined_projection(combined_reshaped)
-            combined_projected = processed_linear_output.reshape(batch_size, self.combined_projection.out_features, height, width)
+            combined_projected = processed_linear_output.reshape(batch_size_c, self.combined_projection.out_features, height_c, width_c)
 
-        elif self.model_type == "mocogeo":
+        elif self.model_type == "geo_aware ":
+            # Handle x_embedding's potential 4D shape for consistency
+            if x_embedding.dim() == 4 and x_embedding.shape[0] == 1:
+                x_embedding = x_embedding.squeeze(0)
+            # If moco/mocogeo x_embedding is [batch_size, seq_len, 512], reduce it
+            if x_embedding.dim() == 3 and x_embedding.shape[2] == 512:
+                x_embedding = torch.mean(x_embedding, dim=1) # Reduce seq_len
+            
             x_embedding_flat_projected = self.mocogeo_projection(x_embedding)
             
             processed_x_embedding = x_embedding_flat_projected.view(
@@ -132,13 +164,35 @@ class UNet_Marida(nn.Module):
             )
             combined = torch.cat([processed_x_embedding, x5], dim=1)
 
-            batch_size, channels_combined, height, width = combined.shape
-            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size * height * width, channels_combined)
+            batch_size_c, channels_c, height_c, width_c = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size_c * height_c * width_c, channels_c)
             
             processed_linear_output = self.combined_projection(combined_reshaped)
-            # This reshape is now correct because self.combined_projection.out_features is self.embedding_dim
-            combined_projected = processed_linear_output.reshape(batch_size, self.embedding_dim, height, width)
+            combined_projected = processed_linear_output.reshape(batch_size_c, self.embedding_dim, height_c, width_c)
+        elif self.model_type == "ocean_aware":
+            # Handle x_embedding's potential 4D shape for consistency
+            if x_embedding.dim() == 4 and x_embedding.shape[0] == 1:
+                x_embedding = x_embedding.squeeze(0)
+            # If moco/mocogeo x_embedding is [batch_size, seq_len, 512], reduce it
+            if x_embedding.dim() == 3 and x_embedding.shape[2] == 512:
+                x_embedding = torch.mean(x_embedding, dim=1) # Reduce seq_len
+            
+            x_embedding_flat_projected = self.mocogeo_projection(x_embedding)
+            
+            processed_x_embedding = x_embedding_flat_projected.view(
+                x5.shape[0], self.embedding_dim, x5.shape[2], x5.shape[3]
+            )
+            combined = torch.cat([processed_x_embedding, x5], dim=1)
 
+            batch_size_c, channels_c, height_c, width_c = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(batch_size_c * height_c * width_c, channels_c)
+            
+            processed_linear_output = self.combined_projection(combined_reshaped)
+            combined_projected = processed_linear_output.reshape(batch_size_c, self.embedding_dim, height_c, width_c)
+
+
+        else:
+            combined_projected = x5 
 
         x6 = self.up1(combined_projected, x4)
         x7 = self.up2(x6, x3)

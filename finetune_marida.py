@@ -34,8 +34,8 @@ class MarineDebrisPredictor:
         model_type: str = "mae"
     ):
         self.model_type = model_type
-        self.full_finetune = True
-        self.random = False
+        self.full_finetune = False
+        self.random = True
         self.ssl = False
         
         self._validate_paths(pretrained_weights_path, data_dir)
@@ -56,7 +56,12 @@ class MarineDebrisPredictor:
                     strict=False
                 )
 
-            elif self.model_type.lower() == "mocogeo":
+            elif self.model_type.lower() == "geo_aware":
+                self.pretrained_model = MoCoGeo.load_from_checkpoint(
+                    pretrained_weights_path,
+                    strict=False
+                )
+            elif self.model_type.lower() == "ocean_aware":
                 self.pretrained_model = MoCoGeo.load_from_checkpoint(
                     pretrained_weights_path,
                     strict=False

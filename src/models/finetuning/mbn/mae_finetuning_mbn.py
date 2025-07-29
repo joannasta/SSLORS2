@@ -86,8 +86,12 @@ class MAEFineTuning(pl.LightningModule):
 
         if self.full_finetune:
             if self.model_type == "mae":
+                print("embedding before",embedding.shape)
+                embedding = embedding.squeeze(1)
+                print("embedding after squeeze",embedding.shape)
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
-            elif self.model_type in ["moco", "mocogeo"]:
+                print("processed_embedding",processed_embedding.shape)
+            elif self.model_type in ["moco", "geo_aware","ocean_aware"]:
                 print("embedding shape:", embedding.shape)
                 embedding = embedding.squeeze(0)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
@@ -293,11 +297,11 @@ class MAEFineTuning(pl.LightningModule):
 
             pred = torch.from_numpy(pred).unsqueeze(0)
             gt_e = gt_e.unsqueeze(0)
-            img = np.asarray(255 * img[0,:,:,:], dtype='uint8')#.transpose(1,2,0)
+            img_log =  img[0,:,:,:]#.transpose(1,2,0)
             print("img",img.shape)
             if self.test_image_count < 40:
                 self.log_images(
-                        img,
+                        img_log,
                         masked_pred[0,0,:,:],
                          gt_e[0,:,:],
                         test_dir
@@ -446,7 +450,7 @@ class MAEFineTuning(pl.LightningModule):
         print("predicted_depth_display",predicted_depth.shape)
         plt.subplot(133)
         plt.imshow(predicted_depth, cmap='viridis_r', vmin=display_vmin, vmax=display_vmax)
-        plt.title("Predicted Depth")
+        plt.title(f"Predicted Depth for model {self.model_type} for region {self.location}")
         plt.colorbar(fraction=0.046, pad=0.04)
         plt.axis("off")
 

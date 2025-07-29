@@ -126,13 +126,22 @@ class MAEFineTuning(pl.LightningModule):
 
         if self.full_finetune:
             if self.model_type == "mae":
-                embedding = embedding.squeeze(0)
+                print("embedding before squeeze",embedding.shape)
+                embedding = embedding.squeeze(1)
+                print("embedding after squeeze",embedding.shape)
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
+                print("processed embedding shape before unsqueeze",processed_embedding.shape)
                 processed_embedding = processed_embedding.unsqueeze(0)
+                print("processed embedding shape after unsqueeze",processed_embedding.shape)
             elif self.model_type == "moco":
                 embedding = embedding.squeeze(1)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-            elif self.model_type == "mocogeo":
+            elif self.model_type == "geo_aware":
+                embedding = embedding.squeeze(1)
+                print("embedding shape before backbone:", embedding.shape)
+                processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
+                print("embedding shape after backbone:", processed_embedding.shape)
+            elif self.model_type == "ocean_aware":
                 embedding = embedding.squeeze(1)
                 print("embedding shape before backbone:", embedding.shape)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
@@ -284,7 +293,7 @@ class MAEFineTuning(pl.LightningModule):
         axes[1].axis('off')
 
         axes[2].imshow(visual_image)  # Use a colormap for labels
-        axes[2].set_title("Prediction")
+        axes[2].set_title(f"Prediction for {self.model_type}")
         axes[2].axis('off')
 
         # Create a colormap
@@ -391,7 +400,7 @@ class MAEFineTuning(pl.LightningModule):
 
         # Plot prediction (as class labels)
         axes[2].imshow(prediction)  # Use a colormap for labels
-        axes[2].set_title("Prediction")
+        axes[2].set_title(f"Prediction for model {self.model_type}")
         axes[2].axis('off')
 
         dir_rel = os.path.join(self.run_dir, log_dir)  # Relative path

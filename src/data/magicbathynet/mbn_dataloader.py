@@ -9,7 +9,7 @@ from config import train_images, test_images # Import these here
 
 class MagicBathyNetDataModule(pl.LightningDataModule):
     def __init__(self, root_dir, batch_size=1, transform=None, cache=True, pretrained_model=None, location="agia_napa",
-                 full_finetune=True, random=False, ssl=False):
+                 full_finetune=False, random=False, ssl=True):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size

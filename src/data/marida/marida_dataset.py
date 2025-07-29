@@ -50,7 +50,6 @@ class MaridaDataset(Dataset):
         self.path = Path(path)
         self.embeddings = []
         self.pretrained_model = pretrained_model
-        self.mode = mode
         self.standardization = transforms.Normalize(self.means[:11], self.stds[:11]) if standardization else None
         self.length = len(self.y)
         self.agg_to_water = agg_to_water
@@ -148,7 +147,8 @@ class MaridaDataset(Dataset):
         return self.ROIs
 
     def _create_embeddings(self):
-        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
+        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"],ocean_flag=False)
+        print(f"Length of hydro_dataset: {len(hydro_dataset)}")
         self.embeddings = []
 
         def weights_init(m):
@@ -173,6 +173,8 @@ class MaridaDataset(Dataset):
             if not self.full_finetune:
                 with torch.no_grad():
                     if self.pretrained_model.__class__.__name__ == "MAE":
+                        img = F.interpolate(img, size=(224,224), mode='nearest')
+                        print("img",img.shape)
                         embedding = self.pretrained_model.forward_encoder(img)
                     elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
                         img = img[:,1:4,:,:]

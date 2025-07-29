@@ -15,10 +15,10 @@ import cartopy.feature as cfeature
 # --- Configuration Paths ---
 TIF_DIRECTORY = Path('/mnt/storagecube/joanna/Hydro')
 #'/mnt/storagecube/joanna/ocean_features_projected.csv'
-OCEAN_FEATURES_PATH = Path("/home/joanna/SSLORS2/src/utils/ocean_features/ocean_features_combined.csv")
+OCEAN_FEATURES_PATH = Path("/home/joanna/SSLORS2/src/utils/ocean_features_nans_bathy.csv")
 
 # --- Clustering Parameters ---
-n_clusters = 2 # You can change this based on Elbow/Silhouette analysis
+n_clusters = 3 # You can change this based on Elbow/Silhouette analysis
 
 # --- Output Paths ---
 output_csv_path = Path(f"train_ocean_labels_{n_clusters}_clusters_correct.csv")
@@ -54,7 +54,7 @@ print(f"Found {len(tif_file_paths)} TIFF files in {TIF_DIRECTORY}.")
 
 matched_file_paths = []
 matched_geo_coords = []
-matched_ocean_features = []
+matched_ocean_features = [] # This will now only contain complete rows
 
 for file_path in tif_file_paths:
     try:
@@ -82,13 +82,21 @@ for file_path in tif_file_paths:
             if distance <= MAX_MATCH_DISTANCE and index != ocean_kdtree.n:
                 matched_row = ocean_df.iloc[index]
                 
-                matched_file_paths.append(str(file_path))
-                matched_geo_coords.append([tif_center_lon, tif_center_lat])
-                matched_ocean_features.append([
-                    matched_row['bathy'],
-                    matched_row['chlorophyll'],
-                    matched_row['secchi']
-                ])
+                # IMPORTANT: Check for NaN in the features *before* adding to matched_ocean_features
+                bathy_val = matched_row['bathy']
+                chlorophyll_val = matched_row['chlorophyll']
+                secchi_val = matched_row['secchi']
+
+                if pd.notna(bathy_val) and pd.notna(chlorophyll_val) and pd.notna(secchi_val):
+                    matched_file_paths.append(str(file_path))
+                    matched_geo_coords.append([tif_center_lon, tif_center_lat])
+                    matched_ocean_features.append([
+                        bathy_val,
+                        chlorophyll_val,
+                        secchi_val
+                    ])
+                else:
+                    print(f"Skipping {file_path} due to NaN values in ocean features after masking.")
 
     except rasterio.errors.RasterioIOError as e:
         print(f"Warning: Error opening {file_path}: {e}.")

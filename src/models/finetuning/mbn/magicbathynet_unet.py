@@ -67,15 +67,25 @@ class UNet_bathy(nn.Module):
         self.down3 = Down(128, 256)
 
         cat_channels_in = 256
-
-        if model_type in ["mae", "moco"]:
+            
+        if model_type == "mae":
             cat_channels_in += 256
-            self.emb_proj = nn.Linear(512, 256 * 32 * 32)
-        elif model_type == "mocogeo":
+            self.mae_pre_emb_proj = nn.Linear(768, 512) 
+            self.mae_emb_proj = nn.Linear(512, 256 * 32 * 32)
+        if model_type == "mae_ocean":
+            cat_channels_in += 256
+            self.mae_pre_emb_proj = nn.Linear(768, 512) 
+            self.mae_emb_proj = nn.Linear(512, 256 * 32 * 32)
+        elif model_type == "moco":
+            cat_channels_in += 256
+            # CHANGE THIS LINE: input features should be 512, not 2048
+            self.moco_pre_emb_proj = nn.Linear(512, 512) 
+            self.moco_emb_proj = nn.Linear(512, 256 * 32 * 32)
+        elif model_type in ["geo_aware","ocean_aware"]:
             cat_channels_in += 512
         else:
             raise NotImplementedError(f"Model type '{model_type}' not supported for embedding processing in UNet_bathy.")
-
+        
         self.cat_to_bot_proj = nn.Linear(cat_channels_in, 512)
 
         self.bottleneck = DoubleConv(512, 512)
@@ -96,13 +106,44 @@ class UNet_bathy(nn.Module):
 
         fused_features = None
 
-        if self.model_type in ["mae", "moco"]:
-            emb_spat_proj = self.emb_proj(x_embedding).view(x_embedding.shape[0], 256, 32, 32)
+        if self.model_type == "mae":
+            if x_embedding.dim() == 3 and x_embedding.shape[1] == 1:
+                cls_token = x_embedding.squeeze(1) 
+            elif x_embedding.dim() == 2:
+                cls_token = x_embedding
+            else:
+                raise ValueError(f"Unexpected x_embedding dimensions for mae: {x_embedding.shape}")
+            
+            processed_embedding = self.mae_pre_emb_proj(cls_token)
+            
+            output_of_emb_proj = self.mae_emb_proj(processed_embedding)
+            emb_spat_proj = output_of_emb_proj.view(processed_embedding.shape[0], 256, 32, 32)
+            
             emb_interp = F.interpolate(emb_spat_proj, size=x4.shape[2:], mode='bilinear', align_corners=False)
             fused_features = torch.cat([x4, emb_interp], dim=1)
 
-        elif self.model_type == "mocogeo":
-            emb_expanded = x_embedding.unsqueeze(2).unsqueeze(3).expand(-1, -1, x4.shape[2], x4.shape[3])
+        elif self.model_type == "moco":
+            if x_embedding.dim() == 3 and x_embedding.shape[1] == 1:
+                moco_embedding = x_embedding.squeeze(1) 
+            elif x_embedding.dim() == 2:
+                moco_embedding = x_embedding
+            else:
+                raise ValueError(f"Unexpected x_embedding dimensions for moco: {x_embedding.shape}")
+            
+            processed_embedding = self.moco_pre_emb_proj(moco_embedding)
+            
+            output_of_emb_proj = self.moco_emb_proj(processed_embedding)
+            emb_spat_proj = output_of_emb_proj.view(processed_embedding.shape[0], 256, 32, 32)
+            
+            emb_interp = F.interpolate(emb_spat_proj, size=x4.shape[2:], mode='bilinear', align_corners=False)
+            fused_features = torch.cat([x4, emb_interp], dim=1)
+
+        elif self.model_type in ["geo_aware","ocean_aware"]:
+            if x_embedding.dim() == 3 and x_embedding.shape[1] == 1:
+                x_embedding = x_embedding.squeeze(1)
+
+            emb_expanded = x_embedding.unsqueeze(2).unsqueeze(3)
+            emb_expanded = emb_expanded.expand(-1, -1, x4.shape[2], x4.shape[3])
             fused_features = torch.cat([x4, emb_expanded], dim=1)
         else:
             raise NotImplementedError(f"Model type '{self.model_type}' not supported during forward pass.")

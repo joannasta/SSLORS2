@@ -15,7 +15,7 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 # Define variables
 DEVICES=1 # Number of devices for training
 NUM_WORKERS=8 # Number of data loader workers
-MODEL=moco-geo # Model name
+MODEL=geo_aware # Model name
 TRAIN_BATCH_SIZE=64 # Training batch size
 VAL_BATCH_SIZE=64 # Validation batch size
 LEARNING_RATE=3e-3 # Learning rate

@@ -8,19 +8,22 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from src.models.moco_geo import MoCoGeo
 from src.models.moco import MoCo
 from src.models.mae import MAE
-from src.models.moco_geo_ocean import MoCoOceanFeatures # Assuming MoCoGeoOcean is defined in this module
+from src.models.mae_ocean import MAE_Ocean
+from src.models.moco_geo_ocean import MoCoOceanFeatures
 from src.data.hydro.hydro_dataloader_moco_geo import HydroMoCoGeoDataModule
 from src.data.hydro.hydro_dataloader_moco_geo_ocean import HydroOceanFeaturesDataModule
 from src.data.hydro.hydro_dataloader_moco import HydroMoCoDataModule
+from src.data.hydro.hydro_dataloader_mae_ocean import HydroMaeOceanFeaturesDataModule
 from src.data.hydro.hydro_dataloader import HydroDataModule
 from torchvision import transforms
 from src.utils.mocogeo_utils import GaussianBlur, TwoCropsTransform
 
 models = {
     "mae": MAE,
+    "mae_ocean" : MAE_Ocean,
     "moco": MoCo,
-    "moco-geo": MoCoGeo,
-    "moco-geo-ocean": MoCoOceanFeatures,
+    "geo_aware": MoCoGeo,
+    "ocean_aware": MoCoOceanFeatures,
 }
 
 def set_seed(seed):
@@ -40,6 +43,10 @@ def main(args):
     datamodule = None
     transform = None # Initialize transform here to ensure scope
 
+    ocean_flag = args.ocean 
+    print("Training model:",args.model)
+    print("Using Ocean dataset:", ocean_flag)
+    
     print(f"DEBUG: Initializing model and transform for model: {args.model}")
     # --- Initialize Model and Define Transform Pipeline based on selected model ---
     if args.model == "mae":
@@ -57,10 +64,32 @@ def main(args):
             batch_size=args.train_batch_size,
             transform=transform,
             model_name = args.model,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            ocean_flag=ocean_flag
         )
         print("DEBUG: MAE model and HydroDataModule initialized.")
-    elif args.model == "moco-geo":
+        
+    elif args.model == "mae_ocean":
+        transform = transforms.Compose([
+            transforms.RandomResizedCrop(224), 
+            transforms.RandomHorizontalFlip(),
+        ])
+        model = MAE_Ocean(
+            src_channels=12, 
+            mask_ratio=args.mask_ratio,
+            decoder_dim=args.decoder_dim,
+        )
+        datamodule = HydroMaeOceanFeaturesDataModule( 
+            data_dir=args.dataset,
+            batch_size=args.train_batch_size,
+            transform=transform,
+            model_name = args.model,
+            num_workers=args.num_workers,
+            ocean_flag=ocean_flag
+        )
+        print("DEBUG: MAE_Ocean model and HydroDataModule initialized.")
+        
+    elif args.model == "geo_aware":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
             transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
@@ -75,10 +104,11 @@ def main(args):
             batch_size=args.train_batch_size,
             transform=transform,
             model_name = args.model,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            ocean_flag=ocean_flag
         )
         print("DEBUG: MoCoGeo model and HydroMoCoGeoDataModule initialized.")
-    elif args.model == "moco-geo-ocean":
+    elif args.model == "ocean_aware":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
             transforms.RandomApply([GaussianBlur(sigma_range=[.1, 2.])], p=0.5), 
@@ -93,7 +123,8 @@ def main(args):
             batch_size=args.train_batch_size,
             transform=transform,
             model_name = args.model,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            ocean_flag=ocean_flag
         )
         print("DEBUG: MoCoOceanFeatures model and HydroOceanFeaturesDataModule initialized.")
         
@@ -112,7 +143,8 @@ def main(args):
             batch_size=args.train_batch_size,
             transform=transform,
             model_name = args.model,
-            num_workers=args.num_workers
+            num_workers=args.num_workers,
+            ocean_flag=ocean_flag
         )
         print("DEBUG: MoCo model and HydroMoCoDataModule initialized.")
     
@@ -164,7 +196,7 @@ def parse_args():
     parser.add_argument("--dataset", default="/data/joanna/Hydro", type=str, help="Path to dataset")
     parser.add_argument("--model", type=str, choices=models.keys(), default="mae", help="Model architecture")
     parser.add_argument("--epochs", default=100, type=int, help="Number of epochs")
-    parser.add_argument("--ocean", default=False, type=bool, help="Flag to indicate ocean dataset")
+    parser.add_argument("--ocean", default=True, type=bool, help="Flag to indicate ocean dataset")
 
     # MAE-specific arguments
     parser.add_argument("--mask-ratio", default=0.90, type=float, help="Masking ratio for MAE")

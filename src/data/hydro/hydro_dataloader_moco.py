@@ -29,6 +29,7 @@ class HydroMoCoDataModule(LightningDataModule):
         batch_size = 64, 
         model_name = "moco",
         num_workers: int = 8, 
+        ocean_flag=True
     ): 
         super().__init__() 
         self.data_dir = Path(data_dir) 
@@ -37,23 +38,25 @@ class HydroMoCoDataModule(LightningDataModule):
         self.batch_size = batch_size 
         self.model_name = model_name 
         self.num_workers = num_workers
+        self.ocean_flag=ocean_flag
 
     def setup(self, stage=None): 
-        # Use stage to load data depending on the task 
         if stage == 'fit' or stage is None: 
             self.train_dataset = HydroMoCoDataset( 
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
                 compute_stats=False, 
                 transform=self.transform, 
-                model_name = self.model_name 
+                model_name = self.model_name,
+                ocean_flag=self.ocean_flag
             ) 
             self.val_dataset = HydroMoCoDataset( 
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
                 compute_stats=False, 
                 transform=self.transform, 
-                model_name = self.model_name 
+                model_name = self.model_name,
+                ocean_flag=self.ocean_flag
             ) 
 
         if stage == 'test' or stage is None: 
@@ -63,7 +66,8 @@ class HydroMoCoDataModule(LightningDataModule):
                 bands=self.bands, 
                 compute_stats=False, 
                 transform=self.transform, 
-                model_name = self.model_name 
+                model_name = self.model_name,
+                ocean_flag=self.ocean_flag
             ) 
 
         if stage == 'predict': 
@@ -73,7 +77,8 @@ class HydroMoCoDataModule(LightningDataModule):
                 bands=self.bands, 
                 compute_stats=False, 
                 transform=self.transform, 
-                model_name = self.model_name 
+                model_name = self.model_name,
+                ocean_flag=self.ocean_flag
             ) 
 
     def train_dataloader(self): 

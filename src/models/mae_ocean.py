@@ -6,15 +6,17 @@ import numpy as np
 
 from config import get_means_and_stds
 from lightly.models import utils
-from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
+from lightly.models.modules import MAEDecoderTIMM
 
-class MAE(pl.LightningModule):
-    def __init__(self, src_channels=3, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None):
+class MAE_Ocean(pl.LightningModule):
+    def __init__(self, src_channels=3, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None, 
+                 num_ocean_features: int = 3):
         super().__init__()
-        self.src_channels = 11#src_channels
+        self.src_channels = 3#src_channels
         self.save_hyperparameters()
         self.mask_ratio = mask_ratio
         self.pretrained_weights = pretrained_weights
+        self.num_ocean_features = num_ocean_features
 
         vit = timm.create_model(
             'vit_base_patch16_224',
@@ -23,8 +25,11 @@ class MAE(pl.LightningModule):
             patch_size=16,        
         )
         self.patch_size = vit.patch_embed.patch_size[0]
-        self.backbone = MaskedVisionTransformerTIMM(vit=vit)
-        self.sequence_length = self.backbone.sequence_length
+        
+        self.vit_backbone = vit 
+        
+        self.num_image_patches = vit.patch_embed.num_patches
+        self.encoder_sequence_length = self.num_image_patches + 1 
 
         self.decoder = MAEDecoderTIMM(
             in_chans=self.src_channels,
@@ -39,6 +44,11 @@ class MAE(pl.LightningModule):
             attn_drop_rate=0.0,
         )
 
+        self.linear_projection_ocean_features = nn.Linear(
+            in_features=self.num_ocean_features,
+            out_features=vit.embed_dim
+        )
+        
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1) if self.src_channels == 3 else None
 
         if self.pretrained_weights:
@@ -52,65 +62,96 @@ class MAE(pl.LightningModule):
         self.val_batch_count = 0
 
     def load_pretrained_weights(self, pretrained_weights):
-        """Load pretrained weights into the model."""
         checkpoint = torch.load(pretrained_weights)
         model_state_dict = self.state_dict()
         pretrained_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model_state_dict}
         model_state_dict.update(pretrained_dict)
         self.load_state_dict(model_state_dict)
-        print("Pretrained weights loaded successfully.")
 
     def forward_encoder(self, images, idx_keep=None):
-        return self.backbone.encode(images=images, idx_keep=idx_keep)
+        x_patches = self.vit_backbone.patch_embed(images)
+
+        cls_token = self.vit_backbone.cls_token.expand(x_patches.shape[0], -1, -1)
+        
+        x = torch.cat((cls_token, x_patches), dim=1)
+        
+        x = x + self.vit_backbone.pos_embed
+
+        if idx_keep is not None:
+            x = utils.get_at_index(x, idx_keep)
+
+        for blk in self.vit_backbone.blocks:
+            x = blk(x)
+        x = self.vit_backbone.norm(x)
+        return x
 
     def forward_decoder(self, x_encoded, idx_keep, idx_mask):
         batch_size = x_encoded.shape[0]
         x_decode = self.decoder.embed(x_encoded)
 
-        x_masked = utils.repeat_token(self.decoder.mask_token, (batch_size, self.sequence_length))
+        x_masked = utils.repeat_token(self.decoder.mask_token, (batch_size, self.encoder_sequence_length))
         x_masked = utils.set_at_index(x_masked, idx_keep, x_decode.type_as(x_masked))
 
         x_decoded = self.decoder.decode(x_masked)
-
-        x_pred = utils.get_at_index(x_decoded, idx_mask)
+        
+        x_pred_full_sequence = utils.get_at_index(x_decoded, idx_mask)
+        
+        x_pred = x_pred_full_sequence
 
         x_pred = self.decoder.predict(x_pred)
         
         return x_pred
 
-    def forward(self, images):
+    def forward(self, images, ocean_features: torch.Tensor):
         batch_size = images.shape[0]
 
-        idx_keep, idx_mask = utils.random_token_mask(
-            size=(batch_size, self.sequence_length),
+        idx_keep_patches_only, idx_mask_patches_only = utils.random_token_mask(
+            size=(batch_size, self.num_image_patches),
             mask_ratio=self.mask_ratio,
             device=images.device,
         )
 
-        x_encoded = self.forward_encoder(images=images, idx_keep=idx_keep)
+        idx_keep_cls = torch.zeros((batch_size, 1), dtype=torch.long, device=images.device)
+        idx_keep_absolute = torch.cat(
+            (idx_keep_cls, idx_keep_patches_only + 1),
+            dim=1
+        )
+        
+        idx_mask_absolute = idx_mask_patches_only + 1
+
+        x_encoded = self.forward_encoder(images=images, idx_keep=idx_keep_absolute)
 
         x_pred = self.forward_decoder(
-            x_encoded=x_encoded, idx_keep=idx_keep, idx_mask=idx_mask
+            x_encoded=x_encoded, idx_keep=idx_keep_absolute, idx_mask=idx_mask_absolute
         )
 
         patches = utils.patchify(images, self.patch_size)
-        target = utils.get_at_index(patches, idx_mask - 1)
-        
-        pred_patches = utils.set_at_index(patches, idx_mask - 1, x_pred)
-        pred_img = utils.unpatchify(pred_patches, self.patch_size, self.src_channels)
+        target = utils.get_at_index(patches, idx_mask_patches_only)
 
-        masked_patches = utils.set_at_index(patches, idx_mask - 1, torch.zeros_like(x_pred))
-        masked_img = utils.unpatchify(masked_patches, self.patch_size, self.src_channels)
+        pred_patches_unmasked_idx = idx_mask_absolute - 1
+        pred_patches_full = utils.set_at_index(patches, pred_patches_unmasked_idx, x_pred)
+        pred_img = utils.unpatchify(pred_patches_full, self.patch_size, self.src_channels)
+
+        masked_patches_full = utils.set_at_index(patches, pred_patches_unmasked_idx, torch.zeros_like(x_pred))
+        masked_img = utils.unpatchify(masked_patches_full, self.patch_size, self.src_channels)
         
-        return x_pred, target, pred_img, masked_img
+        cls_embedding = x_encoded[:, 0, :]
+
+        projected_ocean_features = self.linear_projection_ocean_features(ocean_features)
+
+        combined_embedding = torch.cat((cls_embedding, projected_ocean_features), dim=1)
+
+        return x_pred, target, pred_img, masked_img, combined_embedding
     
     def training_step(self, batch, batch_idx):
-        if isinstance(batch, tuple) and len(batch) == 3: 
-            images = batch[0]
-        else:
-            images = batch 
+        images, ocean_features = batch
 
-        x_pred, target, pred_img, masked_img = self(images)
+        x_pred, target, pred_img, masked_img, combined_embedding = self(images, ocean_features)
+
+        print(f"Epoch {self.current_epoch}, Batch {batch_idx}:")
+        print(f"  x_pred min/max: {x_pred.min().item():.4f} / {x_pred.max().item():.4f}")
+        print(f"  target min/max: {target.min().item():.4f} / {target.max().item():.4f}")
+        print(f"  Loss before logging: {self.criterion(x_pred, target).item()}") # Print raw loss
 
         loss = self.criterion(x_pred, target)
 
@@ -142,15 +183,10 @@ class MAE(pl.LightningModule):
         self.total_train_loss = 0.0
         self.train_batch_count = 0
 
-        print(f"Train Loss (Epoch {self.current_epoch}): {avg_train_loss}")
-
     def validation_step(self, batch, batch_idx):
-        if isinstance(batch, tuple) and len(batch) == 3:
-            images = batch[0]
-        else:
-            images = batch
-        print("images shape",images.shape)
-        x_pred, target,pred_img,masked_img = self(images)
+        images, ocean_features = batch
+        
+        x_pred, target, pred_img, masked_img, combined_embedding = self(images, ocean_features)
 
         val_loss = self.criterion(x_pred, target)
 
@@ -165,8 +201,6 @@ class MAE(pl.LightningModule):
 
         self.total_val_loss = 0.0
         self.val_batch_count = 0
-
-        print(f"Validation Loss (Epoch {self.current_epoch}): {avg_val_loss}")
 
     def log_images(self, original_image, reconstructed_image, masked_image):
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -213,7 +247,9 @@ class MAE(pl.LightningModule):
     def on_train_epoch_start(self):
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
-        print(f"Starting epoch - Current learning rate: {current_lr}")
 
-    def get_embeddings_from_image(self,image):
-        return self.forward_encoder(image)
+    def get_embeddings_from_image(self,image, ocean_features: torch.Tensor):
+        image_embedding = self.forward_encoder(image)[:, 0, :]
+        projected_ocean_features = self.linear_projection_ocean_features(ocean_features)
+        
+        return torch.cat((image_embedding, projected_ocean_features), dim=1)

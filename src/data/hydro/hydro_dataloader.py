@@ -20,47 +20,54 @@ class HydroDataModule(LightningDataModule):
         data_dir: str,
         bands: List[str] = None,
         transform = None,
+        model_name="mae",
+        num_workers: int = 8, 
         batch_size = 64,
+        ocean_flag=True
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
         self.bands = bands
         self.transform = transform
+        self.model_name=model_name
         self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.ocean_flag=ocean_flag
 
     def setup(self, stage=None):
-        # Use stage to load data depending on the task
         if stage == 'fit' or stage is None:
             self.train_dataset = HydroDataset(
                 path_dataset=self.data_dir,
                 bands=self.bands,
                 compute_stats=False,
-                transforms=self.transform
+                transforms=self.transform,
+                ocean_flag=self.ocean_flag
             )
             
             self.val_dataset = HydroDataset(
                 path_dataset=self.data_dir,
                 bands=self.bands,
                 compute_stats=False,
-                transforms=self.transform
+                transforms=self.transform,
+                ocean_flag=self.ocean_flag
             )
 
         if stage == 'test' or stage is None:
-            # Initialize test dataset for evaluation
             self.test_dataset = HydroDataset(
                 path_dataset=self.data_dir,
                 bands=self.bands,
                 compute_stats=False,
-                transforms=self.transform
+                transforms=self.transform,
+                ocean_flag=self.ocean_flag
             )
 
         if stage == 'predict':
-            # You can set up a different dataset for prediction if needed
             self.predict_dataset = HydroDataset(
                 path_dataset=self.data_dir,
                 bands=self.bands,
                 compute_stats=False,
-                transforms=self.transform
+                transforms=self.transform,
+                ocean_flag=self.ocean_flag
             )
 
     def train_dataloader(self):
@@ -68,7 +75,7 @@ class HydroDataModule(LightningDataModule):
             self.train_dataset,
             batch_size=self.batch_size,
             shuffle=True,
-            num_workers=8,
+            num_workers=self.num_workers, 
             collate_fn=collate_fn
         )
 
@@ -78,7 +85,7 @@ class HydroDataModule(LightningDataModule):
                 self.val_dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=8,
+                num_workers=self.num_workers, 
                 collate_fn=collate_fn
             )
         else:
@@ -90,7 +97,7 @@ class HydroDataModule(LightningDataModule):
                 self.test_dataset,
                 batch_size=self.batch_size,
                 shuffle=False,
-                num_workers=8,
+                num_workers=self.num_workers, 
                 collate_fn=collate_fn
             )
         else:

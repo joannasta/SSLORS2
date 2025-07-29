@@ -2,63 +2,74 @@ import torch
 from torch.utils.data import Dataset, DataLoader, default_collate # Import default_collate
 from torchvision import transforms as T
 from pathlib import Path
-from typing import Optional, List
-from src.data.hydro.hydro_moco_geo_dataset import HydroMoCoGeoDataset
+from typing import Optional, List, Callable, Dict, Any
+
+from src.data.hydro.hydro_dataset_mae_ocean import HydroMaeOceanFeaturesDataset
 from pytorch_lightning import LightningDataModule
 
-class HydroMoCoGeoDataModule(LightningDataModule):
-    def __init__(self, data_dir: str, batch_size: int = 32, num_workers: int = 4, transform=None, model_name="mae", num_geo_clusters=100,ocean_flag=True):
+class HydroMaeOceanFeaturesDataModule(LightningDataModule): 
+    def __init__(
+            self, 
+            data_dir: str, 
+            batch_size: int = 32, 
+            num_workers: int = 4, 
+            transform: Optional[Callable] = None, 
+            model_name: str = "mae-ocean", 
+            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv",
+            ocean_flag = True
+            
+        ):
         super().__init__()
         self.data_dir = Path(data_dir)
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.transform = transform
         self.model_name = model_name
-        self.num_geo_clusters = num_geo_clusters
+        self.csv_features_path = csv_features_path
         self.ocean_flag=ocean_flag
         
-
-    def custom_collate_fn(self, batch):
+    def custom_collate_fn(self, batch: List[Any]): 
         batch = [item for item in batch if item is not None]
-        if not batch:
+        if not batch: 
+            print("Warning: Batch is empty after filtering None values. This batch will be skipped.")
             return None 
         return default_collate(batch)
 
 
     def setup(self, stage: Optional[str] = None):
-
         if stage == 'fit' or stage is None:
-            self.train_dataset = HydroMoCoGeoDataset(
+            self.train_dataset = HydroMaeOceanFeaturesDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                num_geo_clusters=self.num_geo_clusters,
+                csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
-            self.val_dataset = HydroMoCoGeoDataset(
-                path_dataset=self.data_dir,
+
+            self.val_dataset = HydroMaeOceanFeaturesDataset(
+                path_dataset=self.data_dir, 
                 transforms=self.transform,
                 model_name=self.model_name,
-                num_geo_clusters=self.num_geo_clusters,
+                csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
 
         if stage == 'test' or stage is None:
-            self.test_dataset = HydroMoCoGeoDataset(
+            self.test_dataset = HydroMaeOceanFeaturesDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                num_geo_clusters=self.num_geo_clusters,
+                csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
 
         if stage == 'predict':
-            self.predict_dataset = HydroMoCoGeoDataset(
+            self.predict_dataset = HydroMaeOceanFeaturesDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                num_geo_clusters=self.num_geo_clusters,
-                ocean_flag=ocean_flag
+                csv_features_path=self.csv_features_path,
+                ocean_flag=self.ocean_flag
             )
 
     def train_dataloader(self):
@@ -84,7 +95,7 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 collate_fn=self.custom_collate_fn 
             )
         else:
-            print("WARNING: Validation dataloader requested but val_dataset not initialized or is None.")
+            print("WARNING: Validation dataloader requested but val_dataset not initialized or is None. Returning None.")
             return None 
 
     def test_dataloader(self):
@@ -99,5 +110,5 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 collate_fn=self.custom_collate_fn 
             )
         else:
-            print("WARNING: Test dataloader requested but test_dataset not initialized or is None.")
-            return None 
+            print("WARNING: Test dataloader requested but test_dataset not initialized or is None. Returning None.")
+            return None

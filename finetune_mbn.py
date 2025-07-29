@@ -15,6 +15,7 @@ from torchvision import transforms
 # from src.utils.finetuning_utils import write_geotiff, read_geotiff
 from src.models.finetuning.mbn.mae_finetuning_mbn import MAEFineTuning
 from src.models.mae import MAE
+from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
 from src.models.moco_geo import MoCoGeo
 from src.data.magicbathynet.mbn_dataloader import MagicBathyNetDataModule
@@ -32,9 +33,9 @@ class BathymetryPredictor:
         resize_to: Tuple[int, int] = (3, 256, 256), # This tuple looks like (C, H, W)
         location: Optional[str] = "agia_napa",
     ):
-        self.full_finetune = True # Set to True for finetuning
+        self.full_finetune = False 
         self.random = False
-        self.ssl = False
+        self.ssl = True
         self.location = location
         self.model_type = model_type 
 
@@ -48,13 +49,23 @@ class BathymetryPredictor:
                 pretrained_weights_path,
                 strict=False # Use strict=False if the checkpoint has extra keys
             )
+        elif self.model_type.lower() == "mae_ocean":
+            self.pretrained_model = MAE_Ocean.load_from_checkpoint(
+                pretrained_weights_path,
+                strict=False
+            )
         elif self.model_type.lower() == "moco":
             self.pretrained_model = MoCo.load_from_checkpoint(
                 pretrained_weights_path,
                 strict=False
             )
 
-        elif self.model_type.lower() == "mocogeo":
+        elif self.model_type.lower() == "geo_aware":
+            self.pretrained_model = MoCoGeo.load_from_checkpoint(
+                pretrained_weights_path,
+                strict=False
+            )
+        elif self.model_type.lower() == "ocean_aware":
             self.pretrained_model = MoCoGeo.load_from_checkpoint(
                 pretrained_weights_path,
                 strict=False

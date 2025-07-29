@@ -20,12 +20,16 @@ class HydroMoCoGeoDataset(Dataset):
             transforms: Optional[Callable] = None,
             location: str = "agia_napa",
             model_name: str = "mae",
-            csv_path: str = "/home/joanna/SSLORS/src/data/hydro/train_geo_labels10_projected.csv",
-            num_geo_clusters: int = 100
+            csv_path: str = "/home/joanna/SSLORS2/src/data/hydro/train_ocean_labels10_projected.csv",
+            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv",
+            num_geo_clusters: int = 10,
+            ocean_flag=True
     ):
         self.path_dataset = Path(path_dataset)
-        self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
+        all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))
+        #self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
         self.num_geo_clusters = num_geo_clusters
+        self.ocean_flag=ocean_flag
         
         # Default bands if not provided
         self.bands = bands if bands is not None else [
@@ -41,7 +45,20 @@ class HydroMoCoGeoDataset(Dataset):
         self._load_normalization_params()
 
         self.geo_to_label = {}
-        if self.model_name == "moco-geo":
+        
+        self.csv_features_path = Path(csv_features_path)
+        
+        if self.ocean_flag:
+            self.file_path_to_csv_row_map = {}
+            self.file_paths = []
+
+            self.csv_df = None
+            
+            self._load_ocean_features_and_map(all_file_paths)
+        else:
+            self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
+            
+        if self.model_name == "geo_aware":
             self._load_geo_labels()
 
     def _load_normalization_params(self):
@@ -61,20 +78,47 @@ class HydroMoCoGeoDataset(Dataset):
 
     def _load_geo_labels(self):
         """Loads geo-labels from CSV for 'moco-geo' model."""
-        if not self.csv_path.exists():
+        df = pd.read_csv(self.csv_path)
+        self.geo_to_label = {row['file_dir']: row['label'] for _, row in df.iterrows()}
+        print(f"Successfully loaded {len(self.geo_to_label)} geo-labels from '{self.csv_path}'.")
+            
+    def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
+        print(f"Starting data mapping. CSV path: {self.csv_features_path}")
+        if not self.csv_features_path.exists():
             raise FileNotFoundError(
-                f"Required geo-labels CSV not found at '{self.csv_path}'. "
-                "For 'moco-geo' model, this CSV must pre-exist as automatic generation is disabled. "
-                "Please ensure the CSV file is in the correct location."
+                f"Ocean features CSV not found at '{self.csv_features_path}'. "
+                "Please ensure the CSV file is in the correct location and name."
             )
         try:
-            df = pd.read_csv(self.csv_path)
-            self.geo_to_label = {row['file_dir']: row['label'] for _, row in df.iterrows()}
-            print(f"Successfully loaded {len(self.geo_to_label)} geo-labels from '{self.csv_path}'.")
+            self.csv_df = pd.read_csv(self.csv_features_path)
+            print(f"Loaded CSV with {len(self.csv_df)} rows.")
+
+            if 'file_dir' not in self.csv_df.columns:
+                raise ValueError("CSV must contain a 'file_dir' column for direct file path mapping.")
+            
+            csv_file_dir_map = {Path(p).resolve(): row for p, row in self.csv_df.set_index('file_dir').iterrows()}
+            print(f"Created CSV file_dir to row map with {len(csv_file_dir_map)} entries.")
+
+            successful_matches = []
+            print(f"Starting direct mapping process for {len(all_file_paths)} TIF files.")
+            
+            for i, file_path in enumerate(all_file_paths):
+                if i % 1000 == 0:
+                    print(f"Matching TIF file {i}/{len(all_file_paths)}")
+                
+                resolved_file_path = file_path.resolve()
+                if resolved_file_path in csv_file_dir_map:
+                    matched_row = csv_file_dir_map[resolved_file_path]
+                    self.file_path_to_csv_row_map[file_path] = matched_row
+                    successful_matches.append(file_path)
+            
+            self.file_paths = successful_matches
+            print(f"Finished direct mapping. Successfully matched {len(self.file_paths)} TIF files.")
+
         except Exception as e:
             raise RuntimeError(
-                f"Error loading geo-labels from '{self.csv_path}': {e}. "
-                "Please ensure the CSV format (label,file_dir,lat,lon) is correct."
+                f"Error loading or processing ocean features from '{self.csv_features_path}': {e}. "
+                "Please ensure the CSV format includes a 'file_dir' column with correct paths."
             ) from e
 
     def __len__(self) -> int:
@@ -109,17 +153,13 @@ class HydroMoCoGeoDataset(Dataset):
             return None
 
     def _normalize_tensor(self, img_tensor: torch.Tensor) -> torch.Tensor:
-        """Applies normalization (mean/std) to a tensor and selects channels 1:4."""
-        # Ensure img_tensor is indeed a Tensor before subtraction
-        if not isinstance(img_tensor, torch.Tensor):
-            raise TypeError(f"Expected a torch.Tensor for normalization, but got {type(img_tensor)}")
-        
+        """Applies normalization (mean/std) to a tensor and selects channels 1:4."""    
         normalized_tensor = (img_tensor - self.means_tensor) / self.stds_tensor
-        # Select channels from 1 to 3 (inclusive), which is 1:4 in Python slicing
         return normalized_tensor[1:4, :, :]
 
     def __getitem__(self, idx: int):
         file_path = self.file_paths[idx]
+        print("file_path",file_path)
         sample = self._read_and_process_image(file_path)
 
         if sample is None:
@@ -129,37 +169,19 @@ class HydroMoCoGeoDataset(Dataset):
         if self.transforms is not None:
             sample = self.transforms(sample)
 
-        # Handle different model types and transformation outputs
-        if self.model_name == "moco-geo":
-            # Expecting a list of two tensors from TwoCropsTransform
-            if isinstance(sample, list) and len(sample) == 2:
-                q_raw, k_raw = sample
+        # Expecting a list of two tensors from TwoCropsTransform
+        if isinstance(sample, list) and len(sample) == 2:
+            q_raw, k_raw = sample
+
+            # Normalize query and key crops
+            q_normalized = self._normalize_tensor(q_raw)
+            k_normalized = self._normalize_tensor(k_raw)
                 
-                # Normalize query and key crops
-                q_normalized = self._normalize_tensor(q_raw)[1:4, :, :]  # Select channels 1:4
-                k_normalized = self._normalize_tensor(k_raw)[1:4, :, :] 
-                
-                pseudo_label = self.geo_to_label.get(str(file_path), -1)
-                if pseudo_label == -1:
-                    print(f"WARNING: No geo-label found for '{file_path}' in CSV. Using default label -1.")
-                
-                # Return as a tuple: (query_image, key_image, label)
-                return (q_normalized, k_normalized, torch.tensor(pseudo_label, dtype=torch.long))
+            pseudo_label = self.geo_to_label.get(str(file_path), -1)
+            print("pseudo_label",pseudo_label)
+            if pseudo_label == -1:
+                print(f"WARNING: No geo-label found for '{file_path}' in CSV. Using default label -1.")
             
-            # Fallback for moco-geo if transforms somehow returned a single tensor (less common)
-            elif isinstance(sample, torch.Tensor):
-                sample_normalized = self._normalize_tensor(sample)
-                pseudo_label = self.geo_to_label.get(str(file_path), -1)
-                if pseudo_label == -1:
-                    print(f"WARNING: No geo-label found for '{file_path}' in CSV. Using default label -1.")
-                return sample_normalized.float(), torch.tensor(pseudo_label, dtype=torch.long)
-            else:
-                # If the transformed 'sample' is neither a list of two Tensors nor a single Tensor
-                raise TypeError(
-                    f"Unexpected type returned by transforms for moco-geo model: {type(sample)}. "
-                    "Expected a list of two Tensors or a single Tensor."
-                )
-        else: # For other models (e.g., 'mae'), expect a single tensor
-            sample_normalized = self._normalize_tensor(sample)
-            sample_normalized = sample_normalized[1:4, :, :]  
-            return sample_normalized.float()
+            # Return as a tuple: (query_image, key_image, label)
+            return (q_normalized, k_normalized, torch.tensor(pseudo_label, dtype=torch.long))
+            
