@@ -137,6 +137,13 @@ class UNet_bathy(nn.Module):
             fused_features = torch.cat([x4, upsampled_emb], dim=1)
 
         elif self.model_type in ["geo_aware","ocean_aware"]:
+            # Ensure embedding is 2D [batch_size, feature_dim]
+            # If embedding is already higher dimension, you might need to reshape/squeeze it first
+            if embedding.dim() > 2:
+                # Example: if it's [B, 1, 1, 1, F], reshape to [B, F]
+                # You might need to adjust this based on the actual input shape
+                embedding = embedding.flatten(start_dim=1) 
+            
             emb_expanded = embedding.unsqueeze(2).unsqueeze(3)
             emb_expanded = emb_expanded.expand(-1, -1, x4.shape[2], x4.shape[3])
             fused_features = torch.cat([x4, emb_expanded], dim=1)

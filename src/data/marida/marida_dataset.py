@@ -172,7 +172,7 @@ class MaridaDataset(Dataset):
 
             if not self.full_finetune:
                 with torch.no_grad():
-                    if self.pretrained_model.__class__.__name__ == "MAE":
+                    if self.pretrained_model.__class__.__name__ == "MAE" or self.pretrained_model.__class__.__name__  == 'MAE_Ocean':
                         img = F.interpolate(img, size=(224,224), mode='nearest')
                         embedding = self.pretrained_model.forward_encoder(img)
                     elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:

@@ -19,8 +19,8 @@ def mask_bathymetry_beyond_secchi(input_csv_path, output_csv_path):
 
 
 if __name__ == "__main__":
-    input_file = "../train_ocean_labels_3_clusters.csv"
-    output_file = "../ocean_features_nans_bathy.csv"
+    input_file = "train_ocean_labels_3_clusters.csv"
+    output_file = "ocean_features_nans_bathy.csv"
 
     mask_bathymetry_beyond_secchi(input_file, output_file)
 

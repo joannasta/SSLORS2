@@ -9,7 +9,7 @@ import cartopy.feature as cfeature
 
 # Define the path to your ocean features CSV file
 #'/mnt/storagecube/joanna/ocean_features_projected.csv'
-OCEAN_FEATURES_PATH = Path('/home/joanna/SSLORS2/src/utils/ocean_features/ocean_features_combined.csv')
+OCEAN_FEATURES_PATH = Path('/mnt/storagecube/joanna/ocean_features_combined.csv')
 
 # Define output paths for the generated maps
 output_bathy_map_path = Path("geographic_bathymetry_distribution_proj.png")

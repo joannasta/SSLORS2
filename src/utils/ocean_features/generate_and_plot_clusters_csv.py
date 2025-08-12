@@ -15,18 +15,16 @@ import cartopy.feature as cfeature
 
 TIF_DIRECTORY = Path('/mnt/storagecube/joanna/Hydro')
 #'/mnt/storagecube/joanna/ocean_features_projected.csv'
-OCEAN_FEATURES_PATH = Path("/home/joanna/SSLORS2/src/utils/ocean_features_capped_bathy.csv")
+OCEAN_FEATURES_PATH = Path("/mnt/storagecube/joanna/ocean_features.csv")
 
 n_clusters = 3 
 
-output_csv_path = Path(f"train_ocean_labels_{n_clusters}_clusters_capped.csv")
-output_3d_plot_path = Path(f"3d_ocean_features_clusters_{n_clusters}_capped.png")
-output_map_plot_path = Path(f"geographic_clusters_map_{n_clusters}_capped.png")
-output_elbow_plot_path = Path("elbow_method_ocean_clusters_capped.png") 
-output_silhouette_plot_path = Path("silhouette_score_ocean_clusters.png") 
+output_csv_path = Path(f"ocean_{n_clusters}_clusters_nan.csv")
+output_3d_plot_path = Path(f"3d_ocean_clusters_{n_clusters}_nan.png")
+output_map_plot_path = Path(f"new_geographic_clusters_map_{n_clusters}_nan.png")
 
 
-MAX_MATCH_DISTANCE = 0.01
+MAX_MATCH_DISTANCE = 0.05#0.01
 
 # --- Load Ocean Features Data ---
 
@@ -48,75 +46,56 @@ matched_geo_coords = []
 matched_ocean_features = [] 
 
 for file_path in tif_file_paths:
+    try:
+        with rasterio.open(file_path) as src:
+            # Your existing code to extract coordinates goes here
+            row, col = src.height // 2, src.width // 2
+            native_center_lon, native_center_lat = src.transform * (col, row)
 
-    with rasterio.open(file_path) as src:
-        row, col = src.height // 2, src.width // 2
-        native_center_lon, native_center_lat = src.transform * (col, row)
+            if src.crs and src.crs.to_epsg() != 4326:
+                transformed_lon, transformed_lat = rasterio_transform(
+                    src.crs,
+                    'EPSG:4326',
+                    [native_center_lon],
+                    [native_center_lat]
+                )
+                tif_center_lon = transformed_lon[0]
+                tif_center_lat = transformed_lat[0]
+            else:
+                tif_center_lon = native_center_lon
+                tif_center_lat = native_center_lat
 
-        if src.crs and src.crs.to_epsg() != 4326:
-            transformed_lon, transformed_lat = rasterio_transform(
-                src.crs,
-                'EPSG:4326',
-                [native_center_lon],
-                [native_center_lat]
-            )
-            tif_center_lon = transformed_lon[0]
-            tif_center_lat = transformed_lat[0]
-        else:
-            tif_center_lon = native_center_lon
-            tif_center_lat = native_center_lat
+            query_point = np.array([tif_center_lat, tif_center_lon])
 
-        query_point = np.array([tif_center_lat, tif_center_lon])
+            distance, index = ocean_kdtree.query(query_point, k=1, distance_upper_bound=MAX_MATCH_DISTANCE)
 
-        distance, index = ocean_kdtree.query(query_point, k=1, distance_upper_bound=MAX_MATCH_DISTANCE)
-
-        if distance <= MAX_MATCH_DISTANCE and index != ocean_kdtree.n:
-            matched_row = ocean_df.iloc[index]
+            if distance <= MAX_MATCH_DISTANCE and index != ocean_kdtree.n:
+                matched_row = ocean_df.iloc[index]
+                    
+                bathy_val = matched_row['bathy']
+                chlorophyll_val = matched_row['chlorophyll']
+                secchi_val = matched_row['secchi']
                 
-            bathy_val = matched_row['bathy']
-            chlorophyll_val = matched_row['chlorophyll']
-            secchi_val = matched_row['secchi']
+                if abs(bathy_val) > secchi_val:
+                    bathy_val = np.nan
+                    
 
-            if pd.notna(bathy_val) and pd.notna(chlorophyll_val) and pd.notna(secchi_val):
+
                 matched_file_paths.append(str(file_path))
                 matched_geo_coords.append([tif_center_lon, tif_center_lat])
                 matched_ocean_features.append([
-                    bathy_val,
-                    chlorophyll_val,
-                    secchi_val
+                        bathy_val,
+                        chlorophyll_val,
+                        secchi_val
                 ])
-            else:
-                print(f"Skipping {file_path} due to NaN values in ocean features after masking.")
 
+
+    except rasterio.errors.RasterioIOError as e:
+        print(f"Warning: Skipping {file_path} because it could not be opened: {e}")
 
 ocean_features_for_clustering = np.array(matched_ocean_features)
 geo_coords_matched_np = np.array(matched_geo_coords)
 
-# --- Determine Optimal Number of Clusters (Elbow Method & Silhouette Score) ---
-print("\n--- Determining Optimal Number of Clusters ---")
-
-# Elbow Method
-wcss = []
-k_range = range(1, min(len(ocean_features_for_clustering), 20)) 
-
-if len(k_range) > 0:
-    for k in k_range:
-        kmeans_model = KMeans(n_clusters=k, random_state=42, n_init=10)
-        kmeans_model.fit(ocean_features_for_clustering)
-        wcss.append(kmeans_model.inertia_) 
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(k_range, wcss, marker='o')
-    plt.title('Elbow Method for Optimal K')
-    plt.xlabel('Number of Clusters (K)')
-    plt.ylabel('Within-Cluster Sum of Squares (WCSS)')
-    plt.xticks(k_range) 
-    plt.grid(True)
-    plt.savefig(output_elbow_plot_path, dpi=300, bbox_inches='tight')
-    plt.close()
-    print(f"Elbow method plot saved to '{output_elbow_plot_path}'. Review this plot for an 'elbow' point.")
-else:
-    print("Not enough data points to perform Elbow Method analysis.")
 
 print("\n--- Performing K-means Clustering and Plotting with n_clusters = 3---")
 # Adjust actual_n_clusters based on the available data points, then use the chosen n_clusters value

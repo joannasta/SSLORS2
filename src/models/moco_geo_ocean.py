@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torchvision
 import pytorch_lightning as pl
-from torchmetrics import Accuracy # Changed to Accuracy for classification
+from torchmetrics.classification import MulticlassAccuracy
 from typing import Callable, Tuple
 from lightly.loss import NTXentLoss
 from lightly.models.modules import MoCoProjectionHead
@@ -15,6 +15,7 @@ class OceanFeatureClassifier(nn.Module):
     def __init__(self, input_dim: int = 128, num_classes: int = 3):
         super().__init__()
         self.layers = nn.Sequential(
+            nn.ReLU(),
             nn.Linear(input_dim, num_classes),
         )
 
@@ -59,7 +60,9 @@ class MoCoOceanFeatures(pl.LightningModule):
         self.ocean_classifier = OceanFeatureClassifier(
             input_dim=self.hparams.dim, num_classes=self.hparams.num_classes
         )
-        self.classification_metric = Accuracy(task="multiclass", num_classes=self.hparams.num_classes)
+        self.classification_metric = MulticlassAccuracy(
+            num_classes=self.hparams.num_classes, average='micro'
+        )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         features = self.backbone(x).flatten(start_dim=1)
@@ -87,7 +90,7 @@ class MoCoOceanFeatures(pl.LightningModule):
         predicted_cluster_logits = self.ocean_classifier(query_features)
         loss_classification = self.classification_criterion(predicted_cluster_logits, cluster_labels)
 
-        total_loss = 0.1 * loss_contrastive + loss_classification
+        total_loss = loss_contrastive + loss_classification
 
         self.log("train_loss_total", total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_loss_contrastive", loss_contrastive, on_step=False, on_epoch=True, logger=True)

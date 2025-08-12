@@ -1,6 +1,8 @@
 # Ignore image files (e.g., PNG, JPG, TIFF, etc.)
 *.png
 *.jpg
+*.csv
+*.pdf
 *.jpeg
 *.tiff
 *.bmp

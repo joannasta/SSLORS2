@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --job-name=Moco_MO_FineTune           # Job name
+#SBATCH --job-name=OCEAN_FineTune           # Job name
 #SBATCH --partition=small_job      # Partition name
 #SBATCH --nodes=1                         # Number of nodes
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=1-00:00:00              # Time limit
-#SBATCH --output=logs/finetune_slurm_mbn_mae_ocean_agia_napa.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_mbn_mae_ocean_agia_napa.err   # Error log
+#SBATCH --output=logs/finetune_slurm_mbn_ocean_aware_nan_puck_lagoon.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_mbn_ocean_aware_nan_puck_lagoon.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -18,13 +18,15 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 # --- Define Training Parameters ---
 DEVICES=1                                 # Number of devices for training
 NUM_WORKERS=32                              # Number of data loader workers
-MODEL=mae_ocean                             # Model name
+MODEL=ocean_aware                             # Model name
 TRAIN_BATCH_SIZE=1                    # Training batch size
 VAL_BATCH_SIZE=1                     # Validation batch size
 LEARNING_RATE=1e-4 #1e-5                  # Learning rate
 EPOCHS=10                              # Number of epochs
 
-PRETRAINED_MODEL="./results/trains/mae_ocean/version_8/checkpoints/epoch=99-step=2900.ckpt"
+PRETRAINED_MODEL="./results/trains/ocean_aware/nan/checkpoints/epoch=99-step=9800.ckpt"
+#"./results/trains/ocean_aware/version_12/checkpoints/epoch=99-step=9800.ckpt"
+#"./results/trains/mae_ocean/version_8/checkpoints/epoch=99-step=2900.ckpt"
 
 #"./results/trains/mae_ocean/version_6/checkpoints/epoch=99-step=9900.ckpt"
 #"./results/trains/moco-geo-ocean/version_5/checkpoints/epoch=199-step=16800.ckpt"
@@ -50,7 +52,7 @@ PRETRAINED_MODEL="./results/trains/mae_ocean/version_8/checkpoints/epoch=99-step
 #"./results/trains/moco-geo/version_28/checkpoints/epoch=199-step=331600.ckpt"
 DATASET_PATH="/mnt/storagecube/joanna/MagicBathyNet/"  # Dataset path
 SEED=42                                   # Seed for reproducibility
-LOCATION=agia_napa
+LOCATION=puck_lagoon
 
 # --- Run Training ---
 srun python -u finetune_mbn.py \

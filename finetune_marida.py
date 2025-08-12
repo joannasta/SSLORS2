@@ -16,6 +16,7 @@ import random
 
 #from src.utils.finetuning_utils import write_geotiff, read_geotiff 
 from src.models.mae import MAE
+from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
 from src.models.moco_geo import MoCoGeo
 
@@ -47,6 +48,11 @@ class MarineDebrisPredictor:
             
             if self.model_type.lower() == "mae":
                 self.pretrained_model = MAE.load_from_checkpoint(
+                    pretrained_weights_path,
+                    strict=False 
+                )
+            if self.model_type.lower() == "mae_ocean":
+                self.pretrained_model = MAE_Ocean.load_from_checkpoint(
                     pretrained_weights_path,
                     strict=False 
                 )

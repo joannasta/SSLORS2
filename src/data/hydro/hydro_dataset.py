@@ -53,77 +53,44 @@ class HydroDataset(Dataset):
         print("len self.file_paths",len(self.file_paths))
         
     def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
-        print(f"Starting data mapping. CSV path: {self.csv_features_path}")
-        if not self.csv_features_path.exists():
-            raise FileNotFoundError(
-                f"Ocean features CSV not found at '{self.csv_features_path}'. "
-                "Please ensure the CSV file is in the correct location and name."
-            )
-        try:
-            self.csv_df = pd.read_csv(self.csv_features_path)
-            print(f"Loaded CSV with {len(self.csv_df)} rows.")
+        self.csv_df = pd.read_csv(self.csv_features_path)
+        csv_file_dir_map = {Path(p).resolve(): row for p, row in self.csv_df.set_index('file_dir').iterrows()}
+        successful_matches = []
 
-            if 'file_dir' not in self.csv_df.columns:
-                raise ValueError("CSV must contain a 'file_dir' column for direct file path mapping.")
+        for i, file_path in enumerate(all_file_paths):
+            resolved_file_path = file_path.resolve()
+            if resolved_file_path in csv_file_dir_map:
+                matched_row = csv_file_dir_map[resolved_file_path]
+                self.file_path_to_csv_row_map[file_path] = matched_row
+                successful_matches.append(file_path)
             
-            csv_file_dir_map = {Path(p).resolve(): row for p, row in self.csv_df.set_index('file_dir').iterrows()}
-            print(f"Created CSV file_dir to row map with {len(csv_file_dir_map)} entries.")
-
-            successful_matches = []
-            print(f"Starting direct mapping process for {len(all_file_paths)} TIF files.")
-            
-            for i, file_path in enumerate(all_file_paths):
-                if i % 1000 == 0:
-                    print(f"Matching TIF file {i}/{len(all_file_paths)}")
-                
-                resolved_file_path = file_path.resolve()
-                if resolved_file_path in csv_file_dir_map:
-                    matched_row = csv_file_dir_map[resolved_file_path]
-                    self.file_path_to_csv_row_map[file_path] = matched_row
-                    successful_matches.append(file_path)
-            
-            self.file_paths = successful_matches
-            print(f"Finished direct mapping. Successfully matched {len(self.file_paths)} TIF files.")
-
-        except Exception as e:
-            raise RuntimeError(
-                f"Error loading or processing ocean features from '{self.csv_features_path}': {e}. "
-                "Please ensure the CSV format includes a 'file_dir' column with correct paths."
-            ) from e
+        self.file_paths = successful_matches
+        print(f"Finished direct mapping. Successfully matched {len(self.file_paths)} TIF files.")
 
     def __len__(self):
         return len(self.file_paths)
     
     def __getitem__(self, idx: int):
         file_path = self.file_paths[idx]
-        try:
-            with rasterio.open(file_path) as src:
-                bands = []
-                for i in range(1, len(self.bands) + 1):
-                    band_data = src.read(i)
-                    band_tensor = torch.from_numpy(band_data.astype(np.float32)).unsqueeze(0)
-                    bands.append(band_tensor)
-                sample = torch.cat(bands, dim=0)
-                sample = sample.contiguous()
-
-                if len(self.bands) == 11:
-                    nan_mask = torch.from_numpy(np.isnan(sample.numpy()))
-                    num_nans = torch.sum(nan_mask).item()
-                    sample[nan_mask] = torch.from_numpy(self.impute_nan.transpose(2, 1, 0))[nan_mask]
-                    means, stds,_ = get_marida_means_and_stds()#get_means_and_stds()
-                    sample = (sample - means[:11, None, None]) / stds[:11, None, None]
-                elif len(self.bands) == 3:
-                        means, stds = self.norm_param[0][:, np.newaxis, np.newaxis], self.norm_param[1][:, np.newaxis, np.newaxis] 
-                        sample = (sample - means) / stds
-                else:    
-                    means, stds =  get_means_and_stds()
-                    sample = (sample - means[:, None, None]) / stds[:, None, None]
-                    
-                if self.transforms is not None:
-                    sample = self.transforms(sample)
     
-                sample = sample[0:11,:,:]
-                return sample.float()
-        except rasterio.errors.RasterioIOError as e:
-            print(f"Error opening {file_path}: {e}")
-            return None
+        with rasterio.open(file_path) as src:
+            sample_data = src.read(list(range(1, len(self.bands) + 1)))
+            sample = torch.from_numpy(sample_data.astype(np.float32))
+
+            if len(self.bands) == 11:
+                nan_mask = torch.isnan(sample)
+                sample[nan_mask] = torch.from_numpy(self.impute_nan.transpose(2, 1, 0))[nan_mask]
+                means, stds, _ = get_marida_means_and_stds()
+                sample = (sample - means[:11, None, None]) / stds[:11, None, None]
+            elif len(self.bands) == 3:
+                means, stds = self.norm_param[0][:, np.newaxis, np.newaxis], self.norm_param[1][:, np.newaxis, np.newaxis] 
+                sample = (sample - means) / stds
+            else:    
+                means, stds = get_means_and_stds()
+                sample = (sample - means[:, None, None]) / stds[:, None, None]
+                
+            if self.transforms is not None:
+                sample = self.transforms(sample)
+                
+            sample = sample[0:11,:,:]
+            return sample.float()

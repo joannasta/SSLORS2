@@ -2,12 +2,22 @@ import torch
 from torch.utils.data import Dataset, DataLoader, default_collate # Import default_collate
 from torchvision import transforms as T
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Callable, Dict, Any
 from src.data.hydro.hydro_moco_geo_dataset import HydroMoCoGeoDataset
 from pytorch_lightning import LightningDataModule
 
 class HydroMoCoGeoDataModule(LightningDataModule):
-    def __init__(self, data_dir: str, batch_size: int = 32, num_workers: int = 4, transform=None, model_name="mae", num_geo_clusters=100,ocean_flag=True):
+    def __init__(
+        self, data_dir: str,
+        batch_size: int = 32,
+        num_workers: int = 4,
+        transform: Optional[Callable] = None,
+        model_name="geo_aware",
+        num_geo_clusters=10,
+        csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_geo_labels10.csv",
+        ocean_flag=True
+        
+        ):
         super().__init__()
         self.data_dir = Path(data_dir)
         self.batch_size = batch_size
@@ -15,6 +25,7 @@ class HydroMoCoGeoDataModule(LightningDataModule):
         self.transform = transform
         self.model_name = model_name
         self.num_geo_clusters = num_geo_clusters
+        self.csv_features_path = csv_features_path
         self.ocean_flag=ocean_flag
         
 
@@ -26,13 +37,13 @@ class HydroMoCoGeoDataModule(LightningDataModule):
 
 
     def setup(self, stage: Optional[str] = None):
-
         if stage == 'fit' or stage is None:
             self.train_dataset = HydroMoCoGeoDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
                 num_geo_clusters=self.num_geo_clusters,
+                csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
             self.val_dataset = HydroMoCoGeoDataset(
@@ -40,6 +51,7 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 transforms=self.transform,
                 model_name=self.model_name,
                 num_geo_clusters=self.num_geo_clusters,
+                csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
 
@@ -49,6 +61,7 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 transforms=self.transform,
                 model_name=self.model_name,
                 num_geo_clusters=self.num_geo_clusters,
+                csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
 

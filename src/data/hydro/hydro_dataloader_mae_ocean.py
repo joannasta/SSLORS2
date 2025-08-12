@@ -14,8 +14,8 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
             batch_size: int = 32, 
             num_workers: int = 4, 
             transform: Optional[Callable] = None, 
-            model_name: str = "mae-ocean", 
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv",
+            model_name: str = "mae_ocean", 
+            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv",
             ocean_flag = True
             
         ):

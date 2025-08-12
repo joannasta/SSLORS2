@@ -11,12 +11,6 @@ import os
 import glob
 import warnings
 
-# Suppress specific warnings from rasterio/xarray that might be verbose but not critical
-warnings.filterwarnings("ignore", category=rasterio.errors.NotGeoreferencedWarning)
-warnings.filterwarnings("ignore", message="The input raster has a CRS, but it was not set on the 'crs' attribute.")
-warnings.filterwarnings("ignore", message="Could not find 'spatial_ref' or 'crs' in attrs. Defaulting to EPSG:4326.")
-
-
 # --- Directories ---
 base = os.getcwd()
 bathy_path = os.path.join(base,  "bathy","sub_ice")
@@ -33,15 +27,12 @@ tiff_files = [
 ]
 
 # --- Define a target CRS for all data (WGS 84 Geographic) ---
-# This is a common standard for global oceanographic data.
 TARGET_CRS = "EPSG:4326"
 
 print("--- Step 1: Checking Coordinate Reference Systems (CRSs) of input files ---")
 
 # --- Check Bathymetry (GEBCO) CRS ---
 bathy_tif_files = sorted(glob.glob(os.path.join(bathy_path, "*.tif")))
-print("bathy_path",bathy_path)
-print("bathy_tif_files",bathy_tif_files)
 if bathy_tif_files:
     with rasterio.open(bathy_tif_files[0]) as src:
         bathy_crs = src.crs
@@ -53,22 +44,18 @@ else:
     exit()
 
 # --- Check Secchi (CMEMS NetCDF) CRS ---
-secchi_ds_global = None # Declare globally to close later
+secchi_ds_global = None 
 if os.path.exists(secchi_path):
     try:
-        # Load Secchi dataset once, it's typically smaller and will be interpolated in chunks
         secchi_ds_global = xr.open_dataset(secchi_path)
-
-        # Attempt to set CRS using rioxarray's write_crs if not explicitly found, assuming EPSG:4326
+        
         if not secchi_ds_global.rio.crs:
             print("  Secchi (CMEMS) dataset has no explicit CRS via .rio.crs. Assuming EPSG:4326.")
-            secchi_ds_global = secchi_ds_global.rio.write_crs(TARGET_CRS, inplace=False) # Return new dataset
+            secchi_ds_global = secchi_ds_global.rio.write_crs(TARGET_CRS, inplace=False) 
         
         print(f"\nSecchi (CMEMS) CRS: {secchi_ds_global.rio.crs.to_string()} (EPSG:{secchi_ds_global.rio.crs.to_epsg()})")
         if secchi_ds_global.rio.crs != TARGET_CRS:
             print(f"  WARNING: Secchi CRS is not {TARGET_CRS}. It will be reprojected during interpolation.")
-            # Reproject the entire Secchi dataset if its CRS is explicitly different.
-            # For most CMEMS data, this won't be necessary as it's already EPSG:4326.
             secchi_ds_global = secchi_ds_global.rio.reproject(TARGET_CRS, resampling=Resampling.linear)
 
         secchi_var = list(secchi_ds_global.data_vars)[0]
@@ -100,58 +87,46 @@ print("All data will be processed and reprojected to EPSG:4326 as the common sta
 print("\n--- Step 2: Processing and Combining Data ---")
 
 # --- 1. Load and mosaic GEBCO Bathymetry Tiles ---
-# Merge will attempt to use the CRS of the first dataset if CRSs differ among source files.
-# It's safest if all bathy tiles already have the same CRS.
+
 src_files_to_mosaic = [rasterio.open(fp) for fp in bathy_tif_files]
 
 mosaic_full, out_transform_full = merge(src_files_to_mosaic)
-mosaic_full = mosaic_full[0] # Take the first band (H, W)
+mosaic_full = mosaic_full[0] 
 
 height_full, width_full = mosaic_full.shape
 
-# Close the source files to free memory
+
 for src in src_files_to_mosaic:
     src.close()
 
-# If the merged bathy mosaic is not in TARGET_CRS, reproject it now.
-# This ensures the base grid (lats/lons) generated from out_transform_full is in TARGET_CRS.
-with rasterio.open(bathy_tif_files[0]) as first_src: # Re-open to get metadata for reprojection
+with rasterio.open(bathy_tif_files[0]) as first_src: 
     if first_src.crs != TARGET_CRS:
         print(f"  Reprojecting full bathymetry mosaic from {first_src.crs.to_string()} to {TARGET_CRS}...")
-        # Create a new destination array for the reprojected mosaic
         reprojected_mosaic = np.empty_like(mosaic_full, dtype=mosaic_full.dtype)
         reproject(
             source=mosaic_full,
             destination=reprojected_mosaic,
             src_transform=out_transform_full,
-            src_crs=first_src.crs, # Use the actual CRS of the merged mosaic
-            dst_transform=out_transform_full, # Keep the same transform but with new CRS
+            src_crs=first_src.crs, 
+            dst_transform=out_transform_full, 
             dst_crs=TARGET_CRS,
-            resampling=Resampling.nearest, # Or bilinear
+            resampling=Resampling.nearest, 
             num_threads=os.cpu_count()
         )
         mosaic_full = reprojected_mosaic
-        # Update transform's CRS as well, though `xy` will implicitly use the destination CRS
-        # out_transform_full is now conceptually linked to TARGET_CRS
-    
-    # Store the final CRS of the mosaic for coordinate generation
     mosaic_final_crs = TARGET_CRS
 
-
-# Define tiling parameters
-# You might need to adjust these based on your available RAM and data size
 tile_size_rows = 500
 tile_size_cols = 500
 
-output_path = os.path.join(base, "ocean_features_combined.csv")
+output_path = os.path.join("/mnt/storagecube/joanna/", "ocean_features.csv")
 
 # Open the output CSV file in append mode. Write header only once.
 file_exists = os.path.exists(output_path)
 output_file = open(output_path, 'a')
-if not file_exists or os.stat(output_path).st_size == 0: # Check if file is empty or doesn't exist
+if not file_exists or os.stat(output_path).st_size == 0: 
     pd.DataFrame(columns=["lat", "lon", "bathy", "chlorophyll", "secchi"]).to_csv(output_file, index=False, header=True)
 else:
-    # If file exists and is not empty, ensure no header is written again
     pass
 
 # Iterate over tiles
@@ -179,13 +154,10 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
         chl_arrays_tile = []
         expected_tile_height = r_end - r_start
         expected_tile_width = c_end - c_start
-
-        # Determine the target geographic bounds for this tile (in TARGET_CRS)
+        
         min_lon_tile, max_lat_tile = xy(out_transform_full, r_start, c_start)
         max_lon_tile, min_lat_tile = xy(out_transform_full, r_end, c_end)
 
-        # Create a new transform for the current tile in TARGET_CRS.
-        # This will be the destination transform for reprojecting chlorophyll data.
         dst_transform_tile = rasterio.transform.from_bounds(
             west=min_lon_tile, south=min_lat_tile, east=max_lon_tile, north=max_lat_tile,
             width=expected_tile_width, height=expected_tile_height
@@ -204,13 +176,10 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
                         destination=reprojected_chl_data,
                         src_transform=src_chl.transform,
                         src_crs=src_chl.crs,
-                        dst_transform=dst_transform_tile, # Use the tile-specific destination transform
+                        dst_transform=dst_transform_tile, 
                         dst_crs=TARGET_CRS,
-                        resampling=Resampling.nearest, # Or Resampling.bilinear, Resampling.cubic for smoother results
-                        num_threads=os.cpu_count(),
-                        # Define bounds that cover the chlorophyll data. Use boundless for safety.
-                        # It is better to rely on `reproject` to handle source windowing implicitly.
-                        # window=src_chl.window(min_lon_tile, min_lat_tile, max_lon_tile, max_lat_tile)
+                        resampling=Resampling.nearest, 
+                        num_threads=os.cpu_count()
                     )
 
                     if src_chl.nodata is not None:
@@ -220,7 +189,6 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
                 except Exception as e:
                     print(f"Warning: Error reprojecting {os.path.basename(tiff_path)} for tile "
                           f"R{r_start}-{r_end}, C{c_start}-{c_end}: {e}")
-                    # Append NaNs if reprojection fails for this specific tile/file
                     chl_arrays_tile.append(np.full((expected_tile_height, expected_tile_width), np.nan, dtype="float32"))
 
         if chl_arrays_tile:
@@ -232,7 +200,6 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
 
 
         # --- Interpolate Secchi for current tile's coordinates ---
-        # The secchi_ds_global is already reprojected to TARGET_CRS if needed.
         secchi_interp_tile = secchi_ds_global[secchi_var].interp(
             latitude=("points", lats_tile), longitude=("points", lons_tile), method="linear",
             kwargs={"fill_value": np.nan} # Ensure NaNs for out-of-bounds

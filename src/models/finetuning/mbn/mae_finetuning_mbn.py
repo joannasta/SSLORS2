@@ -85,12 +85,17 @@ class MAEFineTuning(pl.LightningModule):
         processed_embedding = embedding
 
         if self.full_finetune:
-            if self.model_type == "mae" or self.model_type == "mae_ocean":
+            if self.model_type == "mae":
+                print("embedding before",embedding.shape)
                 embedding = embedding.squeeze(1)
+                print("embedding after squeeze",embedding.shape)
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
+                print("processed_embedding",processed_embedding.shape)
             elif self.model_type in ["moco", "geo_aware","ocean_aware"]:
+                print("embedding shape:", embedding.shape)
                 embedding = embedding.squeeze(0)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
+
         return self.projection_head(processed_embedding, images)
 
     def training_step(self, batch,batch_idx):

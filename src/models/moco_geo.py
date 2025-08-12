@@ -15,7 +15,7 @@ class GeoClassifier(nn.Module):
     """
     A simple classifier head for geo-classification.
     """
-    def __init__(self, input_dim: int = 128, num_classes: int = 100):
+    def __init__(self, input_dim: int = 128, num_classes: int = 10):
         super().__init__()
         self.layers = nn.Sequential(
             nn.ReLU(),
@@ -42,7 +42,7 @@ class MoCoGeo(pl.LightningModule):
         m: float = 0.99,     # Momentum coefficient for momentum encoder update
         T: float = 0.07,     # Temperature for NTXentLoss
         src_channels: int = 3, # Number of input channels for the images
-        num_geo_classes: int = 100 # Number of geographical classes
+        num_geo_classes: int = 10 # Number of geographical classes
     ):
         super().__init__()
         # Save all __init__ arguments as hyperparameters for logging and reproducibility

@@ -14,8 +14,9 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
             batch_size: int = 32, 
             num_workers: int = 4, 
             transform: Optional[Callable] = None, 
-            model_name: str = "moco-ocean-features", 
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features_capped_bathy.csv",#"/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv",
+            model_name: str = "ocean_aware", 
+            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/ocean_featues_nans_bathy.csv",#train_ocean_labels_3_clusters.csv",
+            num_geo_clusters=3,
             ocean_flag = True
             
         ):
@@ -25,13 +26,13 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.transform = transform
         self.model_name = model_name
+        self.num_geo_clusters = num_geo_clusters
         self.csv_features_path = csv_features_path
         self.ocean_flag=ocean_flag
         
     def custom_collate_fn(self, batch: List[Any]): 
         batch = [item for item in batch if item is not None]
         if not batch: 
-            print("Warning: Batch is empty after filtering None values. This batch will be skipped.")
             return None 
         return default_collate(batch)
 
@@ -42,6 +43,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
@@ -50,6 +52,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
                 path_dataset=self.data_dir, 
                 transforms=self.transform,
                 model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
@@ -59,6 +62,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
@@ -68,6 +72,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_features_path=self.csv_features_path,
                 ocean_flag=self.ocean_flag
             )
