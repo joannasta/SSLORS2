@@ -165,11 +165,11 @@ class MaridaDataset(Dataset):
                     if self.pretrained_model.__class__.__name__ == "MAE" or self.pretrained_model.__class__.__name__  == 'MAE_Ocean':
                         img = F.interpolate(img, size=(224,224), mode='nearest')
                         embedding = self.pretrained_model.forward_encoder(img)
-                    elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
+                    elif self.pretrained_model.__class__.__name__ in ["MoCo", "GeographyAware","OceanAware"]:
                         img = img[:,1:4,:,:]
                         embedding = self.pretrained_model.backbone(img).flatten(start_dim=1)
             if self.full_finetune:
-                if self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
+                if self.pretrained_model.__class__.__name__ in ["MoCo", "GeographyAware","OceanAware"]:
                     img = img[:,1:4,:,:]
                 embedding = img
             self.embeddings.append(embedding.cpu())

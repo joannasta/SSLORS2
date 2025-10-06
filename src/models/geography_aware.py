@@ -4,15 +4,15 @@ import torch.nn as nn
 import torchvision
 import pytorch_lightning as pl
 from torchmetrics.classification import MulticlassAccuracy
-from typing import Callable, Tuple
+from typing import Callable
 from lightly.loss import NTXentLoss
 from lightly.models.modules import MoCoProjectionHead
 from lightly.models.utils import deactivate_requires_grad, update_momentum
 from lightly.utils.scheduler import cosine_schedule
 
 
-class OceanFeatureClassifier(nn.Module):
-    def __init__(self, input_dim: int = 128, num_classes: int = 3):
+class GeoClassifier(nn.Module):
+    def __init__(self, input_dim: int = 128, num_classes: int = 10):
         super().__init__()
         self.layers = nn.Sequential(
             nn.ReLU(),
@@ -25,16 +25,16 @@ class OceanFeatureClassifier(nn.Module):
         return self.layers(x)
 
 
-class MoCoOceanFeatures(pl.LightningModule):
+class GeographyAware(pl.LightningModule):
     def __init__(
         self,
         base_encoder: Callable = torchvision.models.resnet18,
-        dim: int = 128,
-        K: int = 4096,
-        m: float = 0.99,
-        T: float = 0.07,
-        src_channels: int = 3,
-        num_classes: int = 3
+        dim: int = 128,      # Output dimension of the projection head
+        K: int = 4096,       # Memory bank size for NTXentLoss
+        m: float = 0.99,     # Momentum coefficient for momentum encoder update
+        T: float = 0.07,     # Temperature for NTXentLoss
+        src_channels: int = 3, 
+        num_geo_classes: int = 10 
     ):
         super().__init__()
         self.save_hyperparameters()
@@ -55,13 +55,13 @@ class MoCoOceanFeatures(pl.LightningModule):
             memory_bank_size=(self.hparams.K, self.hparams.dim),
             temperature=self.hparams.T
         )
-        self.classification_criterion = nn.CrossEntropyLoss()
+        self.geo_criterion = nn.CrossEntropyLoss()
 
-        self.ocean_classifier = OceanFeatureClassifier(
-            input_dim=self.hparams.dim, num_classes=self.hparams.num_classes
+        self.geo_classifier = GeoClassifier(
+            input_dim=self.hparams.dim, num_classes=self.hparams.num_geo_classes
         )
-        self.classification_metric = MulticlassAccuracy(
-            num_classes=self.hparams.num_classes, average='micro'
+        self.geo_accuracy = MulticlassAccuracy(
+            num_classes=self.hparams.num_geo_classes, average='micro'
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -75,55 +75,55 @@ class MoCoOceanFeatures(pl.LightningModule):
             key = self.projection_head_momentum(features)
         return key
 
-    def training_step(self, batch: Tuple[torch.Tensor, torch.Tensor, torch.LongTensor], batch_idx: int) -> torch.Tensor:
+    def training_step(self, batch: tuple, batch_idx: int) -> torch.Tensor:
         momentum = cosine_schedule(self.current_epoch, self.trainer.max_epochs, 0.996, 1)
         update_momentum(self.backbone, self.backbone_momentum, m=momentum)
         update_momentum(self.projection_head, self.projection_head_momentum, m=momentum)
 
-        x_query, x_key, cluster_labels = batch 
+        x_query, x_key, geo_labels = batch
 
         query_features = self.forward(x_query)
         key_features = self.forward_momentum(x_key)
 
         loss_contrastive = self.contrastive_loss(query_features, key_features)
+        geo_class_output = self.geo_classifier(query_features)
+        loss_geo_classification = self.geo_criterion(geo_class_output, geo_labels)
 
-        predicted_cluster_logits = self.ocean_classifier(query_features)
-        loss_classification = self.classification_criterion(predicted_cluster_logits, cluster_labels)
-
-        total_loss = loss_contrastive + loss_classification
+        total_loss = loss_contrastive + loss_geo_classification
 
         self.log("train_loss_total", total_loss, on_step=True, on_epoch=True, prog_bar=True, logger=True)
         self.log("train_loss_contrastive", loss_contrastive, on_step=False, on_epoch=True, logger=True)
-        self.log("train_loss_classification", loss_classification, on_step=False, on_epoch=True, logger=True)
+        self.log("train_loss_geo_cls", loss_geo_classification, on_step=False, on_epoch=True, logger=True)
         
-        train_classification_metric = self.classification_metric(predicted_cluster_logits, cluster_labels)
-        self.log("train_accuracy", train_classification_metric, on_step=False, on_epoch=True, logger=True)
+        train_geo_accuracy = self.geo_accuracy(geo_class_output.softmax(dim=-1), geo_labels)
+        self.log("train_geo_acc", train_geo_accuracy, on_step=False, on_epoch=True, logger=True)
 
         return total_loss
 
-    def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor, torch.LongTensor], batch_idx: int) -> dict:
-        x_query, x_key, cluster_labels = batch 
+    def validation_step(self, batch: tuple, batch_idx: int) -> dict:
+        x_query, x_key, geo_labels = batch 
         
         query_features = self.forward(x_query)
         key_features = self.forward_momentum(x_key)
 
         loss_contrastive = self.contrastive_loss(query_features, key_features)
-        predicted_cluster_logits = self.ocean_classifier(query_features)
-        loss_classification = self.classification_criterion(predicted_cluster_logits, cluster_labels)
-        total_loss = loss_contrastive + loss_classification
+        geo_class_output = self.geo_classifier(query_features)
+        loss_geo_classification = self.geo_criterion(geo_class_output, geo_labels)
 
-        val_classification_metric = self.classification_metric(predicted_cluster_logits, cluster_labels)
+        total_loss = loss_contrastive + loss_geo_classification
+
+        val_geo_accuracy = self.geo_accuracy(geo_class_output.softmax(dim=-1), geo_labels)
 
         self.log("val_loss_total", total_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_loss_contrastive", loss_contrastive, on_step=False, on_epoch=True, logger=True)
-        self.log("val_loss_classification", loss_classification, on_step=False, on_epoch=True, prog_bar=True, logger=True)
-        self.log("val_accuracy", val_classification_metric, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val_loss_geo_cls", loss_geo_classification, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val_geo_acc", val_geo_accuracy, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
         return {
             "val_loss_total": total_loss,
             "val_loss_contrastive": loss_contrastive,
-            "val_loss_classification": loss_classification,
-            "val_accuracy": val_classification_metric
+            "val_loss_geo_cls": loss_geo_classification,
+            "val_geo_acc": val_geo_accuracy
         }
 
     def configure_optimizers(self):

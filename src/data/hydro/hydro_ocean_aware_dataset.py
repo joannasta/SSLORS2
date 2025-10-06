@@ -14,7 +14,7 @@ import pyproj
 
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, get_means_and_stds, get_marida_means_and_stds
 
-class HydroMocoGeoOceanFeaturesDataset(Dataset):
+class HydroOceanAwareDataset(Dataset):
     def __init__(
         self,
         path_dataset: Path,

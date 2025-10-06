@@ -5,13 +5,13 @@ import numpy as np
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
-from src.models.moco_geo import MoCoGeo
+from src.models.geography_aware import GeographyAware
 from src.models.moco import MoCo
 from src.models.mae import MAE
 from src.models.mae_ocean import MAE_Ocean
-from src.models.moco_geo_ocean import MoCoOceanFeatures
-from src.data.hydro.hydro_dataloader_moco_geo import HydroMoCoGeoDataModule
-from src.data.hydro.hydro_dataloader_moco_geo_ocean import HydroOceanFeaturesDataModule
+from src.models.ocean_aware import OceanAware
+from src.data.hydro.hydro_dataloader_geography_aware import HydroGeographyAwareDataModule
+from src.data.hydro.hydro_dataloader_ocean_aware import HydroOceanAwareDataModule
 from src.data.hydro.hydro_dataloader_moco import HydroMoCoDataModule
 from src.data.hydro.hydro_dataloader_mae_ocean import HydroMaeOceanFeaturesDataModule
 from src.data.hydro.hydro_dataloader import HydroDataModule
@@ -22,8 +22,8 @@ models = {
     "mae": MAE,
     "mae_ocean" : MAE_Ocean,
     "moco": MoCo,
-    "geo_aware": MoCoGeo,
-    "ocean_aware": MoCoOceanFeatures,
+    "geo_aware": GeographyAware,
+    "ocean_aware": OceanAware,
 }
 
 def set_seed(seed):
@@ -91,10 +91,10 @@ def main(args):
             transforms.RandomHorizontalFlip(),
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
-        model = MoCoGeo(
+        model = GeographyAware(
             src_channels=3 
         )
-        datamodule = HydroMoCoGeoDataModule(
+        datamodule = HydroGeographyAwareDataModule(
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
@@ -109,10 +109,10 @@ def main(args):
             transforms.RandomHorizontalFlip(),
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
-        model = MoCoOceanFeatures(
+        model = OceanAware(
             src_channels=3 
         )
-        datamodule = HydroOceanFeaturesDataModule( 
+        datamodule = HydroOceanAwareDataModule( 
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
