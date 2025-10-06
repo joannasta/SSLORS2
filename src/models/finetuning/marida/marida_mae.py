@@ -62,6 +62,7 @@ class MAEFineTuning(pl.LightningModule):
 
 
         self.src_channels = src_channels  
+        print("number of source channels:",self.src_channels)
         if self.pretrained_model is not None:
             self.pretrained_in_channels = 11
         else:
@@ -90,7 +91,6 @@ class MAEFineTuning(pl.LightningModule):
             self.class_distr = self.class_distr[:-4]    # Drop Mixed Water, Wakes, Cloud Shadows, Waves  
 
         self.weight =  gen_weights(self.class_distr, c = self.weight_param)
-        print("weights",self.weight)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
 
 
@@ -106,46 +106,32 @@ class MAEFineTuning(pl.LightningModule):
         self.embeddings = []
 
         for idx in range(len(hydro_dataset)):
-            #print(f"Processing image index: {idx}") # print the index
             img = hydro_dataset[idx].to(self.device)
             img = img.unsqueeze(0).to(self.pretrained_model.device)
             if not self.fully_finetuning:
                 with torch.no_grad():
                     embedding = self.pretrained_model.forward_encoder(img)
-
-                    print("embeddings shape", embedding)
-
                 self.embeddings.append(embedding.cpu())
 
         self.embeddings = torch.stack(self.embeddings).cpu()
 
     def forward(self, images, embedding):
-
-        
         processed_embedding = None
 
         if self.full_finetune:
-            if self.model_type == "mae":
-                print("embedding before squeeze",embedding.shape)
+            if self.model_type == "mae" or self.model_type == "mae_ocean":
                 embedding = embedding.squeeze(1)
-                print("embedding after squeeze",embedding.shape)
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
-                print("processed embedding shape before unsqueeze",processed_embedding.shape)
                 processed_embedding = processed_embedding.unsqueeze(0)
-                print("processed embedding shape after unsqueeze",processed_embedding.shape)
             elif self.model_type == "moco":
                 embedding = embedding.squeeze(1)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
             elif self.model_type == "geo_aware":
                 embedding = embedding.squeeze(1)
-                print("embedding shape before backbone:", embedding.shape)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-                print("embedding shape after backbone:", processed_embedding.shape)
             elif self.model_type == "ocean_aware":
                 embedding = embedding.squeeze(1)
-                print("embedding shape before backbone:", embedding.shape)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
-                print("embedding shape after backbone:", processed_embedding.shape)
         else:
             processed_embedding = embedding
 
@@ -177,9 +163,7 @@ class MAEFineTuning(pl.LightningModule):
             self.train_batch_count = 0
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
-        
         print("training loss", loss)
-
         return loss
 
 
@@ -202,16 +186,15 @@ class MAEFineTuning(pl.LightningModule):
                 target[0].cpu(),   
                 log_dir = val_dir 
             )
-
+            
         self.log('val_loss', loss)
         if not hasattr(self, 'total_val_loss'):
             self.total_val_loss = 0.0
             self.val_batch_count = 0
+            
         self.total_val_loss += loss.item()
         self.val_batch_count += 1
-        
         print("validation loss", loss)
-
         return loss
     
     
@@ -219,9 +202,6 @@ class MAEFineTuning(pl.LightningModule):
         test_dir = "test_results"
         data, target, embedding = batch
         batch_size = data.shape[0]
-        print(f"Batch {batch_idx}: Data shape: {data.shape}, Target shape: {target.shape}")
-        print(f"Batch {batch_idx}: Unique target values: {torch.unique(target)}")
-
         logits = self(data,embedding)
         target = target.long()
         target = target.squeeze(1)
@@ -281,7 +261,7 @@ class MAEFineTuning(pl.LightningModule):
 
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).to(torch.uint8)
-        fig, axes = plt.subplots(1, 3, figsize=(14, 6))  # Adjusted figure size
+        fig, axes = plt.subplots(1, 3, figsize=(14, 6)) 
         img = img.permute(1,2,0)
         
         axes[0].imshow(img)
@@ -292,34 +272,31 @@ class MAEFineTuning(pl.LightningModule):
         axes[1].set_title("Ground Truth")
         axes[1].axis('off')
 
-        axes[2].imshow(visual_image)  # Use a colormap for labels
+        axes[2].imshow(visual_image)  
         axes[2].set_title(f"Prediction for {self.model_type}")
         axes[2].axis('off')
 
         # Create a colormap
         cmap = plt.cm.viridis
-        norm = mcolors.Normalize(vmin=0, vmax=12) # Use 12, because there are 13 classes 0-12
-
-        # Add colorbar
+        norm = mcolors.Normalize(vmin=0, vmax=12) 
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-        sm.set_array([])  # Required for matplotlib >= 3.1
-        cbar = fig.colorbar(sm, ax=axes[2], shrink=0.8, aspect=20) # Adjust shrink and aspect as needed
-        cbar.set_ticks(np.arange(0, 13)) # Set ticks for each class
+        sm.set_array([]) 
+        cbar = fig.colorbar(sm, ax=axes[2], shrink=0.8, aspect=20) 
+        cbar.set_ticks(np.arange(0, 13)) 
         keys = list(cat_mapping_marida.keys())[:-4]
-        cbar.set_ticklabels(list(cat_mapping_marida.keys())[:-2]) # Set tick labels from category mapping
+        cbar.set_ticklabels(list(cat_mapping_marida.keys())[:-2])
 
-        dir_rel = os.path.join(self.run_dir, test_dir)  # Relative path
-        dir_abs = os.path.abspath(dir_rel)  # Absolute path
+        dir_rel = os.path.join(self.run_dir, test_dir)  
+        dir_abs = os.path.abspath(dir_rel)  
 
-        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
+        os.makedirs(dir_abs, exist_ok=True)  
         if test_dir == "test_results":
             filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
             self.test_image_count += 1
         else:
             filename = os.path.join(dir_abs, f"segmentation_comparison_epoch_{self.current_epoch}.png")
-        plt.savefig(filename)  # Save using absolute path
-        print(f"Saving to: {filename}") # Print to check where you are saving
-
+            
+        plt.savefig(filename)  
         plt.close()
         return loss
 
@@ -373,7 +350,6 @@ class MAEFineTuning(pl.LightningModule):
         self.writer.close()
     
     def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,log_dir) -> None:
-        print("log images")
         self.log_results()
         img= original_images.cpu().numpy()
         target = target.detach().cpu().numpy()
@@ -386,35 +362,32 @@ class MAEFineTuning(pl.LightningModule):
         img = np.clip(img, 0, np.percentile(img, 99))
         img = (img / img.max() * 255).astype('uint8')
         
-        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  # Create a figure with 1 row and 2 columns
+        fig, axes = plt.subplots(1, 3, figsize=(10, 5))  
         img = img.transpose(1,2,0)
-        # Plot original image
+
         axes[0].imshow(img)
         axes[0].set_title("Original Image")
         axes[0].axis('off')
 
-        # Plot original image
         axes[1].imshow(target)
         axes[1].set_title("Ground Truth")
         axes[1].axis('off')
 
-        # Plot prediction (as class labels)
-        axes[2].imshow(prediction)  # Use a colormap for labels
+        axes[2].imshow(prediction)  
         axes[2].set_title(f"Prediction for model {self.model_type}")
         axes[2].axis('off')
 
-        dir_rel = os.path.join(self.run_dir, log_dir)  # Relative path
-        dir_abs = os.path.abspath(dir_rel)  # Absolute path
+        dir_rel = os.path.join(self.run_dir, log_dir)  
+        dir_abs = os.path.abspath(dir_rel) 
 
-        os.makedirs(dir_abs, exist_ok=True)  # Create (or do nothing) using absolute path
+        os.makedirs(dir_abs, exist_ok=True)  
         if dir == "test_results":
             filename = os.path.join(dir_abs, f"segmentation_comparison_{self.current_epoch}_image_{self.test_image_count}.png")
             self.test_image_count += 1
         else:
             filename = os.path.join(dir_abs, f"segmentation_comparison_epoch_{self.current_epoch}.png")
-        plt.savefig(filename)  # Save using absolute path
-        print(f"Saving to: {filename}") # Print to check where you are saving
-
+        plt.savefig(filename)  
+        print(f"Saving to: {filename}") 
         plt.close()
 
     def log_results(self):
@@ -422,12 +395,10 @@ class MAEFineTuning(pl.LightningModule):
             run_index = 0
             while os.path.exists(os.path.join(self.base_dir, f"run_{run_index}")):
                 run_index += 1
-            
             self.run_dir = os.path.join(self.base_dir, f"run_{run_index}")
             os.makedirs(self.run_dir, exist_ok=True)
                 
     def configure_optimizers(self):
-        
         optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1)
         return [optimizer], [scheduler]

@@ -15,7 +15,7 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
             num_workers: int = 4, 
             transform: Optional[Callable] = None, 
             model_name: str = "ocean_aware", 
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/ocean_featues_nans_bathy.csv",#train_ocean_labels_3_clusters.csv",
+            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv",
             num_geo_clusters=3,
             ocean_flag = True
             
@@ -89,7 +89,6 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
         )
 
     def val_dataloader(self):
-        if hasattr(self, 'val_dataset') and self.val_dataset is not None:
             return DataLoader(
                 self.val_dataset,
                 batch_size=self.batch_size,
@@ -99,12 +98,8 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
                 drop_last=False,
                 collate_fn=self.custom_collate_fn 
             )
-        else:
-            print("WARNING: Validation dataloader requested but val_dataset not initialized or is None. Returning None.")
-            return None 
 
     def test_dataloader(self):
-        if hasattr(self, 'test_dataset') and self.test_dataset is not None:
             return DataLoader(
                 self.test_dataset,
                 batch_size=self.batch_size,
@@ -114,6 +109,3 @@ class HydroOceanFeaturesDataModule(LightningDataModule):
                 drop_last=False,
                 collate_fn=self.custom_collate_fn 
             )
-        else:
-            print("WARNING: Test dataloader requested but test_dataset not initialized or is None. Returning None.")
-            return None

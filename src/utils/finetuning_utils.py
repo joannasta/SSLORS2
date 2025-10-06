@@ -1,24 +1,18 @@
-# Utils
 import random
 import itertools
 import numpy as np
 import pandas as pd
-
-# Visualization
+import sklearn.metrics as metr
+import torch
 import matplotlib.pyplot as plt
+
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score, jaccard_score, hamming_loss, label_ranking_loss, coverage_error
-import sklearn.metrics as metr
-# PyTorch
-import torch
 
-# GDAL for GeoTIFF handling
-#from osgeo import gdal
 
 norm_param_depth = NORM_PARAM_DEPTH["agia_napa"]
 norm_param = np.load(NORM_PARAM_PATHS["agia_napa"])
 
-# Load common model parameters
 crop_size = MODEL_CONFIG["crop_size"]
 window_size = MODEL_CONFIG["window_size"]
 stride = MODEL_CONFIG["stride"]
@@ -65,10 +59,8 @@ def grouper(n, iterable):
         yield chunk
 
 def calculate_metrics(predictions, gts):
-    # Exclude 0 values from calculation
     non_zero_mask = predictions != 0
     
-    # Calculate RMSE, MAE, and collect predictions and targets
     rmse = np.sqrt(np.mean(((predictions - gts) ** 2)[non_zero_mask]))
     mae = np.mean(np.abs((predictions - gts)[non_zero_mask]))
     std_dev = np.std((predictions - gts)[non_zero_mask])

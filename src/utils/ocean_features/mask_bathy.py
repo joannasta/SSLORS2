@@ -15,8 +15,6 @@ def mask_bathymetry_beyond_secchi(input_csv_path, output_csv_path):
         axis=1
     )
     df.to_csv(output_csv_path, index=False)
-    print(f"Modified data saved successfully to '{output_csv_path}'")
-
 
 if __name__ == "__main__":
     input_file = "train_ocean_labels_3_clusters.csv"

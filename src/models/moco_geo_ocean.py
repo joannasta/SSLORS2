@@ -102,19 +102,29 @@ class MoCoOceanFeatures(pl.LightningModule):
         return total_loss
 
     def validation_step(self, batch: Tuple[torch.Tensor, torch.Tensor, torch.LongTensor], batch_idx: int) -> dict:
-        x_query, _, cluster_labels = batch 
+        x_query, x_key, cluster_labels = batch 
         
         query_features = self.forward(x_query)
+        key_features = self.forward_momentum(x_key)
 
+        loss_contrastive = self.contrastive_loss(query_features, key_features)
         predicted_cluster_logits = self.ocean_classifier(query_features)
         loss_classification = self.classification_criterion(predicted_cluster_logits, cluster_labels)
+        total_loss = loss_contrastive + loss_classification
 
         val_classification_metric = self.classification_metric(predicted_cluster_logits, cluster_labels)
 
+        self.log("val_loss_total", total_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        self.log("val_loss_contrastive", loss_contrastive, on_step=False, on_epoch=True, logger=True)
         self.log("val_loss_classification", loss_classification, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         self.log("val_accuracy", val_classification_metric, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
-        return {"val_loss": loss_classification, "val_accuracy": val_classification_metric}
+        return {
+            "val_loss_total": total_loss,
+            "val_loss_contrastive": loss_contrastive,
+            "val_loss_classification": loss_classification,
+            "val_accuracy": val_classification_metric
+        }
 
     def configure_optimizers(self):
         optimizer = torch.optim.SGD(self.parameters(), lr=0.06, momentum=0.9, weight_decay=1e-4)

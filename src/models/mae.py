@@ -58,7 +58,6 @@ class MAE(pl.LightningModule):
         pretrained_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model_state_dict}
         model_state_dict.update(pretrained_dict)
         self.load_state_dict(model_state_dict)
-        print("Pretrained weights loaded successfully.")
 
     def forward_encoder(self, images, idx_keep=None):
         return self.backbone.encode(images=images, idx_keep=idx_keep)
@@ -73,7 +72,6 @@ class MAE(pl.LightningModule):
         x_decoded = self.decoder.decode(x_masked)
 
         x_pred = utils.get_at_index(x_decoded, idx_mask)
-
         x_pred = self.decoder.predict(x_pred)
         
         return x_pred
@@ -129,10 +127,6 @@ class MAE(pl.LightningModule):
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
 
-        for name, param in self.named_parameters():
-            if param.grad is not None and (torch.isnan(param.grad).any() or torch.isinf(param.grad).any()):
-                print(f"WARNING: NaN or Inf gradients detected in {name}")
-
         return loss
 
     def on_train_epoch_end(self):
@@ -149,9 +143,7 @@ class MAE(pl.LightningModule):
             images = batch[0]
         else:
             images = batch
-        print("images shape",images.shape)
         x_pred, target,pred_img,masked_img = self(images)
-
         val_loss = self.criterion(x_pred, target)
 
         self.total_val_loss += val_loss.item()

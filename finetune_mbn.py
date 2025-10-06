@@ -1,26 +1,24 @@
 import os
 import argparse
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy import ndimage
 import scipy
 import torch
+
+import numpy as np
+import matplotlib.pyplot as plt
 import pytorch_lightning as pl
 
 from pytorch_lightning import Trainer
+from scipy import ndimage
 from pytorch_lightning.loggers import TensorBoardLogger
 from typing import Optional, Tuple
 from torchvision import transforms
 
-# from src.utils.finetuning_utils import write_geotiff, read_geotiff
 from src.models.finetuning.mbn.mae_finetuning_mbn import MAEFineTuning
 from src.models.mae import MAE
 from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
 from src.models.moco_geo import MoCoGeo
 from src.data.magicbathynet.mbn_dataloader import MagicBathyNetDataModule
-import torch
-
 
 class BathymetryPredictor:
     def __init__(
@@ -30,7 +28,7 @@ class BathymetryPredictor:
         model_type: str = "mae", 
         output_dir: str = "./inference_results/bathymetry",
         batch_size: int = 16,
-        resize_to: Tuple[int, int] = (3, 256, 256), # This tuple looks like (C, H, W)
+        resize_to: Tuple[int, int] = (3, 256, 256), 
         location: Optional[str] = "agia_napa",
     ):
         self.full_finetune = False 
@@ -38,16 +36,13 @@ class BathymetryPredictor:
         self.ssl = True
         self.location = location
         self.model_type = model_type 
-
-        # Determine computational device
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # Load pre-trained model based on model_type
         print(f"Loading pretrained model of type: {self.model_type} from {pretrained_weights_path}")
         if self.model_type.lower() == "mae":
             self.pretrained_model = MAE.load_from_checkpoint(
                 pretrained_weights_path,
-                strict=False # Use strict=False if the checkpoint has extra keys
+                strict=False 
             )
         elif self.model_type.lower() == "mae_ocean":
             self.pretrained_model = MAE_Ocean.load_from_checkpoint(
@@ -71,9 +66,8 @@ class BathymetryPredictor:
                 strict=False
             )
         else:
-            raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae', 'moco', 'mocogeo'.")
+            raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'mocogeo','ocean_aware'.")
 
-        # Initialize data module with transformations
         self.data_module = MagicBathyNetDataModule(
             root_dir=data_dir,
             batch_size=batch_size,
@@ -83,8 +77,8 @@ class BathymetryPredictor:
             pretrained_model=self.pretrained_model,
             location=location,
             full_finetune=self.full_finetune,
-            random=self.random, # Keep random=False for finetuning with loaded SSL model
-            ssl=self.ssl # Pass the determined SSL status to DataModule
+            random=self.random, 
+            ssl=self.ssl 
         )
         
         self.model = MAEFineTuning(
@@ -96,12 +90,10 @@ class BathymetryPredictor:
             pretrained_model=self.pretrained_model
         )
 
-        # Create output directory
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 
     def train(self, max_epochs: int = 10) -> pl.Trainer:
-        # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference", name="finetuning_logs")
 
         trainer = Trainer(
@@ -112,28 +104,25 @@ class BathymetryPredictor:
             gradient_clip_val=1.0,
             enable_progress_bar=True,
             val_check_interval=1.0,
-            # Ensure no batch limits are set here that could interfere
             limit_train_batches=1.0, 
             limit_val_batches=1.0,
         )
 
-        # Perform model training
         trainer.fit(self.model, datamodule=self.data_module)
         trainer.test(self.model, datamodule=self.data_module)
         return trainer
 
 
 def main():
-    # Set up argument parser for configurable parameters
     parser = argparse.ArgumentParser(description="Bathymetry Prediction Pipeline")
     parser.add_argument("--accelerator", type=str, default="gpu", help="Type of accelerator")
     parser.add_argument("--devices", type=int, default=1, help="Number of devices")
-    parser.add_argument("--train-batch-size", type=int, default=1, help="Training batch size") # Changed default to 1
-    parser.add_argument("--val-batch-size", type=int, default=1, help="Validation batch size") # Changed default to 1
+    parser.add_argument("--train-batch-size", type=int, default=1, help="Training batch size") 
+    parser.add_argument("--val-batch-size", type=int, default=1, help="Validation batch size")
     parser.add_argument("--num-workers", type=int, default=8, help="Dataloader workers")
     parser.add_argument("--learning-rate", type=float, default=1e-5, help="Learning rate")
     parser.add_argument("--model", type=str, default="mae",
-                        help="Type of pretrained model to load (mae, moco, mocogeo)") # New argument
+                        help="Type of pretrained model to load (mae, moco, mocogeo)") 
     parser.add_argument("--epochs", type=int, default=100, help="Training epochs")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--weights", required=True, help="Path to pretrained weights checkpoint")
@@ -142,22 +131,21 @@ def main():
     parser.add_argument("--resize-to", type=int, nargs=2, default=(256, 256), help="Resize images (height width)")
     parser.add_argument("--location", type=str, default="agia_napa", help="location")
 
-    # Parse arguments and initialize predictor
     args = parser.parse_args()
     model_type = args.model.lower()
     location = args.location
     print("data_dir:", args.data_dir)
-    # Pass the new 'model_type' argument to BathymetryPredictor
+
     predictor = BathymetryPredictor(
         pretrained_weights_path=args.weights,
         data_dir=args.data_dir,
-        model_type=model_type, # Pass the model type
+        model_type=model_type, 
         output_dir=args.output_dir,
         resize_to=tuple(args.resize_to),
         batch_size=args.train_batch_size,
-        location=location# Ensure this aligns with DataModule's batch_size
+        location=location
     )
-        # Run prediction workflow
+
     predictor.train(max_epochs=args.epochs) 
 
 if __name__ == "__main__":

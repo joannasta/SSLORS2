@@ -1,41 +1,38 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from sklearn.cluster import KMeans
-from pathlib import Path
 import rasterio
 import csv
 import pandas as pd
-from scipy.spatial import KDTree
-from rasterio.warp import transform as rasterio_transform
-from sklearn.metrics import silhouette_score 
-
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
+from scipy.spatial import KDTree
+from rasterio.warp import transform as rasterio_transform
+from sklearn.metrics import silhouette_score 
+from sklearn.cluster import KMeans
+from pathlib import Path
 
 TIF_DIRECTORY = Path('/mnt/storagecube/joanna/Hydro')
+
 #'/mnt/storagecube/joanna/ocean_features_projected.csv'
 OCEAN_FEATURES_PATH = Path("/mnt/storagecube/joanna/ocean_features.csv")
 
 n_clusters = 3 
 
-output_csv_path = Path(f"ocean_{n_clusters}_clusters_nan.csv")
-output_3d_plot_path = Path(f"3d_ocean_clusters_{n_clusters}_nan.png")
-output_map_plot_path = Path(f"new_geographic_clusters_map_{n_clusters}_nan.png")
+output_csv_path = Path(f"ocean_{n_clusters}_clusters.csv")
+output_3d_plot_path = Path(f"3d_ocean_clusters_{n_clusters}_.png")
+output_map_plot_path = Path(f"new_geographic_clusters_map_{n_clusters}_.png")
 
 
-MAX_MATCH_DISTANCE = 0.05#0.01
+MAX_MATCH_DISTANCE = 0.05. #0.01
 
 # --- Load Ocean Features Data ---
 
 ocean_df = pd.read_csv(OCEAN_FEATURES_PATH)
 required_cols = ['lat', 'lon', 'bathy', 'chlorophyll', 'secchi']
-if not all(col in ocean_df.columns for col in required_cols):
-    raise ValueError(f"Ocean features CSV missing one or more required columns: {required_cols}")
-    
+
 ocean_coords = ocean_df[['lat', 'lon']].values
 ocean_kdtree = KDTree(ocean_coords)
-print(f"Successfully loaded {len(ocean_df)} ocean features points.")
 
 # --- Match TIFF Files to Ocean Features ---
 tif_file_paths = sorted(list(TIF_DIRECTORY.glob("*.tif")))
@@ -48,7 +45,6 @@ matched_ocean_features = []
 for file_path in tif_file_paths:
     try:
         with rasterio.open(file_path) as src:
-            # Your existing code to extract coordinates goes here
             row, col = src.height // 2, src.width // 2
             native_center_lon, native_center_lat = src.transform * (col, row)
 
@@ -76,11 +72,9 @@ for file_path in tif_file_paths:
                 chlorophyll_val = matched_row['chlorophyll']
                 secchi_val = matched_row['secchi']
                 
-                if abs(bathy_val) > secchi_val:
-                    bathy_val = np.nan
+                #if abs(bathy_val) > secchi_val:
+                #    bathy_val = np.nan
                     
-
-
                 matched_file_paths.append(str(file_path))
                 matched_geo_coords.append([tif_center_lon, tif_center_lat])
                 matched_ocean_features.append([
@@ -93,20 +87,29 @@ for file_path in tif_file_paths:
     except rasterio.errors.RasterioIOError as e:
         print(f"Warning: Skipping {file_path} because it could not be opened: {e}")
 
+total_tifs = len(tif_file_paths)
+matched_tifs = len(matched_file_paths)
+
+if total_tifs > 0:
+    percentage_matched = (matched_tifs / total_tifs) * 100
+    print("\n--- Matching Results ---")
+    print(f"Total TIFFs in pretraining dataset: {total_tifs}")
+    print(f"Total TIFFs successfully matched: {matched_tifs}")
+    print(f"Percentage of dataset matched: {percentage_matched:.2f}%")
+else:
+    print("\nNo TIFF files were found to match.")
+
 ocean_features_for_clustering = np.array(matched_ocean_features)
 geo_coords_matched_np = np.array(matched_geo_coords)
 
-
-print("\n--- Performing K-means Clustering and Plotting with n_clusters = 3---")
 # Adjust actual_n_clusters based on the available data points, then use the chosen n_clusters value
 actual_n_clusters = min(n_clusters, len(ocean_features_for_clustering))
-
 
 kmeans = KMeans(n_clusters=actual_n_clusters, random_state=42, n_init=10)
 cluster_assignments = kmeans.fit_predict(ocean_features_for_clustering)
 
 # --- Save Clustered Data to CSV ---
-print(f"Saving cluster assignments to {output_csv_path}...")
+
 with open(output_csv_path, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow(['label', 'file_dir', 'lon', 'lat', 'bathy', 'chlorophyll', 'secchi']) 
@@ -119,10 +122,10 @@ with open(output_csv_path, 'w', newline='') as csvfile:
         chlorophyll = ocean_features_for_clustering[i, 1]
         secchi = ocean_features_for_clustering[i, 2]
         writer.writerow([label, file_dir, lon, lat, bathy, chlorophyll, secchi])
-print("Cluster assignments CSV saved.")
 
 # --- Print Cluster Information ---
 unique_clusters, counts = np.unique(cluster_assignments, return_counts=True)
+
 print(f"Number of unique clusters formed: {len(unique_clusters)}")
 print("Cluster counts:", dict(zip(unique_clusters, counts)))
 
@@ -131,6 +134,7 @@ for i, centroid in enumerate(kmeans.cluster_centers_):
 
 # --- 3D Plot of Ocean Features Clusters ---
 print(f"Generating 3D plot and saving to {output_3d_plot_path}...")
+
 fig_3d = plt.figure(figsize=(12, 10))
 ax_3d = fig_3d.add_subplot(111, projection='3d')
 
@@ -188,7 +192,6 @@ unique_cluster_ids = np.unique(cluster_assignments)
 bounds = np.arange(len(unique_cluster_ids) + 1) - 0.5 
 norm = plt.Normalize(vmin=unique_cluster_ids.min() - 0.5, vmax=unique_cluster_ids.max() + 0.5)
     
-# Create the colorbar using the scatter plot and the discrete norm
 cbar = fig_map.colorbar(scatter_map, label="Cluster ID", orientation='vertical', pad=0.05, 
                         ticks=unique_cluster_ids, boundaries=bounds)
 cbar.set_ticklabels([str(int(i)) for i in unique_cluster_ids])

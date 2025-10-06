@@ -28,7 +28,6 @@ models = {
 
 def set_seed(seed):
     """Set the random seed for reproducibility."""
-    print(f"DEBUG: Setting random seed to {seed}")
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -36,30 +35,28 @@ def set_seed(seed):
 
 def main(args):
     """Main training function."""
-    print("DEBUG: Starting main training function.")
     set_seed(args.seed)
 
     model = None
     datamodule = None
-    transform = None # Initialize transform here to ensure scope
+    transform = None 
 
     ocean_flag = args.ocean 
     print("Training model:",args.model)
     print("Using Ocean dataset:", ocean_flag)
     
-    print(f"DEBUG: Initializing model and transform for model: {args.model}")
-    # --- Initialize Model and Define Transform Pipeline based on selected model ---
+    # Initialize Model and Define Transform Pipeline based on selected model 
     if args.model == "mae":
         transform = transforms.Compose([
             transforms.RandomResizedCrop(224), 
             transforms.RandomHorizontalFlip(),
         ])
         model = MAE(
-            src_channels=12, # Assuming 12 channels for Hydro data
+            src_channels=12, 
             mask_ratio=args.mask_ratio,
             decoder_dim=args.decoder_dim,
         )
-        datamodule = HydroDataModule( # Assuming HydroDataModule for MAE
+        datamodule = HydroDataModule( 
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
@@ -67,7 +64,6 @@ def main(args):
             num_workers=args.num_workers,
             ocean_flag=ocean_flag
         )
-        print("DEBUG: MAE model and HydroDataModule initialized.")
         
     elif args.model == "mae_ocean":
         transform = transforms.Compose([
@@ -87,7 +83,6 @@ def main(args):
             num_workers=args.num_workers,
             ocean_flag=ocean_flag
         )
-        print("DEBUG: MAE_Ocean model and HydroDataModule initialized.")
         
     elif args.model == "geo_aware":
         augmentations = [
@@ -97,9 +92,9 @@ def main(args):
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
         model = MoCoGeo(
-            src_channels=3 # Assuming 12 channels for Hydro data
+            src_channels=3 
         )
-        datamodule = HydroMoCoGeoDataModule( # Specific DataModule for MoCo-Geo
+        datamodule = HydroMoCoGeoDataModule(
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
@@ -107,7 +102,6 @@ def main(args):
             num_workers=args.num_workers,
             ocean_flag=ocean_flag
         )
-        print("DEBUG: MoCoGeo model and HydroMoCoGeoDataModule initialized.")
     elif args.model == "ocean_aware":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
@@ -116,9 +110,9 @@ def main(args):
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
         model = MoCoOceanFeatures(
-            src_channels=3 # Assuming 12 channels for Hydro data
+            src_channels=3 
         )
-        datamodule = HydroOceanFeaturesDataModule( # Specific DataModule for MoCo-Geo
+        datamodule = HydroOceanFeaturesDataModule( 
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
@@ -126,8 +120,7 @@ def main(args):
             num_workers=args.num_workers,
             ocean_flag=ocean_flag
         )
-        print("DEBUG: MoCoOceanFeatures model and HydroOceanFeaturesDataModule initialized.")
-        
+
     elif args.model == "moco":
         augmentations = [
             transforms.RandomResizedCrop(224, scale=(0.2, 1.)),
@@ -136,9 +129,9 @@ def main(args):
         ]
         transform = TwoCropsTransform(transforms.Compose(augmentations))
         model = MoCo(
-            src_channels=12 # Assuming 12 channels for Hydro data
+            src_channels=12
         )
-        datamodule = HydroMoCoDataModule( # Specific DataModule for MoCo
+        datamodule = HydroMoCoDataModule(
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
@@ -146,27 +139,16 @@ def main(args):
             num_workers=args.num_workers,
             ocean_flag=ocean_flag
         )
-        print("DEBUG: MoCo model and HydroMoCoDataModule initialized.")
     
     else:
         raise ValueError(f"Unknown model: {args.model}. Choose from {list(models.keys())}")
 
-    # Ensure model and datamodule are initialized
-    if model is None or datamodule is None:
-        raise RuntimeError("Model or DataModule could not be initialized. Check model argument.")
-
-    print("DEBUG: Calling datamodule.setup('fit').")
-    datamodule.setup("fit") # Prepare datasets for training and validation
-    print("DEBUG: Getting train_dataloader.")
+    datamodule.setup("fit") 
     train_dataloader = datamodule.train_dataloader()
-    print("DEBUG: Getting val_dataloader.")
     val_dataloader = datamodule.val_dataloader()
 
-    print("DEBUG: Setting up TensorBoardLogger.")
-    # --- Setup Trainer and Run Fit ---
     logger = TensorBoardLogger("results/trains", name=args.model)
-
-    print(f"DEBUG: Initializing Trainer with epochs: {args.epochs}")
+    
     trainer = Trainer(
         accelerator=args.accelerator,
         devices=args.devices,
@@ -176,17 +158,12 @@ def main(args):
         enable_progress_bar=True,
         val_check_interval=1.0
     )
-    print("DEBUG: Calling trainer.fit().")
+
     trainer.fit(model, train_dataloader, val_dataloaders=val_dataloader)
-    print("DEBUG: Training finished.")
 
-# --- Argument Parsing ---
 def parse_args():
-    """Parse command-line arguments."""
-    print("DEBUG: Parsing command-line arguments.")
     parser = argparse.ArgumentParser(description="Train script for SSL models.")
-
-    # General training arguments
+    
     parser.add_argument("--accelerator", default="cpu", type=str, help="Training accelerator: 'cpu' or 'gpu'")
     parser.add_argument("--devices", default=1, type=int, help="Number of devices to use for training")
     parser.add_argument("--train-batch-size", default=64, type=int, help="Batch size for training")
@@ -198,17 +175,14 @@ def parse_args():
     parser.add_argument("--epochs", default=100, type=int, help="Number of epochs")
     parser.add_argument("--ocean", default=True, type=bool, help="Flag to indicate ocean dataset")
 
-    # MAE-specific arguments
     parser.add_argument("--mask-ratio", default=0.90, type=float, help="Masking ratio for MAE")
     parser.add_argument("--decoder-dim", default=512, type=int, help="Dimension of the MAE decoder")
 
     parser.add_argument("--seed", default=42, type=int, help="Random seed for reproducibility")
 
     args = parser.parse_args()
-    print("DEBUG: Arguments parsed.")
     return args
 
 if __name__ == "__main__":
-    print("DEBUG: Script started. Entering __main__ block.")
     args = parse_args()
     main(args)

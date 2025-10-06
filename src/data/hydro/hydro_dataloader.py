@@ -80,7 +80,6 @@ class HydroDataModule(LightningDataModule):
         )
 
     def val_dataloader(self):
-        if self.val_dataset is not None:
             return DataLoader(
                 self.val_dataset,
                 batch_size=self.batch_size,
@@ -88,11 +87,8 @@ class HydroDataModule(LightningDataModule):
                 num_workers=self.num_workers, 
                 collate_fn=collate_fn
             )
-        else:
-            raise ValueError("Validation dataset is None.")
 
     def test_dataloader(self):
-        if self.test_dataset is not None:
             return DataLoader(
                 self.test_dataset,
                 batch_size=self.batch_size,
@@ -100,7 +96,5 @@ class HydroDataModule(LightningDataModule):
                 num_workers=self.num_workers, 
                 collate_fn=collate_fn
             )
-        else:
-            raise ValueError("Test dataset is None.")
         
  

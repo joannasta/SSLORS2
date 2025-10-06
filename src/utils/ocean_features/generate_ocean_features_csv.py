@@ -25,68 +25,41 @@ tiff_files = [
 ] + [
     os.path.join(geotiff_dir, f"MY1DMM_CHLORA_2025-{month:02d}-01_rgb_3600x1800.TIFF") for month in range(1, 5)
 ]
-
-# --- Define a target CRS for all data (WGS 84 Geographic) ---
 TARGET_CRS = "EPSG:4326"
 
-print("--- Step 1: Checking Coordinate Reference Systems (CRSs) of input files ---")
-
-# --- Check Bathymetry (GEBCO) CRS ---
+# --- Check Bathymetry CRS ---
 bathy_tif_files = sorted(glob.glob(os.path.join(bathy_path, "*.tif")))
 if bathy_tif_files:
     with rasterio.open(bathy_tif_files[0]) as src:
         bathy_crs = src.crs
-        print(f"\nBathymetry (GEBCO) CRS: {bathy_crs.to_string()} (EPSG:{src.crs.to_epsg()})")
-        if bathy_crs != TARGET_CRS:
-            print(f"  WARNING: Bathymetry CRS is not {TARGET_CRS}. It will be handled during merge/processing.")
-else:
-    print("\nERROR: No bathymetry TIFF files found. Please check 'bathy_path'. Exiting.")
-    exit()
 
-# --- Check Secchi (CMEMS NetCDF) CRS ---
+# --- Check Secchi CRS ---
 secchi_ds_global = None 
 if os.path.exists(secchi_path):
     try:
-        secchi_ds_global = xr.open_dataset(secchi_path)
-        
+        secchi_ds_global = xr.open_dataset(secchi_path)     
         if not secchi_ds_global.rio.crs:
-            print("  Secchi (CMEMS) dataset has no explicit CRS via .rio.crs. Assuming EPSG:4326.")
             secchi_ds_global = secchi_ds_global.rio.write_crs(TARGET_CRS, inplace=False) 
-        
-        print(f"\nSecchi (CMEMS) CRS: {secchi_ds_global.rio.crs.to_string()} (EPSG:{secchi_ds_global.rio.crs.to_epsg()})")
+    
         if secchi_ds_global.rio.crs != TARGET_CRS:
-            print(f"  WARNING: Secchi CRS is not {TARGET_CRS}. It will be reprojected during interpolation.")
             secchi_ds_global = secchi_ds_global.rio.reproject(TARGET_CRS, resampling=Resampling.linear)
 
         secchi_var = list(secchi_ds_global.data_vars)[0]
 
     except Exception as e:
-        print(f"\nERROR: Could not load or determine CRS for Secchi NetCDF: {e}. Exiting.")
-        if secchi_ds_global:
-            secchi_ds_global.close()
-        exit()
+        print(f"ERROR: Could not load or determine CRS for Secchi NetCDF: {e}. Exiting.")
 else:
-    print("\nERROR: Secchi NetCDF file not found. Please check 'secchi_path'. Exiting.")
-    exit()
+    print("ERROR: Secchi file not found.")
+
 
 # --- Check Chlorophyll CRS ---
 if tiff_files:
     with rasterio.open(tiff_files[0]) as src:
         chl_crs = src.crs
-        print(f"\nChlorophyll CRS: {chl_crs.to_string()} (EPSG:{src.crs.to_epsg()})")
-        if chl_crs != TARGET_CRS:
-            print(f"  WARNING: Chlorophyll CRS is not {TARGET_CRS}. It will be reprojected per tile.")
 else:
     print("\nERROR: No chlorophyll TIFF files found. Please check 'geotiff_dir' and file names. Exiting.")
-    exit()
 
-print("\n--- Step 1 Complete: CRS Verification ---")
-print("All data will be processed and reprojected to EPSG:4326 as the common standard.")
-
-
-print("\n--- Step 2: Processing and Combining Data ---")
-
-# --- 1. Load and mosaic GEBCO Bathymetry Tiles ---
+# --- 1. Load and mosaic Bathymetry Tiles ---
 
 src_files_to_mosaic = [rasterio.open(fp) for fp in bathy_tif_files]
 
@@ -95,13 +68,11 @@ mosaic_full = mosaic_full[0]
 
 height_full, width_full = mosaic_full.shape
 
-
 for src in src_files_to_mosaic:
     src.close()
 
 with rasterio.open(bathy_tif_files[0]) as first_src: 
     if first_src.crs != TARGET_CRS:
-        print(f"  Reprojecting full bathymetry mosaic from {first_src.crs.to_string()} to {TARGET_CRS}...")
         reprojected_mosaic = np.empty_like(mosaic_full, dtype=mosaic_full.dtype)
         reproject(
             source=mosaic_full,
@@ -121,7 +92,6 @@ tile_size_cols = 500
 
 output_path = os.path.join("/mnt/storagecube/joanna/", "ocean_features.csv")
 
-# Open the output CSV file in append mode. Write header only once.
 file_exists = os.path.exists(output_path)
 output_file = open(output_path, 'a')
 if not file_exists or os.stat(output_path).st_size == 0: 
@@ -129,28 +99,21 @@ if not file_exists or os.stat(output_path).st_size == 0:
 else:
     pass
 
-# Iterate over tiles
 for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows"):
     r_end = min(r_start + tile_size_rows, height_full)
 
     for c_start in tqdm(range(0, width_full, tile_size_cols), desc=f"  Processing Cols (Row {r_start}-{r_end})", leave=False):
         c_end = min(c_start + tile_size_cols, width_full)
-
-        # --- Extract bathy for current tile ---
         mosaic_tile = mosaic_full[r_start:r_end, c_start:c_end]
-
-        # --- Create coordinates for current tile (these are in TARGET_CRS implicitly now) ---
         lats_tile, lons_tile = [], []
         for r_offset in range(r_end - r_start):
             for c_offset in range(c_end - c_start):
                 global_row = r_start + r_offset
                 global_col = c_start + c_offset
-                # xy function converts pixel to (lon, lat) based on the mosaic's transform
                 lon, lat = xy(out_transform_full, global_row, global_col)
                 lats_tile.append(lat)
                 lons_tile.append(lon)
 
-        # --- Load and average Chlorophyll for current tile ---
         chl_arrays_tile = []
         expected_tile_height = r_end - r_start
         expected_tile_width = c_end - c_start
@@ -168,8 +131,7 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
                 reprojected_chl_data = np.full(
                     (expected_tile_height, expected_tile_width), np.nan, dtype=np.float32
                 )
-
-                # Perform the reprojection of the chlorophyll data to the TARGET_CRS grid
+                
                 try:
                     reproject(
                         source=rasterio.band(src_chl, 1),
@@ -198,11 +160,9 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
         else:
             chl_interp_tile = np.full(expected_tile_height * expected_tile_width, np.nan, dtype="float32")
 
-
-        # --- Interpolate Secchi for current tile's coordinates ---
         secchi_interp_tile = secchi_ds_global[secchi_var].interp(
             latitude=("points", lats_tile), longitude=("points", lons_tile), method="linear",
-            kwargs={"fill_value": np.nan} # Ensure NaNs for out-of-bounds
+            kwargs={"fill_value": np.nan} 
         ).values.flatten()
 
         # Add assertions to catch size mismatches early
@@ -218,18 +178,12 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
             "secchi": secchi_interp_tile,
         })
 
-        # --- Remove NaN rows for the tile ---
         df_tile = df_tile.dropna()
-
-        # --- Append to CSV ---
         df_tile.to_csv(output_file, index=False, header=False) # No header for subsequent appends
 
-# Close the output file after all tiles are processed
 output_file.close()
 
-# Close the global Secchi dataset
 if secchi_ds_global:
     secchi_ds_global.close()
 
-print(f"\n--- Step 2 Complete: DataFrame saved to: {output_path} ---")
-print("Processing finished.")
+print(f"\n Complete: DataFrame saved to: {output_path}")

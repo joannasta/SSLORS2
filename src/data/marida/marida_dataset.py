@@ -3,14 +3,15 @@ import json
 import torch
 import numpy as np
 import random
-
-from tqdm import tqdm
 import rasterio
-from torch.utils.data import Dataset
-from pathlib import Path
 import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torch.nn as nn
+
+from tqdm import tqdm
+from torch.utils.data import Dataset
+from pathlib import Path
+
 
 from src.data.hydro.hydro_dataset import HydroDataset
 from src.utils.data_processing_marida import DatasetProcessor
@@ -35,13 +36,11 @@ class MaridaDataset(Dataset):
         
         if mode == 'train':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'train_X.txt'), dtype='str')
-            print("train ROIS are used")
         elif mode == 'test': 
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'test_X.txt'), dtype='str')
             self.transform = transforms.Compose([transforms.ToTensor()]) 
         elif mode == 'val':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'val_X.txt'), dtype='str')
-            print("val ROIS are used")
         else:
             raise ValueError(f"Unknown mode {mode}")
         
@@ -92,7 +91,6 @@ class MaridaDataset(Dataset):
                 print(f"Error opening file for ROI {roi}: {e}")
         
         if temp is not None:
-            print("impute nan tempshape",  (temp.shape[1],temp.shape[2],1))
             self.impute_nan = np.tile(self.means, (temp.shape[1],temp.shape[2],1))
         else:
             print("Warning: No data loaded. `temp` is not defined.")
@@ -102,8 +100,6 @@ class MaridaDataset(Dataset):
 
 
     def _save_data_to_tiff(self):
-        print("Entering _save_data_to_tiff function...")
-
         output_folder = os.path.join(self.path, "roi_data", self.mode)
         os.makedirs(output_folder, exist_ok=True)
         output_img_folder = os.path.join(output_folder, "_images")
@@ -123,19 +119,15 @@ class MaridaDataset(Dataset):
                 img_filename = os.path.join(output_img_folder, f"X_{i:04d}_{roi_name}.tif")
                 with rasterio.open(img_filename, 'w', driver='GTiff', width=img.shape[2], height=img.shape[1], count=img.shape[0], dtype=img.dtype, crs=None, transform=None) as dst:
                     dst.write(img)
-                print(f"Image saved successfully: {os.path.exists(img_filename)}")
 
                 target_filename = os.path.join(output_target_folder, f"y__{i:04d}_{roi_name}.tif")
                 with rasterio.open(target_filename, 'w', driver='GTiff', width=target.shape[1], height=target.shape[0], count=1, dtype=target.dtype, crs=None, transform=None) as dst:
                     dst.write(target, 1)
-                print(f"Target saved successfully: {os.path.exists(target_filename)}")
 
                 paired_filename = os.path.join(output_paired_folder, f"paired_{i:04d}_{roi_name}.tif")
                 paired_data = np.concatenate([img, target[np.newaxis, :, :]], axis=0)
                 with rasterio.open(paired_filename, 'w', driver='GTiff', width=img.shape[2], height=img.shape[1], count=paired_data.shape[0], dtype=paired_data.dtype, crs=None, transform=None) as dst:
                     dst.write(paired_data)
-                print(f"Paired data saved successfully: {os.path.exists(paired_filename)}") 
-
             except Exception as e:
                 print(f"Error saving data for ROI {roi}: {e}")
 
@@ -148,7 +140,6 @@ class MaridaDataset(Dataset):
 
     def _create_embeddings(self):
         hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"],ocean_flag=False)
-        print(f"Length of hydro_dataset: {len(hydro_dataset)}")
         self.embeddings = []
 
         def weights_init(m):
@@ -158,7 +149,6 @@ class MaridaDataset(Dataset):
                     nn.init.zeros_(m.bias)
 
         if self.random:
-            print("Random weights initialization")
             self.pretrained_model.cpu()
             self.pretrained_model.apply(weights_init)
 

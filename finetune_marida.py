@@ -1,20 +1,19 @@
 import os
 import argparse
-import numpy as np
-import matplotlib.pyplot as plt
-from scipy import ndimage
 import scipy
 import torch
+import random
+import numpy as np
+import matplotlib.pyplot as plt
 import pytorch_lightning as pl
+import torchvision.transforms.functional as F
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import TensorBoardLogger
 from typing import Optional, Tuple
 from torchvision import transforms
-import torchvision.transforms.functional as F
-import random
+from scipy import ndimage
 
-#from src.utils.finetuning_utils import write_geotiff, read_geotiff 
 from src.models.mae import MAE
 from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
@@ -73,7 +72,7 @@ class MarineDebrisPredictor:
                     strict=False
                 )
             else:
-                raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae', 'moco', 'mocogeo'.")
+                raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'mocogeo','ocean_aware'.")
 
 
         # Initialize data module with transformations
@@ -91,7 +90,7 @@ class MarineDebrisPredictor:
             model_type=self.model_type,
             pretrained_model=self.pretrained_model
         )
-        # Create output directory
+        
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         
@@ -106,10 +105,8 @@ class MarineDebrisPredictor:
     
     
     def train(self, max_epochs: int = 50) -> pl.Trainer:
-        # Configure TensorBoard logger for tracking
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
-            
         trainer = Trainer(
             accelerator=self.device.type,
             devices=1,
@@ -120,14 +117,12 @@ class MarineDebrisPredictor:
             val_check_interval=1.0,
         )
 
-        # Perform model training
         trainer.fit(self.model, datamodule=self.data_module)
         trainer.test(self.model, datamodule=self.data_module)
         return trainer
     
 
 def main():
-    # Set up argument parser for configurable parameters
     parser = argparse.ArgumentParser(description="Bathymetry Prediction Pipeline")
     parser.add_argument("--accelerator", type=str, default="gpu", help="Type of accelerator")
     parser.add_argument("--devices", type=int, default=1, help="Number of devices")
@@ -143,7 +138,6 @@ def main():
     parser.add_argument("--output_dir", default="./inference_results", help="Output directory")
     parser.add_argument("--resize-to", type=int, nargs=2, default=(256, 256), help="Resize images")
 
-    # Parse arguments and initialize predictor
     args = parser.parse_args()
     model_type = args.model.lower()
     predictor = MarineDebrisPredictor(

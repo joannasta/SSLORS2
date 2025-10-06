@@ -96,9 +96,6 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 drop_last=False,
                 collate_fn=self.custom_collate_fn 
             )
-        else:
-            print("WARNING: Validation dataloader requested but val_dataset not initialized or is None.")
-            return None 
 
     def test_dataloader(self):
         if hasattr(self, 'test_dataset') and self.test_dataset is not None:
@@ -111,6 +108,3 @@ class HydroMoCoGeoDataModule(LightningDataModule):
                 drop_last=False,
                 collate_fn=self.custom_collate_fn 
             )
-        else:
-            print("WARNING: Test dataloader requested but test_dataset not initialized or is None.")
-            return None 

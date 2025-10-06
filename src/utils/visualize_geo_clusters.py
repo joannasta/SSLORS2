@@ -1,8 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
+import rasterio
+
 from sklearn.cluster import KMeans
 from pathlib import Path
-import rasterio
 
 path_dataset = Path("/mnt/storagecube/joanna/Hydro/")
 file_paths = sorted(list(path_dataset.glob("*.tif")))

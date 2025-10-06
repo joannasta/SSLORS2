@@ -1,8 +1,10 @@
 import random
-from PIL import ImageFilter
-from torchvision.transforms import GaussianBlur as GB
 import torch
 import torchvision.transforms as T
+
+from PIL import ImageFilter
+from torchvision.transforms import GaussianBlur as GB
+
 class TwoCropsTransform:
     """Take two random crops of one image as the query and key."""
 

@@ -85,14 +85,10 @@ class MAEFineTuning(pl.LightningModule):
         processed_embedding = embedding
 
         if self.full_finetune:
-            if self.model_type == "mae":
-                print("embedding before",embedding.shape)
+            if self.model_type == "mae" or self.model_type == "mae_ocean":
                 embedding = embedding.squeeze(1)
-                print("embedding after squeeze",embedding.shape)
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
-                print("processed_embedding",processed_embedding.shape)
             elif self.model_type in ["moco", "geo_aware","ocean_aware"]:
-                print("embedding shape:", embedding.shape)
                 embedding = embedding.squeeze(0)
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
 
@@ -284,13 +280,8 @@ class MAEFineTuning(pl.LightningModule):
 
             img_mask = (img != 0).float()
             img_mask = img_mask.to(self.device)
-
-        
-            print("img_mask shape:", img_mask.shape)
-            print("gt_mask shape:", gt_mask.shape)
+            
             combined_mask = img_mask*gt_mask
-
-            print("combined_mask shape:", combined_mask.shape)
 
             masked_pred = pred * combined_mask.cpu().numpy()
             masked_gt_e = gt_e * combined_mask.cpu().numpy()
@@ -298,7 +289,7 @@ class MAEFineTuning(pl.LightningModule):
             pred = torch.from_numpy(pred).unsqueeze(0)
             gt_e = gt_e.unsqueeze(0)
             img_log =  img[0,:,:,:]#.transpose(1,2,0)
-            print("img",img.shape)
+            
             if self.test_image_count < 40:
                 self.log_images(
                         img_log,
@@ -405,11 +396,6 @@ class MAEFineTuning(pl.LightningModule):
 
     def log_images(self, data: torch.Tensor, predicted_depth: np.ndarray, depth: np.ndarray, dir: str) -> None:
         self.log_results()
-
-        print("data",data.shape)
-        print("predicted_depth",predicted_depth.shape)
-        print("depth",depth.shape)
-
         if data.ndim == 3 and data.shape[0] == 3:
             data = np.transpose(data, (1, 2, 0))
         elif data.ndim == 4 and data.shape[1] == 3:
@@ -447,7 +433,6 @@ class MAEFineTuning(pl.LightningModule):
         plt.colorbar(fraction=0.046, pad=0.04)
         plt.axis("off")
 
-        print("predicted_depth_display",predicted_depth.shape)
         plt.subplot(133)
         plt.imshow(predicted_depth, cmap='viridis_r', vmin=display_vmin, vmax=display_vmax)
         plt.title(f"Predicted Depth for model {self.model_type} for region {self.location}")

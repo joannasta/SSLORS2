@@ -60,7 +60,6 @@ class HydroMoCoDataModule(LightningDataModule):
             ) 
 
         if stage == 'test' or stage is None: 
-            # Initialize test dataset for evaluation 
             self.test_dataset = HydroMoCoDataset( 
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
@@ -71,7 +70,6 @@ class HydroMoCoDataModule(LightningDataModule):
             ) 
 
         if stage == 'predict': 
-            # You can set up a different dataset for prediction if needed 
             self.predict_dataset = HydroMoCoDataset( 
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
@@ -100,11 +98,8 @@ class HydroMoCoDataModule(LightningDataModule):
                 collate_fn=collate_fn, 
                 pin_memory=True, drop_last=True 
             ) 
-        else: 
-            raise ValueError("Validation dataset is None.") 
 
     def test_dataloader(self): 
-        if self.test_dataset is not None: 
             return DataLoader( 
                 self.test_dataset, 
                 batch_size=self.batch_size, 
@@ -112,5 +107,3 @@ class HydroMoCoDataModule(LightningDataModule):
                 num_workers=self.num_workers, 
                 collate_fn=collate_fn, 
                 pin_memory=True, drop_last=True) 
-        else: 
-            raise ValueError("Test dataset is None.")

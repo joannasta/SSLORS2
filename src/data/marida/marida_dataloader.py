@@ -1,17 +1,16 @@
 import torch
-from torch.utils.data import DataLoader
 import pytorch_lightning as pl
-from torchvision import transforms
 import torchvision.transforms as T
-
-from torchvision.utils import make_grid # Import make_grid
 import os
+import matplotlib.pyplot as plt
+import numpy as np
+from torchvision import transforms
+from torch.utils.data import DataLoader
+from torchvision.utils import make_grid
 from config import get_marida_means_and_stds
 
-import matplotlib.pyplot as plt
-# Import your dataset class (ensure this is correctly defined in your project)
-from .marida_dataset import MaridaDataset # Update the path as per your project structure
-import numpy as np
+from .marida_dataset import MaridaDataset 
+
 
 class MaridaDataModule(pl.LightningDataModule):
     def __init__(self, batch_size=32, root_dir="/home/jovyan/SSLORS/marida", transform=None, standardization=None,
@@ -30,20 +29,27 @@ class MaridaDataModule(pl.LightningDataModule):
         self.pretrained_model = pretrained_model
         
     def setup(self, stage=None):
-        """Setup dataset for training, validation, or test."""
-        print("self.path", self.path)
         self.train_dataset = MaridaDataset(root_dir=self.root_dir,mode='train', transform=self.transform, standardization=self.standardization, path=self.path,full_finetune=self.full_finetune, random=self.random, ssl=self.ssl, pretrained_model=self.pretrained_model,model_type=self.model_type)
         self.val_dataset = MaridaDataset(root_dir=self.root_dir, mode='val', transform=self.transform, standardization=self.standardization, path=self.path,full_finetune=self.full_finetune, random=self.random, ssl=self.ssl,pretrained_model=self.pretrained_model,model_type=self.model_type)
         self.test_dataset = MaridaDataset(root_dir=self.root_dir, mode='test', transform=self.transform, standardization=self.standardization, path=self.path,full_finetune=self.full_finetune, random=self.random, ssl=self.ssl, pretrained_model=self.pretrained_model,model_type=self.model_type)
 
     def train_dataloader(self):
-        """Return train dataloader."""
-        return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=4)
+        return DataLoader(
+            self.train_dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=4)
 
     def val_dataloader(self):
-        """Return validation dataloader."""
-        return DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(
+            self.val_dataset, 
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=4)
 
     def test_dataloader(self):
-        """Return test dataloader."""
-        return DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=4)
+        return DataLoader(
+            self.test_dataset, 
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=4)

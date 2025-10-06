@@ -22,7 +22,7 @@ class HydroMocoGeoOceanFeaturesDataset(Dataset):
         transforms: Optional[Callable] = None,
         location: str = "agia_napa",
         model_name: str = "ocean_aware",
-        csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features//ocean_featues_nans_bathy.csv",#"#train_ocean_labels_3_clusters.csv",
+        csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv",
         num_geo_clusters: int = 3,
         ocean_flag=True
     ):

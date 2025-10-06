@@ -12,7 +12,7 @@ class MAE_Ocean(pl.LightningModule):
     def __init__(self, src_channels=3, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None, 
                  num_ocean_features: int = 3):
         super().__init__()
-        self.src_channels = 11#src_channels
+        self.src_channels = src_channels
         self.save_hyperparameters()
         self.mask_ratio = mask_ratio
         self.pretrained_weights = pretrained_weights
@@ -25,9 +25,7 @@ class MAE_Ocean(pl.LightningModule):
             patch_size=16,        
         )
         self.patch_size = vit.patch_embed.patch_size[0]
-        
         self.vit_backbone = vit 
-        
         self.num_image_patches = vit.patch_embed.num_patches
         self.encoder_sequence_length = self.num_image_patches + 1 
 
@@ -70,16 +68,11 @@ class MAE_Ocean(pl.LightningModule):
 
     def forward_encoder(self, images, idx_keep=None):
         x_patches = self.vit_backbone.patch_embed(images)
-
         cls_token = self.vit_backbone.cls_token.expand(x_patches.shape[0], -1, -1)
-        
         x = torch.cat((cls_token, x_patches), dim=1)
-        
         x = x + self.vit_backbone.pos_embed
-
         if idx_keep is not None:
             x = utils.get_at_index(x, idx_keep)
-
         for blk in self.vit_backbone.blocks:
             x = blk(x)
         x = self.vit_backbone.norm(x)
@@ -95,9 +88,7 @@ class MAE_Ocean(pl.LightningModule):
         x_decoded = self.decoder.decode(x_masked)
         
         x_pred_full_sequence = utils.get_at_index(x_decoded, idx_mask)
-        
         x_pred = x_pred_full_sequence
-
         x_pred = self.decoder.predict(x_pred)
         
         return x_pred
@@ -145,14 +136,7 @@ class MAE_Ocean(pl.LightningModule):
     
     def training_step(self, batch, batch_idx):
         images, ocean_features = batch
-
         x_pred, target, pred_img, masked_img, combined_embedding = self(images, ocean_features)
-
-        print(f"Epoch {self.current_epoch}, Batch {batch_idx}:")
-        print(f"  x_pred min/max: {x_pred.min().item():.4f} / {x_pred.max().item():.4f}")
-        print(f"  target min/max: {target.min().item():.4f} / {target.max().item():.4f}")
-        print(f"  Loss before logging: {self.criterion(x_pred, target).item()}") # Print raw loss
-
         loss = self.criterion(x_pred, target)
 
         self.log('train_loss_step', loss, on_step=True, on_epoch=False, prog_bar=True, logger=True)
@@ -169,11 +153,7 @@ class MAE_Ocean(pl.LightningModule):
             self.train_batch_count = 0
         self.total_train_loss += loss.item()
         self.train_batch_count += 1
-
-        for name, param in self.named_parameters():
-            if param.grad is not None and (torch.isnan(param.grad).any() or torch.isinf(param.grad).any()):
-                print(f"WARNING: NaN or Inf gradients detected in {name}")
-
+        
         return loss
 
     def on_train_epoch_end(self):

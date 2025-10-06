@@ -1,4 +1,3 @@
-
 import shutil
 import os
 import re
@@ -20,23 +19,22 @@ class DatasetProcessor:
         self.all_target_files = self.collect_files(self.depth_dir)
         self.paired_files = self.match_files()
 
-        # Check if the output directory already exists. If it does, do NOT create it.
+        # Check if the output directory already exists. 
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self.copy_files = True
         else:
             self.copy_files = False
-            print(f"Output directory '{self.output_dir}' already exists. Skipping file copy.")
 
-        if self.copy_files:  # Only copy and create folders if copy_files is True
+        if self.copy_files:  
             self.copy_paired_files()
 
-            if img_only_dir:  # Create img_only_dir AFTER copying
+            if img_only_dir:  
                 self.create_img_folder(img_only_dir)
             else:
                 print("img_only_dir is None. Skipping creation.")
 
-            if self.target_only_dir:  # Create depth_only_dir AFTER copying
+            if self.target_only_dir:  
                 self.create_target_folder(self.target_only_dir)
             else:
                 print("target_only_dir is None. Skipping creation.")
@@ -74,21 +72,15 @@ class DatasetProcessor:
         dest_path = Path(destination_folder)
         dest_path.mkdir(parents=True, exist_ok=True)
 
-        for item in self.output_dir.iterdir():  # Iterate through all files in output dir
-            if item.is_file() and re.match(r"S2_.+\.tif$", item.name) and not re.search(r"_cl\.tif$", item.name): # Match S2_..._.tif but not _cl.tif
+        for item in self.output_dir.iterdir(): 
+            if item.is_file() and re.match(r"S2_.+\.tif$", item.name) and not re.search(r"_cl\.tif$", item.name): 
                 shutil.copy2(item, dest_path / item.name)
-                print(f"Copied: {item.name}")
-
-        print(f"Finished copying 'img' files to '{destination_folder}'.")
 
     def create_target_folder(self, destination_folder):
         """Creates a new folder containing only the 'depth' files."""
         dest_path = Path(destination_folder)
         dest_path.mkdir(parents=True, exist_ok=True)
 
-        for item in self.output_dir.iterdir():  # Iterate through all files in output dir
-            if item.is_file() and re.match(r"S2_.+_cl\.tif$", item.name):  # Match S2_..._cl.tif
+        for item in self.output_dir.iterdir():  
+            if item.is_file() and re.match(r"S2_.+_cl\.tif$", item.name):  
                 shutil.copy2(item, dest_path / item.name)
-                print(f"Copied: {item.name}")
-
-        print(f"Finished copying target files to '{destination_folder}'.")

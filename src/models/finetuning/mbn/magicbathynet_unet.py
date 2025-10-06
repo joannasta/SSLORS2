@@ -22,7 +22,6 @@ class Down(nn.Module):
             nn.MaxPool2d(2),
             DoubleConv(in_channels, out_channels)
         )
-
     def forward(self, x):
         return self.down_conv(x)
 
@@ -34,13 +33,10 @@ class Up(nn.Module):
 
     def forward(self, x_up, x_skip):
         x_up = self.up(x_up)
-        
         diff_y = x_skip.size()[2] - x_up.size()[2]
         diff_x = x_skip.size()[3] - x_up.size()[3]
-        
         x_up = F.pad(x_up, [diff_x // 2, diff_x - diff_x // 2,
                             diff_y // 2, diff_y - diff_y // 2])
-        
         x = torch.cat([x_skip, x_up], dim=1)
         return self.conv(x)
 
@@ -58,14 +54,10 @@ class UNet_bathy(nn.Module):
 
         bottleneck_input_channels = 256
             
-        if model_type == "mae":
+        if model_type == "mae" or model_type == "mae_ocean":
             bottleneck_input_channels += 256
             self.mae_pre_proj = nn.Linear(768, 512) 
             self.mae_spatial_proj = nn.Linear(512, 256 * 32 * 32)
-        elif model_type == "mae_ocean":
-            bottleneck_input_channels += 256
-            self.mae_ocean_pre_proj = nn.Linear(768, 512) 
-            self.mae_ocean_spatial_proj = nn.Linear(512, 256 * 32 * 32)
         elif model_type == "moco":
             bottleneck_input_channels += 256
             self.moco_pre_proj = nn.Linear(512, 512) 
@@ -95,7 +87,7 @@ class UNet_bathy(nn.Module):
 
         fused_features = None
         
-        if self.model_type == "mae":
+        if self.model_type == "mae" or self.model_type== "mae_ocean":
             if embedding.dim() == 4:
                 cls_feat = embedding.squeeze(1)[:, 0, :]
             elif embedding.dim() == 3:
@@ -103,27 +95,9 @@ class UNet_bathy(nn.Module):
             elif embedding.dim() == 2 and embedding.shape[-1] == 768:
                 cls_feat = embedding
             else:
-                raise ValueError(f"Unexpected embedding dimensions for {self.model_type}: {embedding.shape}.")
-            
+                raise ValueError(f"Unexpected embedding dimensions for {self.model_type}: {embedding.shape}.")   
             proj_emb = self.mae_pre_proj(cls_feat)
             spatial_flat = self.mae_spatial_proj(proj_emb)
-            
-            spatial_2d = spatial_flat.view(embedding.shape[0], 256, 32, 32)
-            upsampled_emb = F.interpolate(spatial_2d, size=x4.shape[2:], mode='bilinear', align_corners=False)
-            fused_features = torch.cat([x4, upsampled_emb], dim=1)
-
-        elif self.model_type == "mae_ocean":
-            if embedding.dim() == 4:
-                cls_feat = embedding.squeeze(1)[:, 0, :]
-            elif embedding.dim() == 3:
-                cls_feat = embedding[:, 0, :]
-            elif embedding.dim() == 2 and embedding.shape[-1] == 768:
-                cls_feat = embedding
-            else:
-                raise ValueError(f"Unexpected embedding dimensions for {self.model_type}: {embedding.shape}.")
-
-            proj_emb = self.mae_ocean_pre_proj(cls_feat) 
-            spatial_flat = self.mae_ocean_spatial_proj(proj_emb)
             
             spatial_2d = spatial_flat.view(embedding.shape[0], 256, 32, 32)
             upsampled_emb = F.interpolate(spatial_2d, size=x4.shape[2:], mode='bilinear', align_corners=False)
@@ -137,11 +111,7 @@ class UNet_bathy(nn.Module):
             fused_features = torch.cat([x4, upsampled_emb], dim=1)
 
         elif self.model_type in ["geo_aware","ocean_aware"]:
-            # Ensure embedding is 2D [batch_size, feature_dim]
-            # If embedding is already higher dimension, you might need to reshape/squeeze it first
             if embedding.dim() > 2:
-                # Example: if it's [B, 1, 1, 1, F], reshape to [B, F]
-                # You might need to adjust this based on the actual input shape
                 embedding = embedding.flatten(start_dim=1) 
             
             emb_expanded = embedding.unsqueeze(2).unsqueeze(3)
@@ -154,7 +124,6 @@ class UNet_bathy(nn.Module):
         fused_reshaped = fused_features.permute(0, 2, 3, 1).reshape(bs * h_fused * w_fused, ch_fused)
 
         bottleneck_in = self.feature_linear(fused_reshaped).reshape(bs, 512, h_fused, w_fused)
-
         bottleneck_out = self.bottleneck(bottleneck_in)
 
         x = self.up1(bottleneck_out, x3)

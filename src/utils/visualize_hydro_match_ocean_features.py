@@ -1,7 +1,5 @@
 import geopandas as gpd
 import rasterio
-from rasterio.warp import transform_bounds
-from shapely.geometry import box, Point
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -9,10 +7,13 @@ import cartopy.crs as ccrs
 import cartopy.feature
 import os
 import pandas as pd
+
 from tqdm import tqdm
+from rasterio.warp import transform_bounds
+from shapely.geometry import box, Point
 
 OCEAN_FEATURES_PATH = '/mnt/storagecube/joanna/ocean_features_combined.csv'
-TIF_DIRECTORY = '/mnt/storagecube/joanna/Hydro'
+TIF_DIRECTORY = '/mnt/storagecube/joanna/Hydro_new/Hydro'
 OUTPUT_PLOT_PATH = 'world_distribution_hydro_ocean_plot_proj.png'
 
 df = pd.read_csv(OCEAN_FEATURES_PATH)
@@ -25,6 +26,7 @@ for col in lat_cols:
     if col in df.columns:
         found_lat_col = col
         break
+    
 for col in lon_cols:
     if col in df.columns:
         found_lon_col = col
@@ -32,7 +34,7 @@ for col in lon_cols:
 
 ocean_features = gpd.GeoDataFrame(
     df,
-    geometry=gpd.points_from_xy(df[found_lon_col], df[found_lon_col]),
+    geometry=gpd.points_from_xy(df[found_lon_col], df[found_lat_col]),
     crs="EPSG:4326"
 )
 
@@ -60,7 +62,13 @@ for tif_path in tqdm(tif_files_list, desc="Processing TIFs"):
             'bbox_geometry': tif_bbox_geom
         })
 
-tif_gdf = gpd.GeoDataFrame(tif_data, crs="EPSG:4326")
+# Create a DataFrame from the list of dictionaries
+tif_df = pd.DataFrame(tif_data)
+
+# Separate the geometry from the DataFrame and create the GeoDataFrame
+tif_geometry = tif_df['geometry']
+tif_gdf = gpd.GeoDataFrame(tif_df.drop(columns=['geometry']), geometry=tif_geometry, crs="EPSG:4326")
+
 ocean_features_sindex = ocean_features.sindex
 tif_gdf['matched'] = False
 for i, tif_row in tqdm(tif_gdf.iterrows(), total=len(tif_gdf), desc="Checking matches"):
@@ -71,6 +79,18 @@ for i, tif_row in tqdm(tif_gdf.iterrows(), total=len(tif_gdf), desc="Checking ma
 
 fig, ax = plt.subplots(1, 1, figsize=(15, 10),
                        subplot_kw={'projection': ccrs.PlateCarree()})
+
+# Calculate and print percentages
+total_tifs = len(tif_gdf)
+matched_tifs = tif_gdf['matched'].sum()
+unmatched_tifs = total_tifs - matched_tifs
+
+percentage_matched = (matched_tifs / total_tifs) * 100
+percentage_unmatched = (unmatched_tifs / total_tifs) * 100
+
+print(f"Total TIF files: {total_tifs}")
+print(f"Matched TIF files: {matched_tifs} ({percentage_matched:.2f}%)")
+print(f"Unmatched TIF files: {unmatched_tifs} ({percentage_unmatched:.2f}%)")
 
 ax.add_feature(cartopy.feature.LAND, edgecolor='black', facecolor='lightgray', zorder=1)
 ax.add_feature(cartopy.feature.OCEAN, facecolor='lightblue', zorder=0)
