@@ -31,13 +31,14 @@ MoCo	ResNet-18	moco.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-
 Geography_Aware	ResNet-18	geography_aware.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models/releases/latest/download/geography_aware_resnet50.pth
 Ocean_Aware	ResNet-18	ocean_aware.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models/releases/latest/download/ocean_aware_resnet50.pth
 
+Here you go.
 
 ## Datasets
-
-Phase	Dataset	Task Type	Description
-Pre-training (Unlabeled)	Hydro [1]	Self-Supervision	100k sampled 256×256 Sentinel‑2 patches containing water from around the globe; used to train the foundation models.
-Finetuning (Labeled)	MAGICBathyNet [2]	Bathymetry Regression	Multimodal remote sensing dataset for benchmarking learning‑based bathymetry and pixel‑based classification in shallow waters.
-Finetuning (Labeled)	MARIDA [3]	Marine Debris Detection	Marine debris–oriented dataset on Sentinel‑2 images, including various co‑existing sea features.
+| Phase                     | Dataset         | Task Type              | Description |
+|--------------------------|-----------------|------------------------|-------------|
+| Pre-training (Unlabeled) | Hydro [1]       | Self-Supervision       | 100k sampled 256×256 Sentinel‑2 patches containing water from around the globe; used to train the foundation models. |
+| Finetuning (Labeled)     | MAGICBathyNet [2]| Bathymetry Regression  | Multimodal remote sensing dataset for benchmarking learning‑based bathymetry and pixel‑based classification in shallow waters. |
+| Finetuning (Labeled)     | MARIDA [3]      | Marine Debris Detection| Marine debris–oriented dataset on Sentinel‑2 images, including various co‑existing sea features. |
 
 ## Installation and Setup
 
