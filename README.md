@@ -21,17 +21,16 @@ Comparative Study: Comparing generative and contrastive SSL frameworks:
 Downstream Tasks: Evaluating performance improvements on:
 - Bathymetry Regression (pixel-level depth prediction)
 - Marine Debris Detection (segmentation)
-  
+
 ## Pre-trained Weights
 
-|Model	|Backbone	|Filename |	Link
-|------|-----------------|------------------------|-------------|
-|MAE	| ViT	| mae.pth	 | [https://drive.google.com/file/d/1dkHYFvrxBT_FNtivaYq_bD6yroSfLVzW/view?usp=share_link](Link) |
-|OceanMAE	| ViT	| oceanmae.pth |	[https://drive.google.com/file/d/1A-lkt7N45A4EVDLRPhWAf-sLF5g0wyb5/view?usp=share_link](Link) |
-|MoCo	| ResNet-18	| moco.pth |	[https://drive.google.com/file/d/1NwGWX_V6GuG6YReHJImHlM0mDbESVE86/view?usp=share_link](Link) |
-|Geography_Aware	| ResNet-18	| geography_aware.pth	 | [https://drive.google.com/file/d/1vouzF9IO_7MBSGYGnuL-mTQMpkQgIsMd/view?usp=share_link](Link) |
-|Ocean_Aware	| ResNet-18	| ocean_aware.pth |	[https://drive.google.com/file/d/1hP7A_2NjRmaFIyan39dQ2vvDUTVvvi33/view?usp=share_link](Link) |
-
+| Model           | Backbone  | Filename            | Link |
+|-----------------|-----------|---------------------|------|
+| MAE             | ViT       | mae.pth             | [Link](https://drive.google.com/file/d/1dkHYFvrxBT_FNtivaYq_bD6yroSfLVzW/view?usp=share_link) |
+| OceanMAE        | ViT       | oceanmae.pth        | [Link](https://drive.google.com/file/d/1A-lkt7N45A4EVDLRPhWAf-sLF5g0wyb5/view?usp=share_link) |
+| MoCo            | ResNet-18 | moco.pth            | [Link](https://drive.google.com/file/d/1NwGWX_V6GuG6YReHJImHlM0mDbESVE86/view?usp=share_link) |
+| Geography_Aware | ResNet-18 | geography_aware.pth | [Link](https://drive.google.com/file/d/1vouzF9IO_7MBSGYGnuL-mTQMpkQgIsMd/view?usp=share_link) |
+| Ocean_Aware     | ResNet-18 | ocean_aware.pth     | [Link](https://drive.google.com/file/d/1hP7A_2NjRmaFIyan39dQ2vvDUTVvvi33/view?usp=share_link) |
 
 ## Datasets
 | Phase                     | Dataset         | Task Type              | Description |
@@ -69,42 +68,43 @@ python sh finetune_slurm_marida.sh
 ## Quantitative Results
 
 ### Domain-specific Best Models (Overview)
+| Domain | Task | Best Model | Key Metrics | Score |
+|--------|------|------------|-------------|-------|
+| MARIDA | Marine Debris Detection | OceanMAE | IoU / PA / F1 | 0.600 / 0.750 / 0.700 |
+| MAGICBathyNet – Agia Napa | Bathymetry Regression | MAE | MAE / RMSE / STDV | 0.431 / 0.571 / 0.517 |
+| MAGICBathyNet – Puck Lagoon | Bathymetry Regression | Baseline | MAE / RMSE / STDV | 0.493 / 0.907 / 0.874 |
 
-Domain	Task	Best Model	Key Metrics	Score
-MARIDA	Marine Debris Detection	OceanMAE	IoU / PA / F1	0.600 / 0.750 / 0.700
-MAGICBathyNet – Agia Napa	Bathymetry Regression	MAE	MAE / RMSE / STDV	0.431 / 0.571 / 0.517
-MAGICBathyNet – Puck Lagoon	Bathymetry Regression	Baseline	MAE / RMSE / STDV	0.493 / 0.907 / 0.874
 Note: On Puck Lagoon, the Baseline outperforms the pretrained variants.
 
 ### MARIDA — Marine Debris Detection (Leaderboard)
-
-Model (Pretraining)	IoU ↑	PA ↑	F1 ↑
-Baseline	0.570	0.690	0.690
-MAE	0.480	0.680	0.590
-OceanMAE	0.600	0.750	0.700
-MoCo	0.340	0.550	0.440
-Geography_Aware	0.480	0.630	0.560
-Ocean_Aware	0.500	0.660	0.610
+| Model (Pretraining) | IoU ↑ | PA ↑ | F1 ↑ |
+|---------------------|-------|------|------|
+| Baseline | 0.570 | 0.690 | 0.690 |
+| MAE | 0.480 | 0.680 | 0.590 |
+| OceanMAE | 0.600 | 0.750 | 0.700 |
+| MoCo | 0.340 | 0.550 | 0.440 |
+| Geography_Aware | 0.480 | 0.630 | 0.560 |
+| Ocean_Aware | 0.500 | 0.660 | 0.610 |
 
 ### MAGICBathyNet — Agia Napa (Leaderboard)
-
-Model (Pretraining)	MAE ↓	RMSE ↓	STDV ↓
-Baseline	0.694	1.068	0.940
-MAE	0.431	0.571	0.517
-OceanMAE	0.488	0.658	0.564
-MoCo	0.514	0.668	0.601
-Geography_Aware	0.531	0.689	0.588
-Ocean_Aware	0.453	0.589	0.568
+| Model (Pretraining) | MAE ↓ | RMSE ↓ | STDV ↓ |
+|---------------------|--------|--------|--------|
+| Baseline | 0.694 | 1.068 | 0.940 |
+| MAE | 0.431 | 0.571 | 0.517 |
+| OceanMAE | 0.488 | 0.658 | 0.564 |
+| MoCo | 0.514 | 0.668 | 0.601 |
+| Geography_Aware | 0.531 | 0.689 | 0.588 |
+| Ocean_Aware | 0.453 | 0.589 | 0.568 |
 
 ### MAGICBathyNet — Puck Lagoon (Leaderboard)
-
-Model (Pretraining)	MAE ↓	RMSE ↓	STDV ↓
-Baseline	0.493	0.907	0.874
-MAE	0.542	0.783	0.649
-OceanMAE	0.775	1.211	0.892
-MoCo	0.547	0.886	0.768
-Geography_Aware	0.791	1.062	0.929
-Ocean_Aware	0.981	1.240	1.058
+| Model (Pretraining) | MAE ↓ | RMSE ↓ | STDV ↓ |
+|---------------------|--------|--------|--------|
+| Baseline | 0.493 | 0.907 | 0.874 |
+| MAE | 0.542 | 0.783 | 0.649 |
+| OceanMAE | 0.775 | 1.211 | 0.892 |
+| MoCo | 0.547 | 0.886 | 0.768 |
+| Geography_Aware | 0.791 | 1.062 | 0.929 |
+| Ocean_Aware | 0.981 | 1.240 | 1.058 |
 
 ## Thesis / Code
 
