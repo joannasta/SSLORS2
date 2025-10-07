@@ -35,7 +35,7 @@ class CustomLoss(nn.Module):
 
         return rmse_loss_val
 
-class MAEFineTuning(pl.LightningModule):
+class FineTuningMBN(pl.LightningModule):
     def __init__(self, src_channels=3, mask_ratio=0.5,pretrained_model=None,location="agia_napa",
                  full_finetune=False, random=False, ssl=False, model_type="mae"):
 

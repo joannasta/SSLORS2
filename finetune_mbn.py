@@ -13,7 +13,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from typing import Optional, Tuple
 from torchvision import transforms
 
-from src.models.finetuning.mbn.mae_finetuning_mbn import MAEFineTuning
+from src.models.finetuning.mbn.finetuning_mbn import FineTuningMBN
 from src.models.mae import MAE
 from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
@@ -81,7 +81,7 @@ class BathymetryPredictor:
             ssl=self.ssl 
         )
         
-        self.model = MAEFineTuning(
+        self.model = FineTuningMBN(
             location=location,
             full_finetune=self.full_finetune, 
             random=False,

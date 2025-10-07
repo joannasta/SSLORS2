@@ -19,7 +19,7 @@ from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
 from src.models.moco_geo import MoCoGeo
 
-from src.models.finetuning.marida.marida_mae import MAEFineTuning
+from src.models.finetuning.marida.finetuning_marida import FineTuningMARIDA
 from src.data.marida import marida_dataloader
 
     
@@ -85,7 +85,7 @@ class MarineDebrisPredictor:
             ssl=self.ssl,
             model_type=self.model_type,
         )
-        self.model = MAEFineTuning(
+        self.model = FineTuningMARIDA(
             full_finetune=self.full_finetune,
             model_type=self.model_type,
             pretrained_model=self.pretrained_model
@@ -101,9 +101,6 @@ class MarineDebrisPredictor:
         if not os.path.exists(data_dir):
             raise FileNotFoundError(f"Data directory not found at {data_dir}")
         
-    
-    
-    
     def train(self, max_epochs: int = 50) -> pl.Trainer:
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 

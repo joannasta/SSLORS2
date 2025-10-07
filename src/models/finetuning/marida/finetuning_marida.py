@@ -40,7 +40,7 @@ class InputChannelAdapter(nn.Module):
     def forward(self, x):
         return self.conv(x)
     
-class MAEFineTuning(pl.LightningModule):
+class FineTuningMARIDA(pl.LightningModule):
     def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,model_type="mae",full_finetune=True,location="agia_napa"):
         super().__init__()
         self.writer = SummaryWriter()
