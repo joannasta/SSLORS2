@@ -22,16 +22,16 @@ Downstream Tasks: Evaluating performance improvements on:
 - Bathymetry Regression (pixel-level depth prediction)
 - Marine Debris Detection (segmentation)
   
-Pre-trained Weights
+## Pre-trained Weights
 
-Model	Backbone	Filename	Link
-MAE	ViT	mae.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models/releases/latest/download/mae_resnet50.pth
-OceanMAE	ViT	oceanmae.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models/releases/latest/download/oceanmae_resnet50.pth
-MoCo	ResNet-18	moco.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models/releases/latest/download/moco_resnet50.pth
-Geography_Aware	ResNet-18	geography_aware.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models/releases/latest/download/geography_aware_resnet50.pth
-Ocean_Aware	ResNet-18	ocean_aware.pth	https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models/releases/latest/download/ocean_aware_resnet50.pth
+|Model	|Backbone	|Filename |	Link
+|------|-----------------|------------------------|-------------|
+|MAE	| ViT	| mae.pth	 | [https://drive.google.com/file/d/1dkHYFvrxBT_FNtivaYq_bD6yroSfLVzW/view?usp=share_link](Link) |
+|OceanMAE	| ViT	| oceanmae.pth |	[https://drive.google.com/file/d/1A-lkt7N45A4EVDLRPhWAf-sLF5g0wyb5/view?usp=share_link](Link) |
+|MoCo	| ResNet-18	| moco.pth |	[https://drive.google.com/file/d/1NwGWX_V6GuG6YReHJImHlM0mDbESVE86/view?usp=share_link](Link) |
+|Geography_Aware	| ResNet-18	| geography_aware.pth	 | [https://drive.google.com/file/d/1vouzF9IO_7MBSGYGnuL-mTQMpkQgIsMd/view?usp=share_link](Link) |
+|Ocean_Aware	| ResNet-18	| ocean_aware.pth |	[https://drive.google.com/file/d/1hP7A_2NjRmaFIyan39dQ2vvDUTVvvi33/view?usp=share_link](Link) |
 
-Here you go.
 
 ## Datasets
 | Phase                     | Dataset         | Task Type              | Description |
