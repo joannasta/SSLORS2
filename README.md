@@ -3,27 +3,22 @@
 A Master's Thesis submitted to the Technische Universität Berlin | October 2025
 
 ## Overview
-
-This repository contains the official code, models, and pre-trained weights for the Master's Thesis titled: Development of Foundation Models for Ocean Remote Sensing.
+This repository contains the official code, models, and pre-trained weights for the Master's Thesis titled: Development of Foundation Models for Ocean Remote Sensing.  
 The project addresses the scarcity of labeled data in marine remote sensing by leveraging Self-Supervised Learning (SSL). Different foundation models were trained using the Hydro dataset containing ocean satellite imagery to learn robust, generalized feature representations. These foundation models are then finetuned on the downstream tasks of bathymetry and marine debris detection.
 
 ## Core Contributions
-
-Novel Ocean-Specific SSL Methods: Implementation and evaluation of two novel self-supervised pre-training techniques:
-- Ocean Aware
-- OceanMAE
-  
-Comparative Study: Comparing generative and contrastive SSL frameworks:
-- MAE
-- MoCo
-- Geography-Aware
-  
-Downstream Tasks: Evaluating performance improvements on:
-- Bathymetry Regression (pixel-level depth prediction)
-- Marine Debris Detection (segmentation)
+- Novel Ocean-Specific SSL Methods: Implementation and evaluation of two novel self-supervised pre-training techniques:
+  - Ocean Aware
+  - OceanMAE
+- Comparative Study: Comparing generative and contrastive SSL frameworks:
+  - MAE
+  - MoCo
+  - Geography-Aware
+- Downstream Tasks: Evaluating performance improvements on:
+  - Bathymetry Regression (pixel-level depth prediction)
+  - Marine Debris Detection (segmentation)
 
 ## Pre-trained Weights
-
 | Model           | Backbone  | Filename            | Link |
 |-----------------|-----------|---------------------|------|
 | MAE             | ViT       | mae.pth             | [Link](https://drive.google.com/file/d/1dkHYFvrxBT_FNtivaYq_bD6yroSfLVzW/view?usp=share_link) |
@@ -33,38 +28,39 @@ Downstream Tasks: Evaluating performance improvements on:
 | Ocean_Aware     | ResNet-18 | ocean_aware.pth     | [Link](https://drive.google.com/file/d/1hP7A_2NjRmaFIyan39dQ2vvDUTVvvi33/view?usp=share_link) |
 
 ## Datasets
-| Phase                     | Dataset         | Task Type              | Description |
-|--------------------------|-----------------|------------------------|-------------|
-| Pre-training (Unlabeled) | Hydro [1]       | Self-Supervision       | 100k sampled 256×256 Sentinel‑2 patches containing water from around the globe; used to train the foundation models. |
+| Phase                     | Dataset          | Task Type              | Description |
+|--------------------------|------------------|------------------------|-------------|
+| Pre-training (Unlabeled) | Hydro [1]        | Self-Supervision       | 100k sampled 256×256 Sentinel‑2 patches containing water from around the globe; used to train the foundation models. |
 | Finetuning (Labeled)     | MAGICBathyNet [2]| Bathymetry Regression  | Multimodal remote sensing dataset for benchmarking learning‑based bathymetry and pixel‑based classification in shallow waters. |
-| Finetuning (Labeled)     | MARIDA [3]      | Marine Debris Detection| Marine debris–oriented dataset on Sentinel‑2 images, including various co‑existing sea features. |
+| Finetuning (Labeled)     | MARIDA [3]       | Marine Debris Detection| Marine debris–oriented dataset on Sentinel‑2 images, including various co‑existing sea features. |
 
 ## Installation and Setup
-
 Environment: Python (PyTorch ecosystem)
-BASH
+
+```bash
 # Clone the repository
 git clone https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models.git
 cd Ocean-Foundation-Models
 
 # Create and activate a conda environment (recommended)
-conda create -n ocean-ssl python=3.9
+conda create -n ocean-ssl python=3.9 -y
 conda activate ocean-ssl
 
 # Install dependencies
 pip install -r requirements.txt
+```
 
 ### Finetuning Example
+```bash
+# Example: Finetune the 'mae_ocean' backbone for Marine Debris Detection (MARIDA)
+bash finetune_slurm_marida.sh \
+  --model mae_ocean \
+  --pretrained_model results/trains/mae_ocean/version_9/checkpoints/epoch=99-step=2900.ckpt \
+  --dataset_path /path/to/marida \
+  --learning_rate 1e-5 \
+  --gpus 1
+```
 
-BASH
-# Example: Finetune the 'mae_ocean' backbone for Marine Debris Detection
-python sh finetune_slurm_marida.sh
-    --model mae_ocean \
-    --pretrained_model ".\results\trains\mae_ocean\version_9\checkpoints\epoch=99-step=2900.ckpt"
-    --dataset_path  path\to\marida\dataset
-    --learning_rate 1e-5 
-    --gpus 1
-    
 ## Quantitative Results
 
 ### Domain-specific Best Models (Overview)
@@ -107,19 +103,19 @@ Note: On Puck Lagoon, the Baseline outperforms the pretrained variants.
 | Ocean_Aware | 0.981 | 1.240 | 1.058 |
 
 ## Thesis / Code
-
 If you use this code or the pre-trained weights in your research, please cite the Master's Thesis:
-BIBTEX
+```bibtex
 @mastersthesis{stamer2025ocean,
-    author  = {Viola-Joanna Stamer},
-    title   = {Development of Foundation Models for Ocean Remote Sensing},
-    school  = {Technische Universität Berlin},
-    year    = {2025},
-    month   = {October},
-    address = {Berlin, Germany}
+  author  = {Viola-Joanna Stamer},
+  title   = {Development of Foundation Models for Ocean Remote Sensing},
+  school  = {Technische Universität Berlin},
+  year    = {2025},
+  month   = {October},
+  address = {Berlin, Germany}
 }
+```
 
 ## References
-[1] Corley, I., & Robinson, C. (2024). Hydro Foundation Model [GitHub repository]. https://github.com/isaaccorley/hydro-foundation-model
-[2] Agrafiotis, P., Janowski, Ł., Skarlatos, D., & Demir, B. (2024). MAGICBATHYNET: A Multimodal Remote Sensing Dataset for Bathymetry Prediction and Pixel-Based Classification in Shallow Waters. In IGARSS 2024 (pp. 249–253). https://doi.org/10.1109/IGARSS53475.2024.10641355
-[3] Kikaki, K., Kakogeorgiou, I., Mikeli, P., Raitsos, D. E., & Karantzalos, K. (2022). MARIDA: A benchmark for Marine Debris detection from Sentinel-2 remote sensing data. PLOS ONE, 17(1), e0262247. https://doi.org/10.1371/journal.pone.0262247
+- [1] Corley, I., & Robinson, C. (2024). Hydro Foundation Model [GitHub repository]. https://github.com/isaaccorley/hydro-foundation-model
+- [2] Agrafiotis, P., Janowski, Ł., Skarlatos, D., & Demir, B. (2024). MAGICBATHYNET: A Multimodal Remote Sensing Dataset for Bathymetry Prediction and Pixel-Based Classification in Shallow Waters. IGARSS 2024, 249–253. https://doi.org/10.1109/IGARSS53475.2024.10641355
+- [3] Kikaki, K., Kakogeorgiou, I., Mikeli, P., Raitsos, D. E., & Karantzalos, K. (2022). MARIDA: A benchmark for Marine Debris detection from Sentinel‑2 remote sensing data. PLOS ONE, 17(1), e0262247. https://doi.org/10.1371/journal.pone.0262247
