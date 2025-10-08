@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 from src.utils.finetuning_utils import get_random_pos
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG, train_images, test_images
 from src.data.hydro.hydro_dataset import HydroDataset
-from src.utils.data_processing import DatasetProcessor
+from src.utils.data_processing_mbn import DatasetProcessor
 from pathlib import Path
 
 random.seed(1)

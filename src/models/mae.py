@@ -11,7 +11,7 @@ from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 class MAE(pl.LightningModule):
     def __init__(self, src_channels=3, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None):
         super().__init__()
-        self.src_channels = 11#src_channels
+        self.src_channels = src_channels
         self.save_hyperparameters()
         self.mask_ratio = mask_ratio
         self.pretrained_weights = pretrained_weights

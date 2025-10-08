@@ -16,7 +16,7 @@ from src.data.hydro.hydro_dataloader_moco import HydroMoCoDataModule
 from src.data.hydro.hydro_dataloader_mae_ocean import HydroMaeOceanFeaturesDataModule
 from src.data.hydro.hydro_dataloader import HydroDataModule
 from torchvision import transforms
-from src.utils.mocogeo_utils import GaussianBlur, TwoCropsTransform
+from src.utils.two_crop_transformations import GaussianBlur, TwoCropsTransform
 
 models = {
     "mae": MAE,
