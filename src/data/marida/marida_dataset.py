@@ -12,14 +12,15 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from pathlib import Path
 
-
 from src.data.hydro.hydro_dataset import HydroDataset
 from src.utils.data_processing_marida import DatasetProcessor
 from config import get_marida_means_and_stds
 
+# Base dataset path from project root
 dataset_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data')
 
 class MaridaDataset(Dataset):
+    """MARIDA dataset: loads S2 patches, labels, optional SSL embeddings, and applies transforms."""
     def __init__(self, root_dir, mode='train', pretrained_model=None, transform=None, standardization=None, path=dataset_path, img_only_dir=None, agg_to_water=True, save_data=False
                  , full_finetune=True, random=False, ssl=False,model_type="mae"):
         self.mode = mode
@@ -34,6 +35,7 @@ class MaridaDataset(Dataset):
         self.ssl = ssl
         self.model_type = model_type
         
+        # Load split ROI names
         if mode == 'train':
             self.ROIs = np.genfromtxt(os.path.join(path, 'splits', 'train_X.txt'), dtype='str')
         elif mode == 'test': 
@@ -49,21 +51,28 @@ class MaridaDataset(Dataset):
         self.path = Path(path)
         self.embeddings = []
         self.pretrained_model = pretrained_model
+        
+        # Normalize first 11 bands 
         self.standardization = transforms.Normalize(self.means[:11], self.stds[:11]) if standardization else None
         self.length = len(self.y)
         self.agg_to_water = agg_to_water
         self.save_data = save_data
         
+        # Label mapping
         with open(os.path.join(path, 'labels_mapping.txt'), 'r') as inputfile:
             self.labels = json.load(inputfile)
 
+        # Load images/labels into memory
         self._load_data()
         if self.save_data:
             self._save_data_to_tiff()
+            
+        # Compute embeddings if pretrained model 
         self._create_embeddings()
 
 
     def _load_data(self):
+        """Read image (X) and class mask (y) TIFFs; optionally aggregate tail classes into Water."""
         temp = None
         for roi in tqdm(self.ROIs, desc=f'Load {self.mode} set to memory'):
             roi_folder = '_'.join(['S2'] + roi.split('_')[:-1])
@@ -91,6 +100,7 @@ class MaridaDataset(Dataset):
                 print(f"Error opening file for ROI {roi}: {e}")
         
         if temp is not None:
+            # Prepare NaN imputation per pixel using band means
             self.impute_nan = np.tile(self.means, (temp.shape[1],temp.shape[2],1))
         else:
             print("Warning: No data loaded. `temp` is not defined.")
@@ -100,6 +110,7 @@ class MaridaDataset(Dataset):
 
 
     def _save_data_to_tiff(self):
+        """Save images, targets, and paired stacks to disk."""
         output_folder = os.path.join(self.path, "roi_data", self.mode)
         os.makedirs(output_folder, exist_ok=True)
         output_img_folder = os.path.join(output_folder, "_images")
@@ -139,9 +150,11 @@ class MaridaDataset(Dataset):
         return self.ROIs
 
     def _create_embeddings(self):
+        """Build per-ROI embeddings from HydroDataset and a pretrained model."""
         hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"],ocean_flag=False)
         self.embeddings = []
 
+        # Optional random init
         def weights_init(m):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
                 nn.init.xavier_uniform_(m.weight)
@@ -160,6 +173,7 @@ class MaridaDataset(Dataset):
 
             img = img.to(device)
 
+            # If not fully finetuning, generate fixed embeddings
             if not self.full_finetune:
                 with torch.no_grad():
                     if self.pretrained_model.__class__.__name__ == "MAE" or self.pretrained_model.__class__.__name__  == 'MAE_Ocean':
@@ -177,16 +191,20 @@ class MaridaDataset(Dataset):
         self.embeddings = torch.stack(self.embeddings).cpu()
 
     def __getitem__(self, index):
+        """Return (image, target, embedding) for given index."""
         img = self.X[index]
         target = self.y[index]
+        
+        # Embedding fallback if no pretrained model
         if self.pretrained_model:
             embedding = self.embeddings[index]
-            
-
+        
+        # To HWC and impute NaNs
         img = np.moveaxis(img, [0, 1, 2], [2, 0, 1]).astype('float32')
         nan_mask = np.isnan(img)
         img[nan_mask] = self.impute_nan[nan_mask]
 
+        # Apply composed transform on stacked image+target if provided
         if self.transform is not None:
             target = target.transpose(1, 2, 0)
             stack = np.concatenate([img, target], axis=-1).astype('float32')
@@ -195,6 +213,7 @@ class MaridaDataset(Dataset):
             img = stack[:-1,:,:]
             target = stack[-1,:,:]
 
+        # Standardize image tensor 
         if self.standardization is not None:
             img = self.standardization(img)
 
@@ -205,6 +224,7 @@ class MaridaDataset(Dataset):
 
 
 class RandomRotationTransform:
+    """Random rotation transform using torchvision functional API."""
     def __init__(self, angles):
         self.angles = angles
 
@@ -213,4 +233,5 @@ class RandomRotationTransform:
         return F.rotate(x, angle)
     
 def gen_weights(class_distribution, c = 1.02):
+    """Inverse log-frequency weights."""
     return 1/torch.log(c + class_distribution)

@@ -7,6 +7,7 @@ from src.data.hydro.hydro_moco_geo_dataset import HydroGeographyAwareDataset
 from pytorch_lightning import LightningDataModule
 
 class HydroGeographyAwareDataModule(LightningDataModule):
+    """LightningDataModule for geography-aware SSL on Hydro data."""
     def __init__(
         self, data_dir: str,
         batch_size: int = 32,
@@ -30,6 +31,7 @@ class HydroGeographyAwareDataModule(LightningDataModule):
         
 
     def custom_collate_fn(self, batch):
+        """Filter out None samples and use default_collate; returns None if batch is empty."""
         batch = [item for item in batch if item is not None]
         if not batch:
             return None 
@@ -37,6 +39,7 @@ class HydroGeographyAwareDataModule(LightningDataModule):
 
 
     def setup(self, stage: Optional[str] = None):
+        """Instantiate datasets for train/val/test/predict depending on stage."""
         if stage == 'fit' or stage is None:
             self.train_dataset = HydroMoCoGeoDataset(
                 path_dataset=self.data_dir,

@@ -1,26 +1,32 @@
 import shutil
-import os
 import re
 
 from pathlib import Path
 from config import train_images, test_images
 
 class DatasetProcessor:
+    :
+    '''Process dataset by pairing image/depth TIFFs, copying them, and optionally
+       creating split folders containing only images or only depths.'''
     def __init__(self, img_dir, depth_dir, output_dir,img_only_dir=None,depth_only_dir=None,split_type="train"):
+        # Base dirs
         self.img_dir = Path(img_dir)
         self.depth_dir = Path(depth_dir)
         self.output_dir = Path(output_dir)
+        # Optional output dirs
         self.img_only_dir = img_only_dir
         self.depth_only_dir = depth_only_dir
+        # Normalize configured indices to sets of ints for robust matching
         self.train_idx = train_images
         self.test_idx = test_images
         self.split_type = split_type
 
-
+        # Collect and pair files by numeric index
         self.all_img_files = self.collect_files(self.img_dir)
         self.all_depth_files = self.collect_files(self.depth_dir)
         self.paired_files = self.match_files()
 
+        # Prepare output dir and copy if needed
         if not self.output_dir.exists():
             self.output_dir.mkdir(parents=True, exist_ok=True)
             self.copy_files = True
@@ -28,7 +34,9 @@ class DatasetProcessor:
             self.copy_files = False
 
         if self.copy_files:  
+            # Copy paired image/depth files to output_dir
             self.copy_paired_files()
+            # Optionally create image-only and depth-only folders
             if img_only_dir:  
                 self.create_img_folder(img_only_dir)
             else:

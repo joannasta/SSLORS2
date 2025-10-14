@@ -8,7 +8,7 @@ from typing import Optional, List, Callable, Tuple
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 
-from config import get_means_and_stds, get_marida_means_and_stds, NORM_PARAM_DEPTH, NORM_PARAM_PATHS
+from config import _Hydro, get_marida_means_and_stds, NORM_PARAM_DEPTH, NORM_PARAM_PATHS
 
 class HydroMoCoDataset(Dataset):
     def __init__(
@@ -35,6 +35,7 @@ class HydroMoCoDataset(Dataset):
         self._load_ocean_features_and_map(all_file_paths)
             
     def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
+        """Map existing TIFFs to CSV entries by absolute path."""
         csv_df = pd.read_csv(self.csv_features_path)
         csv_file_dir_map = {Path(p).resolve(): row for p, row in csv_df.set_index('file_dir').iterrows()}
         
@@ -48,6 +49,7 @@ class HydroMoCoDataset(Dataset):
         return len(self.file_paths)
 
     def _load_and_preprocess(self, file_path: Path) -> torch.Tensor:
+        """Read requested bands and impute NaNs."""
         with rasterio.open(file_path) as src:
             band_indices = list(range(1, len(self.bands) + 1))
             sample_data = src.read(band_indices)
@@ -62,6 +64,7 @@ class HydroMoCoDataset(Dataset):
             return sample.float()
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Return two augmented views (q, k) normalized."""
         file_path = self.file_paths[idx]
         img = self._load_and_preprocess(file_path)
 
@@ -80,7 +83,7 @@ class HydroMoCoDataset(Dataset):
             img_q = (img_q - means_tensor) / stds_tensor
             img_k = (img_k - means_tensor) / stds_tensor
         else:
-            means, stds = get_means_and_stds()
+            means, stds = get_Hydro_means_and_stds()
             means_tensor = means[:, None, None]
             stds_tensor = stds[:, None, None]
             img_q = (img_q - means_tensor) / stds_tensor

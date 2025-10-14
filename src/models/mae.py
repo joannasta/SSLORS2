@@ -4,11 +4,12 @@ import torch.nn as nn
 import timm
 import numpy as np
 
-from config import get_means_and_stds
+from config import get_Hydro_means_and_stds
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 
 class MAE(pl.LightningModule):
+    """Masked Autoencoder using a TIMM ViT backbone and Lightly utilities."""
     def __init__(self, src_channels=3, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None):
         super().__init__()
         self.src_channels = src_channels
@@ -16,16 +17,20 @@ class MAE(pl.LightningModule):
         self.mask_ratio = mask_ratio
         self.pretrained_weights = pretrained_weights
 
+        # Backbone ViT (base, 224x224, patch 16x16) adapted to src_channels
         vit = timm.create_model(
             'vit_base_patch16_224',
             in_chans=self.src_channels,
             img_size=224,          
             patch_size=16,        
         )
+        
+        # Patch size 16
         self.patch_size = vit.patch_embed.patch_size[0]
         self.backbone = MaskedVisionTransformerTIMM(vit=vit)
         self.sequence_length = self.backbone.sequence_length
 
+        # MAE decoder to reconstruct masked patches
         self.decoder = MAEDecoderTIMM(
             in_chans=self.src_channels,
             num_patches=vit.patch_embed.num_patches,
@@ -39,13 +44,17 @@ class MAE(pl.LightningModule):
             attn_drop_rate=0.0,
         )
 
+        # Optional adapter to map 3->12 channels if needed
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1) if self.src_channels == 3 else None
 
+        # Load pretrained weights if provided
         if self.pretrained_weights:
             self.load_pretrained_weights(self.pretrained_weights)
 
+        # Reconstruction loss on masked patches
         self.criterion = nn.MSELoss()
 
+        # Track losses for epoch averages
         self.total_train_loss = 0.0
         self.train_batch_count = 0
         self.total_val_loss = 0.0
@@ -60,49 +69,60 @@ class MAE(pl.LightningModule):
         self.load_state_dict(model_state_dict)
 
     def forward_encoder(self, images, idx_keep=None):
+        """Encode visible tokens with ViT backbone."""
         return self.backbone.encode(images=images, idx_keep=idx_keep)
 
     def forward_decoder(self, x_encoded, idx_keep, idx_mask):
+        """Decode to reconstruct masked tokens."""
         batch_size = x_encoded.shape[0]
         x_decode = self.decoder.embed(x_encoded)
 
+        # Create masked token sequence and insert decoded visible tokens
         x_masked = utils.repeat_token(self.decoder.mask_token, (batch_size, self.sequence_length))
         x_masked = utils.set_at_index(x_masked, idx_keep, x_decode.type_as(x_masked))
 
+        # Decode full sequence
         x_decoded = self.decoder.decode(x_masked)
 
+        # Predict only masked tokens
         x_pred = utils.get_at_index(x_decoded, idx_mask)
         x_pred = self.decoder.predict(x_pred)
         
         return x_pred
 
     def forward(self, images):
+        """Full MAE forward: mask tokens, encode visible, decode, and reconstruct."""
         batch_size = images.shape[0]
 
+        # Random token mask
         idx_keep, idx_mask = utils.random_token_mask(
             size=(batch_size, self.sequence_length),
             mask_ratio=self.mask_ratio,
             device=images.device,
         )
 
+        # Encode and decode
         x_encoded = self.forward_encoder(images=images, idx_keep=idx_keep)
-
         x_pred = self.forward_decoder(
             x_encoded=x_encoded, idx_keep=idx_keep, idx_mask=idx_mask
         )
 
+        # Prepare targets and reconstructions
         patches = utils.patchify(images, self.patch_size)
         target = utils.get_at_index(patches, idx_mask - 1)
         
+        # Build reconstructed image from predicted masked patches
         pred_patches = utils.set_at_index(patches, idx_mask - 1, x_pred)
         pred_img = utils.unpatchify(pred_patches, self.patch_size, self.src_channels)
 
+        # Build masked input visualization
         masked_patches = utils.set_at_index(patches, idx_mask - 1, torch.zeros_like(x_pred))
         masked_img = utils.unpatchify(masked_patches, self.patch_size, self.src_channels)
         
         return x_pred, target, pred_img, masked_img
     
     def training_step(self, batch, batch_idx):
+        """Compute reconstruction loss on masked patches and log images periodically."""
         if isinstance(batch, tuple) and len(batch) == 3: 
             images = batch[0]
         else:
@@ -114,6 +134,7 @@ class MAE(pl.LightningModule):
 
         self.log('train_loss_step', loss, on_step=True, on_epoch=False, prog_bar=True, logger=True)
 
+        # Log sample images every 100 steps
         if batch_idx % 100 == 0:
             self.log_images(
                 images[0], 
@@ -121,6 +142,7 @@ class MAE(pl.LightningModule):
                 masked_img[0]
             )
 
+        # Accumulate for epoch average
         if not hasattr(self, 'total_train_loss'):
             self.total_train_loss = 0.0
             self.train_batch_count = 0
@@ -130,6 +152,7 @@ class MAE(pl.LightningModule):
         return loss
 
     def on_train_epoch_end(self):
+        """Log average train loss per epoch."""
         avg_train_loss = self.total_train_loss / self.train_batch_count
         self.log('train_loss', avg_train_loss)
 
@@ -139,6 +162,7 @@ class MAE(pl.LightningModule):
         print(f"Train Loss (Epoch {self.current_epoch}): {avg_train_loss}")
 
     def validation_step(self, batch, batch_idx):
+        """Compute validation reconstruction loss."""
         if isinstance(batch, tuple) and len(batch) == 3:
             images = batch[0]
         else:
@@ -152,6 +176,7 @@ class MAE(pl.LightningModule):
         return val_loss
 
     def on_validation_epoch_end(self):
+        """Log average validation loss per epoch."""
         avg_val_loss = self.total_val_loss / self.val_batch_count
         self.log('val_loss', avg_val_loss, on_epoch=True)
 
@@ -161,9 +186,11 @@ class MAE(pl.LightningModule):
         print(f"Validation Loss (Epoch {self.current_epoch}): {avg_val_loss}")
 
     def log_images(self, original_image, reconstructed_image, masked_image):
+        """Denormalize and log RGB images to TensorBoard."""
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        means, stds = get_means_and_stds()
+        means, stds = get_Hydro_means_and_stds()
         
+        # Select RGB bands (indices 2,1,0) and broadcast mean/std
         means_rgb = means[[2,1,0]].to(device).unsqueeze(-1).unsqueeze(-1)
         stds_rgb = stds[[2,1,0]].to(device).unsqueeze(-1).unsqueeze(-1)
 
@@ -171,6 +198,7 @@ class MAE(pl.LightningModule):
         reconstructed_image = (reconstructed_image[[2,1,0],:,:] * stds_rgb) + means_rgb
         masked_image = (masked_image[[2,1,0],:,:] * stds_rgb) + means_rgb
 
+        # To HWC numpy
         original_image = original_image.permute(1, 2, 0).detach().cpu().numpy()
         reconstructed_image = reconstructed_image.permute(1, 2, 0).detach().cpu().numpy()
         masked_image = masked_image.permute(1, 2, 0).detach().cpu().numpy()
@@ -190,6 +218,7 @@ class MAE(pl.LightningModule):
         self.logger.experiment.add_image('Masked Images', masked_image, self.current_epoch, dataformats='HWC')
 
     def configure_optimizers(self):
+        """AdamW + MultiStep LR scheduler."""
         optimizer = torch.optim.AdamW(self.parameters(), lr=1.5e-4)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5, 10, 15], gamma=0.1)
 
@@ -203,9 +232,11 @@ class MAE(pl.LightningModule):
         }
 
     def on_train_epoch_start(self):
+        """Log current learning rate at epoch start."""
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
         print(f"Starting epoch - Current learning rate: {current_lr}")
 
     def get_embeddings_from_image(self,image):
+        """Return encoded token embeddings for the input image."""
         return self.forward_encoder(image)

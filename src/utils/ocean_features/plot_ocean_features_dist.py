@@ -6,7 +6,7 @@ import cartopy.feature as cfeature
 
 from pathlib import Path
 
-#'/mnt/storagecube/joanna/ocean_features_projected.csv'
+# Input/Output paths
 OCEAN_FEATURES_PATH = Path('/mnt/storagecube/joanna/ocean_features_combined.csv')
 
 output_bathy_map_path = Path("geographic_bathymetry_distribution_proj.png")
@@ -15,6 +15,8 @@ output_secchi_map_path = Path("geographic_secchi_distribution_proj.png")
 
 # Load Ocean Features Data
 ocean_df = pd.read_csv(OCEAN_FEATURES_PATH)
+
+#Required columns
 required_cols = ['lat', 'lon', 'bathy', 'chlorophyll', 'secchi']
 
 # Plot Geographic Distribution of Bathymetry 

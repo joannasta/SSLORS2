@@ -2,19 +2,20 @@ import torch
 import numpy as np
 import rasterio
 import pandas as pd
-from pathlib import Path
 import sys
 import warnings
+import pyproj
 
+from pathlib import Path
 from typing import Optional, List, Callable, Tuple, Union
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 from rasterio.warp import transform as rasterio_transform
-import pyproj
 
-from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, get_means_and_stds, get_marida_means_and_stds
+from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, get_Hydro_means_and_stds, get_marida_means_and_stds
 
 class HydroOceanAwareDataset(Dataset):
+    """Dataset for ocean-aware SSL: maps S2 TIFFs to ocean feature cluster labels and yields two views."""
     def __init__(
         self,
         path_dataset: Path,
@@ -31,6 +32,7 @@ class HydroOceanAwareDataset(Dataset):
         self.num_geo_clusters = num_geo_clusters
         self.ocean_flag = ocean_flag
         
+        # Default to 12 Sentinel-2 bands
         self.bands = bands if bands is not None else [
             "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"
         ]
@@ -39,16 +41,21 @@ class HydroOceanAwareDataset(Dataset):
         self.location = location
         self.csv_features_path = Path(csv_features_path)
 
+        # Per-band normalization stats 
         self._load_normalization_params()
         
+        # Map each TIFF path to its CSV row 
         self.file_path_to_csv_row_map = {}
         self.file_paths = []
 
+        
+        # If ocean_flag is False, use all files
         if self.ocean_flag:
             self._load_ocean_features_and_map(all_file_paths)
             print(f"Mapped {len(self.file_paths)} TIF files to CSV entries after initial filtering.")
 
     def _load_normalization_params(self):
+        """Load means/stds tensors depending on band count."""
         if len(self.bands) == 11:
             means_np, stds_np, _ = get_marida_means_and_stds()
             self.means_tensor = torch.tensor(means_np[:11], dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
@@ -59,18 +66,21 @@ class HydroOceanAwareDataset(Dataset):
             self.means_tensor = torch.tensor(means_np[:3], dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
             self.stds_tensor = torch.tensor(stds_np[:3], dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
         else:
-            means_np, stds_np = get_means_and_stds()
+            means_np, stds_np = get_Hydro_means_and_stds()
             self.means_tensor = torch.tensor(means_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
             self.stds_tensor = torch.tensor(stds_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
 
 
     def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
+        """Load CSV with ocean features and map by absolute file path."""
         print(f"Starting data mapping. CSV path: {self.csv_features_path}")
 
         self.csv_df = pd.read_csv(self.csv_features_path)
         print(f"Loaded CSV with {len(self.csv_df)} rows.")
 
+        # Map absolute paths to row for fast lookup
         csv_file_dir_map = {Path(p).resolve(): row for p, row in self.csv_df.set_index('file_dir').iterrows()}
+        
         successful_matches = []
         for i, file_path in enumerate(all_file_paths):
             resolved_file_path = file_path.resolve()
@@ -86,11 +96,13 @@ class HydroOceanAwareDataset(Dataset):
         return len(self.file_paths)
 
     def _read_and_process_image(self, file_path: Path) -> torch.Tensor:
+        """Read requested bands from TIFF and impute NaNs if needed."""
         with rasterio.open(file_path) as src:
             band_indices = list(range(1, len(self.bands) + 1))
             sample_data = src.read(band_indices)
             sample = torch.from_numpy(sample_data.astype(np.float32))
 
+            # Impute NaN for 11-band MARIDA setting using MARIDA means
             if len(self.bands) == 11:
                 nan_mask = torch.isnan(sample)
                 means, _, _ = get_marida_means_and_stds()
@@ -100,13 +112,16 @@ class HydroOceanAwareDataset(Dataset):
             return sample
 
     def _normalize_tensor(self, img_tensor: torch.Tensor) -> torch.Tensor:
+        """Normalize per band using preloaded means/stds, return RGB bands (B02,B03,B04)."""
         normalized_tensor = (img_tensor - self.means_tensor) / self.stds_tensor
         return normalized_tensor[1:4, :, :]
 
     def __getitem__(self, idx: int) -> Union[Tuple[torch.Tensor, torch.Tensor, torch.LongTensor], Tuple[torch.Tensor, torch.LongTensor]]:
+        """Return two normalized views (q,k) and a cluster label for contrastive + classification."""
         file_path = self.file_paths[idx]
         sample = self._read_and_process_image(file_path)
 
+        # Produce two views, use provided transform 
         if self.transforms is not None:
             sample = self.transforms(sample)
             

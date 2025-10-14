@@ -4,11 +4,12 @@ import torch.nn as nn
 import timm
 import numpy as np
 
-from config import get_means_and_stds
+from config import _Hydro
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM
 
 class MAE_Ocean(pl.LightningModule):
+    """MAE with ViT backbone and fuses image CLS embedding with projected ocean features."""
     def __init__(self, src_channels=3, mask_ratio=0.90, decoder_dim=512, pretrained_weights=None, 
                  num_ocean_features: int = 3):
         super().__init__()
@@ -18,6 +19,7 @@ class MAE_Ocean(pl.LightningModule):
         self.pretrained_weights = pretrained_weights
         self.num_ocean_features = num_ocean_features
 
+        # ViT backbone (base, 224, patch16) with configurable input channels
         vit = timm.create_model(
             'vit_base_patch16_224',
             in_chans=self.src_channels,
@@ -27,8 +29,9 @@ class MAE_Ocean(pl.LightningModule):
         self.patch_size = vit.patch_embed.patch_size[0]
         self.vit_backbone = vit 
         self.num_image_patches = vit.patch_embed.num_patches
-        self.encoder_sequence_length = self.num_image_patches + 1 
+        self.encoder_sequence_length = self.num_image_patches + 1 # +1 for CLS token
 
+        # MAE decoder to reconstruct masked patches
         self.decoder = MAEDecoderTIMM(
             in_chans=self.src_channels,
             num_patches=vit.patch_embed.num_patches,
@@ -42,11 +45,13 @@ class MAE_Ocean(pl.LightningModule):
             attn_drop_rate=0.0,
         )
 
+        # Project ocean feature vector to ViT embed_dim
         self.linear_projection_ocean_features = nn.Linear(
             in_features=self.num_ocean_features,
             out_features=vit.embed_dim
         )
         
+        # Optional adapter to adapt source channels
         self.adapter_layer = nn.Conv2d(3, 12, kernel_size=1) if self.src_channels == 3 else None
 
         if self.pretrained_weights:
@@ -60,6 +65,7 @@ class MAE_Ocean(pl.LightningModule):
         self.val_batch_count = 0
 
     def load_pretrained_weights(self, pretrained_weights):
+         """Load pretrained weights."""
         checkpoint = torch.load(pretrained_weights)
         model_state_dict = self.state_dict()
         pretrained_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model_state_dict}
@@ -67,35 +73,41 @@ class MAE_Ocean(pl.LightningModule):
         self.load_state_dict(model_state_dict)
 
     def forward_encoder(self, images, idx_keep=None):
-        x_patches = self.vit_backbone.patch_embed(images)
+        """Manual ViT forward on tokens, supports masking via idx_keep."""
+        x_patches = self.vit_backbone.patch_embed(images) # (B, N, C)
         cls_token = self.vit_backbone.cls_token.expand(x_patches.shape[0], -1, -1)
-        x = torch.cat((cls_token, x_patches), dim=1)
+        x = torch.cat((cls_token, x_patches), dim=1) # (B, 1+N, C)
         x = x + self.vit_backbone.pos_embed
         if idx_keep is not None:
-            x = utils.get_at_index(x, idx_keep)
+            x = utils.get_at_index(x, idx_keep) # keep selected tokens
         for blk in self.vit_backbone.blocks:
             x = blk(x)
         x = self.vit_backbone.norm(x)
-        return x
+        return x # (B, kept_tokens, C)
 
     def forward_decoder(self, x_encoded, idx_keep, idx_mask):
+        """Decode and predict masked tokens."""
         batch_size = x_encoded.shape[0]
         x_decode = self.decoder.embed(x_encoded)
 
+        # insert decoded visible tokens, fill masked with mask_token
         x_masked = utils.repeat_token(self.decoder.mask_token, (batch_size, self.encoder_sequence_length))
         x_masked = utils.set_at_index(x_masked, idx_keep, x_decode.type_as(x_masked))
 
+        # Decode and predict masked tokens only
         x_decoded = self.decoder.decode(x_masked)
         
         x_pred_full_sequence = utils.get_at_index(x_decoded, idx_mask)
         x_pred = x_pred_full_sequence
         x_pred = self.decoder.predict(x_pred)
         
-        return x_pred
+        return x_pred  # (B, num_masked, patch_dim)
 
     def forward(self, images, ocean_features: torch.Tensor):
+        """MAE forward + feature fusion: returns reconstructions and fused embedding."""
         batch_size = images.shape[0]
 
+        # Random mask on patch tokens
         idx_keep_patches_only, idx_mask_patches_only = utils.random_token_mask(
             size=(batch_size, self.num_image_patches),
             mask_ratio=self.mask_ratio,
@@ -110,15 +122,17 @@ class MAE_Ocean(pl.LightningModule):
         
         idx_mask_absolute = idx_mask_patches_only + 1
 
+        # Encode visible tokens and decode masked
         x_encoded = self.forward_encoder(images=images, idx_keep=idx_keep_absolute)
-
         x_pred = self.forward_decoder(
             x_encoded=x_encoded, idx_keep=idx_keep_absolute, idx_mask=idx_mask_absolute
         )
 
+        # Targets: true masked patches
         patches = utils.patchify(images, self.patch_size)
         target = utils.get_at_index(patches, idx_mask_patches_only)
 
+        # Reconstruct full image from predicted masked patches
         pred_patches_unmasked_idx = idx_mask_absolute - 1
         pred_patches_full = utils.set_at_index(patches, pred_patches_unmasked_idx, x_pred)
         pred_img = utils.unpatchify(pred_patches_full, self.patch_size, self.src_channels)
@@ -135,6 +149,7 @@ class MAE_Ocean(pl.LightningModule):
         return x_pred, target, pred_img, masked_img, combined_embedding
     
     def training_step(self, batch, batch_idx):
+        '''Training Step'''
         images, ocean_features = batch
         x_pred, target, pred_img, masked_img, combined_embedding = self(images, ocean_features)
         loss = self.criterion(x_pred, target)
@@ -157,6 +172,7 @@ class MAE_Ocean(pl.LightningModule):
         return loss
 
     def on_train_epoch_end(self):
+        """Log average training loss at epoch end."""
         avg_train_loss = self.total_train_loss / self.train_batch_count
         self.log('train_loss', avg_train_loss)
 
@@ -164,6 +180,7 @@ class MAE_Ocean(pl.LightningModule):
         self.train_batch_count = 0
 
     def validation_step(self, batch, batch_idx):
+        """Validation step """
         images, ocean_features = batch
         
         x_pred, target, pred_img, masked_img, combined_embedding = self(images, ocean_features)
@@ -176,6 +193,7 @@ class MAE_Ocean(pl.LightningModule):
         return val_loss
 
     def on_validation_epoch_end(self):
+        """Log average validation loss at epoch end."""
         avg_val_loss = self.total_val_loss / self.val_batch_count
         self.log('val_loss', avg_val_loss, on_epoch=True)
 
@@ -183,8 +201,9 @@ class MAE_Ocean(pl.LightningModule):
         self.val_batch_count = 0
 
     def log_images(self, original_image, reconstructed_image, masked_image):
+        """Log original, reconstructed, and masked images to TensorBoard in RGB."""
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        means, stds = get_means_and_stds()
+        means, stds = get_Hydro_means_and_stds()
         
         means_rgb = means[[2,1,0]].to(device).unsqueeze(-1).unsqueeze(-1)
         stds_rgb = stds[[2,1,0]].to(device).unsqueeze(-1).unsqueeze(-1)
@@ -212,6 +231,7 @@ class MAE_Ocean(pl.LightningModule):
         self.logger.experiment.add_image('Masked Images', masked_image, self.current_epoch, dataformats='HWC')
 
     def configure_optimizers(self):
+        """AdamW + MultiStepLR scheduler."""
         optimizer = torch.optim.AdamW(self.parameters(), lr=1.5e-4)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[5, 10, 15], gamma=0.1)
 
@@ -225,10 +245,12 @@ class MAE_Ocean(pl.LightningModule):
         }
 
     def on_train_epoch_start(self):
+        """Log current learning rate at epoch start."""
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
 
     def get_embeddings_from_image(self,image, ocean_features: torch.Tensor):
+        """Encode image to CLS embedding and concatenate with projected ocean features."""
         image_embedding = self.forward_encoder(image)[:, 0, :]
         projected_ocean_features = self.linear_projection_ocean_features(ocean_features)
         

@@ -12,29 +12,29 @@ from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
 from pathlib import Path
 
+# Paths and Params
 TIF_DIRECTORY = Path('/mnt/storagecube/joanna/Hydro')
-
-#'/mnt/storagecube/joanna/ocean_features_projected.csv'
-OCEAN_FEATURES_PATH = Path("/mnt/storagecube/joanna/ocean_features.csv")
+OCEAN_FEATURES_PATH = Path("/mnt/storagecube/joanna/ocean_features_combined.csv")
 
 n_clusters = 3 
 
-output_csv_path = Path(f"ocean_{n_clusters}_clusters.csv")
-output_3d_plot_path = Path(f"3d_ocean_clusters_{n_clusters}_.png")
-output_map_plot_path = Path(f"new_geographic_clusters_map_{n_clusters}_.png")
+output_csv_path = Path(f"ocean_combined_{n_clusters}_clusters_001.csv")
+output_3d_plot_path = Path(f"3d_ocean_combined_clusters_{n_clusters}_001.png")
+output_map_plot_path = Path(f"new_geo_combined__clusters_map_{n_clusters}_001.png")
 
+# Match radius in degrees (lat/lon)
+MAX_MATCH_DISTANCE = 0.05
 
-MAX_MATCH_DISTANCE = 0.05. #0.01
-
-# --- Load Ocean Features Data ---
+# Load Ocean Features Data
 
 ocean_df = pd.read_csv(OCEAN_FEATURES_PATH)
 required_cols = ['lat', 'lon', 'bathy', 'chlorophyll', 'secchi']
 
+# Generate KDTree 
 ocean_coords = ocean_df[['lat', 'lon']].values
 ocean_kdtree = KDTree(ocean_coords)
 
-# --- Match TIFF Files to Ocean Features ---
+# Match TIFF Files to Ocean Features
 tif_file_paths = sorted(list(TIF_DIRECTORY.glob("*.tif")))
 print(f"Found {len(tif_file_paths)} TIFF files in {TIF_DIRECTORY}.")
 
@@ -45,9 +45,11 @@ matched_ocean_features = []
 for file_path in tif_file_paths:
     try:
         with rasterio.open(file_path) as src:
+            # Center pixel in native CRS
             row, col = src.height // 2, src.width // 2
             native_center_lon, native_center_lat = src.transform * (col, row)
 
+            # Transform to WGS84 lon/lat if needed
             if src.crs and src.crs.to_epsg() != 4326:
                 transformed_lon, transformed_lat = rasterio_transform(
                     src.crs,
@@ -61,10 +63,12 @@ for file_path in tif_file_paths:
                 tif_center_lon = native_center_lon
                 tif_center_lat = native_center_lat
 
+            # KDTree was built on (lat, lon), so query in that order
             query_point = np.array([tif_center_lat, tif_center_lon])
 
             distance, index = ocean_kdtree.query(query_point, k=1, distance_upper_bound=MAX_MATCH_DISTANCE)
 
+            # Check a valid neighbor was found within the threshold
             if distance <= MAX_MATCH_DISTANCE and index != ocean_kdtree.n:
                 matched_row = ocean_df.iloc[index]
                     
@@ -87,6 +91,7 @@ for file_path in tif_file_paths:
     except rasterio.errors.RasterioIOError as e:
         print(f"Warning: Skipping {file_path} because it could not be opened: {e}")
 
+# Summary of matching
 total_tifs = len(tif_file_paths)
 matched_tifs = len(matched_file_paths)
 
@@ -99,6 +104,7 @@ if total_tifs > 0:
 else:
     print("\nNo TIFF files were found to match.")
 
+# Prepare data for clustering: drop rows with NaNs in features
 ocean_features_for_clustering = np.array(matched_ocean_features)
 geo_coords_matched_np = np.array(matched_geo_coords)
 
@@ -108,7 +114,7 @@ actual_n_clusters = min(n_clusters, len(ocean_features_for_clustering))
 kmeans = KMeans(n_clusters=actual_n_clusters, random_state=42, n_init=10)
 cluster_assignments = kmeans.fit_predict(ocean_features_for_clustering)
 
-# --- Save Clustered Data to CSV ---
+# Save Clustered Data to CSV
 
 with open(output_csv_path, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
@@ -123,7 +129,7 @@ with open(output_csv_path, 'w', newline='') as csvfile:
         secchi = ocean_features_for_clustering[i, 2]
         writer.writerow([label, file_dir, lon, lat, bathy, chlorophyll, secchi])
 
-# --- Print Cluster Information ---
+# Print Cluster Information
 unique_clusters, counts = np.unique(cluster_assignments, return_counts=True)
 
 print(f"Number of unique clusters formed: {len(unique_clusters)}")
@@ -132,7 +138,7 @@ print("Cluster counts:", dict(zip(unique_clusters, counts)))
 for i, centroid in enumerate(kmeans.cluster_centers_):
     print(f"Cluster {i}: Bathy={centroid[0]:.2f}, Chlorophyll={centroid[1]:.4f}, Secchi={centroid[2]:.2f}")
 
-# --- 3D Plot of Ocean Features Clusters ---
+# 3D Plot of Ocean Features Clusters
 print(f"Generating 3D plot and saving to {output_3d_plot_path}...")
 
 fig_3d = plt.figure(figsize=(12, 10))
@@ -164,7 +170,7 @@ fig_3d.savefig(output_3d_plot_path, dpi=300, bbox_inches='tight')
 plt.close(fig_3d)
 print("3D plot saved.")
         
-# --- Map Plot of Clusters ---
+# Map Plot of Clusters
 print(f"Generating geographic map of clusters and saving to {output_map_plot_path}...")
 fig_map = plt.figure(figsize=(15, 10))
 ax_map = plt.axes(projection=ccrs.PlateCarree())

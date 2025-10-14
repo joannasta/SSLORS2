@@ -2,25 +2,25 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy
-
 import torch
+import timm
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-from torch.autograd import Variable
 import pytorch_lightning as pl
-from torch.utils.tensorboard import SummaryWriter
 
-import timm
+from torch.autograd import Variable
+from torch.utils.tensorboard import SummaryWriter
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 from torchvision.transforms import RandomCrop
 
 from .magicbathynet_unet import UNet_bathy
-from src.utils.finetuning_utils import calculate_metrics
+from src.utils.finetuning_utils import calculate_metrics_mbn
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 
 class CustomLoss(nn.Module):
+    """RMSE over valid mask."""
     def __init__(self):
         super(CustomLoss, self).__init__()
 
@@ -36,6 +36,7 @@ class CustomLoss(nn.Module):
         return rmse_loss_val
 
 class FineTuningMBN(pl.LightningModule):
+    """Fine-tune UNet on bathymetry using external embeddings (MAE/MoCo/Geo/Ocean)."""
     def __init__(self, src_channels=3, mask_ratio=0.5,pretrained_model=None,location="agia_napa",
                  full_finetune=False, random=False, ssl=False, model_type="mae"):
 
@@ -45,6 +46,8 @@ class FineTuningMBN(pl.LightningModule):
 
         self.run_dir = None
         self.base_dir = "bathymetry_results"
+        
+        # Configs and params
         self.pretrained_model = pretrained_model
         self.model_type = model_type
         self.base_lr = 0.0001
@@ -59,9 +62,11 @@ class FineTuningMBN(pl.LightningModule):
         self.stride = MODEL_CONFIG["stride"]
         self.full_finetune = full_finetune
 
+        # Model and loss
         self.projection_head = UNet_bathy(in_channels=3, out_channels=1, model_type=self.model_type, full_finetune=self.full_finetune)
         self.criterion = CustomLoss()
 
+        # Tracking
         self.total_train_loss = 0.0
         self.train_batch_count = 0
         self.total_val_loss = 0.0
@@ -77,34 +82,39 @@ class FineTuningMBN(pl.LightningModule):
         self.test_std_dev_list = []
         self.test_image_count = 0
 
+        # Optionally enable full finetune
         if self.full_finetune:
             for param in self.parameters():
                 param.requires_grad = True
 
     def forward(self, images, embedding):
+        """Fuse external embedding with image features via UNet head."""
         processed_embedding = embedding
 
         if self.full_finetune:
             if self.model_type == "mae" or self.model_type == "mae_ocean":
-                embedding = embedding.squeeze(1)
+                embedding = embedding.squeeze(1) # expected (B, C, H, W)->(B, H, W) for encoder
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
             elif self.model_type in ["moco", "geo_aware","ocean_aware"]:
-                embedding = embedding.squeeze(0)
+                embedding = embedding.squeeze(0)  # (B, C, H, W)->(C, H, W) 
                 processed_embedding = self.pretrained_model.backbone(embedding).flatten(start_dim=1)
 
         return self.projection_head(processed_embedding, images)
 
     def training_step(self, batch,batch_idx):
+        """Train on random crops and compute masked RMSE."""
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         train_dir = "training_results"
         size=(256, 256)
         data, target, embedding = batch
         data, target,embedding = Variable(data.to(device)), Variable(target.to(device)), Variable(embedding.to(device))
 
+        # Resize inputs
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(0), size=size, mode='nearest')
         data_size = data.size()[2:]
 
+        # Optional random crop 
         if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
             data_transform = RandomCrop(size=self.crop_size)
             target_transform = RandomCrop(size=self.crop_size)
@@ -112,6 +122,7 @@ class FineTuningMBN(pl.LightningModule):
             data = data_transform(data)
             target = target_transform(target)
 
+        # Build masks, valid pixels where both data and target are non-zero
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)
         target_mask = torch.from_numpy(target_mask)
         target_mask = target_mask.reshape(self.crop_size, self.crop_size)
@@ -127,19 +138,24 @@ class FineTuningMBN(pl.LightningModule):
         if torch.sum(combined_mask) == 0:
             return None
 
+        # Clamp input
         data = torch.clamp(data, min=0, max=1)
 
+        # Forward
         output = self(data.float(),embedding.float())
         output = output.to(self.device)
 
+        # Loss
         loss = self.criterion(output, target, combined_mask)
 
+        # Prepare logging arrays
         rgb = np.asarray(np.transpose(data.data.cpu().numpy()[0],(1,2,0)), dtype='float32')
         pred = output.data.cpu().numpy()[0]
         gt = target.data.cpu().numpy()[0]
         masked_pred = pred * combined_mask.cpu().numpy()
         masked_gt = gt * combined_mask.cpu().numpy()
 
+        # Log images at first batch
         if batch_idx == 0:
             self.log_images(
                 rgb,
@@ -148,7 +164,8 @@ class FineTuningMBN(pl.LightningModule):
                 train_dir
             )
 
-        rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt.ravel())
+        # Per-image metrics (denormalized)
+        rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt.ravel())
 
         self.log('train_rmse_step', (rmse * -self.norm_param_depth), on_step=True)
         self.log('train_mae_step', (mae * -self.norm_param_depth), on_step=True)
@@ -168,6 +185,7 @@ class FineTuningMBN(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
+        """Validation on random crops; log masked RMSE/MAE/StdDev."""
         val_dir = "validation_results"
         data, target, embedding = batch
 
@@ -177,10 +195,12 @@ class FineTuningMBN(pl.LightningModule):
         data, target, embedding = batch
         data, target,embedding = Variable(data.to(device)), Variable(target.to(device)), Variable(embedding.to(device))
 
+        # Resize inputs
         data = F.interpolate(data, size=size, mode='nearest')
         target = F.interpolate(target.unsqueeze(0), size=size, mode='nearest')
         data_size = data.size()[2:]
 
+        # Optional random crop
         if data_size[0] > self.crop_size and data_size[1] > self.crop_size:
             data_transform = RandomCrop(size=self.crop_size)
             target_transform = RandomCrop(size=self.crop_size)
@@ -188,6 +208,7 @@ class FineTuningMBN(pl.LightningModule):
             data = data_transform(data)
             target = target_transform(target)
 
+        # Masks
         target_mask = (target.cpu().numpy() != 0).astype(np.float32)
         target_mask = torch.from_numpy(target_mask)
         target_mask = target_mask.reshape(self.crop_size, self.crop_size)
@@ -205,11 +226,13 @@ class FineTuningMBN(pl.LightningModule):
 
         data = torch.clamp(data, min=0, max=1)
 
+        # Forward
         output = self(data.float(),embedding.float())
         output = output.to(self.device)
 
         val_loss = self.criterion(output, target, combined_mask)
 
+        # Logging arrays
         rgb = np.asarray(np.transpose(data.data.cpu().numpy()[0],(1,2,0)), dtype='float32')
         pred = output.data.cpu().numpy()[0]
         gt = target.data.cpu().numpy()[0]
@@ -224,7 +247,8 @@ class FineTuningMBN(pl.LightningModule):
                 val_dir
             )
 
-        rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt.ravel())
+        # Metrics
+        rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt.ravel())
 
         self.log('val_rmse', (rmse * -self.norm_param_depth), on_step=True)
         self.log('val_mae', (mae * -self.norm_param_depth), on_step=True)
@@ -243,6 +267,7 @@ class FineTuningMBN(pl.LightningModule):
         return val_loss
 
     def test_step(self, batch, batch_idx):
+        """Sliding-window style inference, log per-image metrics and plots."""
         test_dir = "test_results"
         test_data_batch, targets_batch, embeddings_batch = batch
 
@@ -256,6 +281,7 @@ class FineTuningMBN(pl.LightningModule):
             gt_e = gt_e.cpu()
             embedding = embedding.unsqueeze(0)
 
+            # Resize for evaluation
             img = scipy.ndimage.zoom(img, (1,ratio, ratio), order=1)
             gt = scipy.ndimage.zoom(gt, (ratio, ratio), order=1)
             gt_e = scipy.ndimage.zoom(gt_e, (ratio, ratio), order=1)
@@ -290,6 +316,7 @@ class FineTuningMBN(pl.LightningModule):
             gt_e = gt_e.unsqueeze(0)
             img_log =  img[0,:,:,:]#.transpose(1,2,0)
             
+            # Log at most 40 test images
             if self.test_image_count < 40:
                 self.log_images(
                         img_log,
@@ -299,7 +326,8 @@ class FineTuningMBN(pl.LightningModule):
                     )
             self.test_image_count += 1
 
-            rmse, mae, std_dev = calculate_metrics(masked_pred.ravel(), masked_gt_e.numpy().ravel())
+            # Per-image metrics
+            rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt_e.numpy().ravel())
 
             self.log(f'test_rmse_step_image_{self.test_image_count}', (rmse * -self.norm_param_depth), on_step=True)
             self.log(f'test_mae_step_image_{self.test_image_count}', (mae * -self.norm_param_depth), on_step=True)
@@ -318,9 +346,11 @@ class FineTuningMBN(pl.LightningModule):
             print(f'Mean Std Dev for image {self.test_image_count} :', std_dev * -self.norm_param_depth)
 
     def on_train_start(self):
+        """Initialize run directory before training starts."""
         self.log_results()
 
     def on_train_epoch_start(self):
+        """Log LR and reset train metric buffers at epoch start."""
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
         print(f"Starting epoch {self.current_epoch} - Current learning rate: {current_lr}")
@@ -330,17 +360,20 @@ class FineTuningMBN(pl.LightningModule):
         self.epoch_std_dev_list = []
 
     def on_validation_epoch_start(self):
+        """Reset validation metric buffers at epoch start."""
         self.val_rmse_list = []
         self.val_mae_list = []
         self.val_std_dev_list = []
 
     def on_test_start(self):
+        """Reset test metric buffers and counters at test start."""
         self.test_rmse_list = []
         self.test_mae_list = []
         self.test_std_dev_list = []
         self.test_image_count = 0
 
     def on_train_epoch_end(self):
+        """Log average train loss and per-epoch train metrics."""
         avg_train_loss = self.total_train_loss / self.train_batch_count
         self.log('train_loss_epoch', avg_train_loss)
         self.total_train_loss = 0.0
@@ -360,6 +393,7 @@ class FineTuningMBN(pl.LightningModule):
         self.epoch_std_dev_list = []
 
     def on_validation_epoch_end(self):
+        """Log average validation loss and per-epoch val metrics."""
         avg_val_loss = self.total_val_loss / self.val_batch_count
         self.log('val_loss_epoch', avg_val_loss, on_epoch=True)
         self.total_val_loss = 0.0
@@ -379,6 +413,7 @@ class FineTuningMBN(pl.LightningModule):
         self.val_std_dev_list = []
 
     def on_test_epoch_end(self):
+        """Log average test metrics over all test images."""
         avg_rmse = torch.tensor(self.test_rmse_list).mean() if self.test_rmse_list else torch.tensor(0.0)
         avg_mae = torch.tensor(self.test_mae_list).mean() if self.test_mae_list else torch.tensor(0.0)
         avg_std_dev = torch.tensor(self.test_std_dev_list).mean() if self.test_std_dev_list else torch.tensor(0.0)
@@ -392,9 +427,11 @@ class FineTuningMBN(pl.LightningModule):
         self.test_std_dev_list = []
 
     def on_train_end(self):
+        """Close SummaryWriter when training finishes."""
         self.writer.close()
 
     def log_images(self, data: torch.Tensor, predicted_depth: np.ndarray, depth: np.ndarray, dir: str) -> None:
+        """Save side-by-side RGB, GT depth, and predicted depth figures."""
         self.log_results()
         if data.ndim == 3 and data.shape[0] == 3:
             data = np.transpose(data, (1, 2, 0))
@@ -452,6 +489,7 @@ class FineTuningMBN(pl.LightningModule):
         plt.close()
 
     def log_results(self):
+        """Create unique run directory."""
         if self.run_dir is None:
             run_index = 0
             while os.path.exists(os.path.join(self.base_dir, f"run_{run_index}")):
@@ -460,6 +498,7 @@ class FineTuningMBN(pl.LightningModule):
             os.makedirs(self.run_dir, exist_ok=True)
 
     def configure_optimizers(self):
+        """Adam with multi-step scheduler over UNet head params."""
         params_dict = dict(self.projection_head.named_parameters())
         params = []
         base_lr = self.base_lr

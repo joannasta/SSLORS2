@@ -8,11 +8,15 @@ import matplotlib.pyplot as plt
 
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score, jaccard_score, hamming_loss, label_ranking_loss, coverage_error
+from ..finetune_mbn import location
 
 
-norm_param_depth = NORM_PARAM_DEPTH["agia_napa"]
-norm_param = np.load(NORM_PARAM_PATHS["agia_napa"])
+'''Utils for MagicBathyNet'''
 
+
+# Normaliazation and model Parameter
+norm_param_depth = NORM_PARAM_DEPTH[location]
+norm_param = np.load(NORM_PARAM_PATHS[location])
 crop_size = MODEL_CONFIG["crop_size"]
 window_size = MODEL_CONFIG["window_size"]
 stride = MODEL_CONFIG["stride"]
@@ -58,7 +62,8 @@ def grouper(n, iterable):
             return
         yield chunk
 
-def calculate_metrics(predictions, gts):
+def calculate_metrics_mbn(predictions, gts):
+    '''Calculate MagicBathyNet metrics'''
     non_zero_mask = predictions != 0
     
     rmse = np.sqrt(np.mean(((predictions - gts) ** 2)[non_zero_mask]))
@@ -73,6 +78,7 @@ def calculate_metrics(predictions, gts):
     return rmse,mae,std_dev
 
 def data_augmentation(cls, *arrays, flip=True, mirror=True):
+    '''Applies random vertical flips and horizontal mirrors'''
         will_flip, will_mirror = False, False
         if flip and random.random() < 0.5:
             will_flip = True
@@ -94,7 +100,13 @@ def data_augmentation(cls, *arrays, flip=True, mirror=True):
             results.append(np.copy(array))
         
         return tuple(results)
+    
+    
+    
+'''Utils for MARIDA'''
+    
 def metrics_marida(y_true,y_predicted):
+    """Compute standard multi-class/multi-label metrics for MARIDA."""
     micro_prec = precision_score(y_true, y_predicted, average='micro')
     macro_prec = precision_score(y_true, y_predicted, average='macro')
     weight_prec = precision_score(y_true, y_predicted, average='weighted')
@@ -129,6 +141,7 @@ def metrics_marida(y_true,y_predicted):
    
    
 def confusion_matrix(y_gt, y_pred, labels):
+    """Build confusion matrix with per-class and macro stats appended."""
 
     # compute metrics
     cm      = metr.confusion_matrix  (y_gt, y_pred)
@@ -201,29 +214,8 @@ def confusion_matrix(y_gt, y_pred, labels):
     return df
 
 def print_confusion_matrix_ML(confusion_matrix, class_label, ind_names, col_names):
-
+     """Pretty-print a confusion matrix with index/column labels."""
     df_cm = pd.DataFrame(confusion_matrix, index=ind_names, columns=col_names)
     
     df_cm.index.name = class_label
     return df_cm
-'''
-def read_geotiff(filename, b):
-    ds = gdal.Open(filename)
-    band = ds.GetRasterBand(b)
-    arr = band.ReadAsArray()
-    return arr, ds
-
-def write_geotiff(filename, arr, in_ds):
-    if arr.dtype == np.float32:
-        arr_type = gdal.GDT_Float32
-    else:
-        arr_type = gdal.GDT_Int32
-
-    driver = gdal.GetDriverByName("GTiff")
-    out_ds = driver.Create(filename, arr.shape[1], arr.shape[0], 1, arr_type)
-    out_ds.SetProjection(in_ds.GetProjection())
-    out_ds.SetGeoTransform(in_ds.GetGeoTransform())
-    band = out_ds.GetRasterBand(1)
-    band.WriteArray(arr)
-    band.FlushCache()
-    band.ComputeStatistics(False)'''

@@ -16,6 +16,7 @@ from pathlib import Path
 random.seed(1)
 
 class MagicBathyNetDataset(Dataset):
+    """Dataset for MagicBathyNet, loads paired S2 images/depth, applies random crops, and provides SSL embeddings."""
     def __init__(self, root_dir, transform=None, split_type='train', cache=True, augmentation=True, pretrained_model=None, location="agia_napa",
                  full_finetune=False, random_init=False, ssl=True, image_ids_for_this_split=None):
         self.root_dir = root_dir
@@ -33,6 +34,7 @@ class MagicBathyNetDataset(Dataset):
         self.random_init = random_init
         self.ssl = ssl
         
+        # Prepare file lists via processor
         self.processor = DatasetProcessor(
             img_dir=Path(self.root_dir) / location / 'img' / 's2',
             depth_dir=Path(self.root_dir) / location / 'depth' / 's2',
@@ -45,6 +47,7 @@ class MagicBathyNetDataset(Dataset):
         self.data_files = [pair[0] for pair in self.paired_files]
         self.label_files = [pair[1] for pair in self.paired_files]
 
+        # Filter by split indices from config
         indices_to_use = self.train_images if split_type == 'train' else self.test_images
 
         filtered_data_files = []
@@ -58,13 +61,16 @@ class MagicBathyNetDataset(Dataset):
         self.data_files = filtered_data_files
         self.label_files = filtered_label_files
         
+        # Compute embeddings if pretrained model
         self.embeddings = None
         if self.pretrained_model is not None:
             self._create_embeddings() 
 
+        # Normalization parameters
         self.norm_param_depth = NORM_PARAM_DEPTH[self.location]
         self.norm_param = np.load(NORM_PARAM_PATHS[self.location])
 
+        # Sliding window / crop settings
         self.crop_size = MODEL_CONFIG["crop_size"]
         self.window_size = MODEL_CONFIG["window_size"]
         self.stride = MODEL_CONFIG["stride"]
@@ -73,9 +79,11 @@ class MagicBathyNetDataset(Dataset):
         self.label_cache_ = {}
         
     def __len__(self):
+        # Return large virtual length to allow many random crops
         return 10000
 
     def _create_embeddings(self):
+        """Build embeddings from RGB bands using the pretrained model."""
         hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"], location=self.location, ocean_flag=False)
         self.embeddings = []
         def weights_init(m):
@@ -116,6 +124,7 @@ class MagicBathyNetDataset(Dataset):
 
     @classmethod
     def data_augmentation(cls, *arrays, flip=True, mirror=True):
+        '''Random vertical/horizontal flips on arrays '''
         will_flip, will_mirror = False, False
         if flip and random.random() < 0.5:
             will_flip = True
@@ -139,10 +148,13 @@ class MagicBathyNetDataset(Dataset):
         return tuple(results)
     
     def __getitem__(self, idx):
+        """Randomly sample a patch, normalized image, scaled depth, and corresponding embedding."""
         random_idx = random.randint(0, len(self.data_files) - 1)
+        # Load/normalize image
         if random_idx in self.data_cache_:
             data = self.data_cache_[random_idx]
         else:
+            # Min-Max normalization 
             data = np.asarray(io.imread(self.data_files[random_idx]).transpose((2,0,1)), dtype='float32')
             data = (data - self.norm_param[0][:, np.newaxis, np.newaxis]) / (self.norm_param[1][:, np.newaxis, np.newaxis] - self.norm_param[0][:, np.newaxis, np.newaxis]) 
             self.data_cache_[random_idx] = data
@@ -154,6 +166,7 @@ class MagicBathyNetDataset(Dataset):
             label = 1/self.norm_param_depth * np.asarray(io.imread(self.label_files[random_idx]), dtype='float32')
             self.label_cache_[random_idx] = label
 
+        # Random crop coordinates
         x1, x2, y1, y2 = get_random_pos(data, self.window_size)
         data_p = data[:, x1:x2,y1:y2]
         label_p = label[x1:x2,y1:y2]

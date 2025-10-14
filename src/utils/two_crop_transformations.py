@@ -18,6 +18,7 @@ class TwoCropsTransform:
 
 
 class GaussianBlur:
+    """Apply Gaussian blur with sigma sampled uniformly from a given range."""
     def __init__(self, sigma_range=(0.1, 2.0), kernel_size=5):
         self.sigma_range = sigma_range
         self.kernel_size = kernel_size

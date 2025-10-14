@@ -2,7 +2,6 @@ import os
 import argparse
 import scipy
 import torch
-
 import numpy as np
 import matplotlib.pyplot as plt
 import pytorch_lightning as pl
@@ -17,7 +16,8 @@ from src.models.finetuning.mbn.finetuning_mbn import FineTuningMBN
 from src.models.mae import MAE
 from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
-from src.models.moco_geo import MoCoGeo
+from src.models.geography_aware import GeographyAware
+from src.models.ocean_aware import OceanAware
 from src.data.magicbathynet.mbn_dataloader import MagicBathyNetDataModule
 
 class BathymetryPredictor:
@@ -31,9 +31,11 @@ class BathymetryPredictor:
         resize_to: Tuple[int, int] = (3, 256, 256), 
         location: Optional[str] = "agia_napa",
     ):
+        # Initalization strategies
         self.full_finetune = False 
         self.random = False
         self.ssl = True
+        
         self.location = location
         self.model_type = model_type 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -56,18 +58,20 @@ class BathymetryPredictor:
             )
 
         elif self.model_type.lower() == "geo_aware":
-            self.pretrained_model = MoCoGeo.load_from_checkpoint(
+            self.pretrained_model = GeographyAware.load_from_checkpoint(
                 pretrained_weights_path,
                 strict=False
             )
         elif self.model_type.lower() == "ocean_aware":
-            self.pretrained_model = MoCoGeo.load_from_checkpoint(
+            self.pretrained_model = OceanAware.load_from_checkpoint(
                 pretrained_weights_path,
                 strict=False
             )
         else:
             raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'mocogeo','ocean_aware'.")
 
+        
+        # Setup MagicBathyNet Datamodule and Model
         self.data_module = MagicBathyNetDataModule(
             root_dir=data_dir,
             batch_size=batch_size,
@@ -94,6 +98,7 @@ class BathymetryPredictor:
         os.makedirs(self.output_dir, exist_ok=True)
 
     def train(self, max_epochs: int = 10) -> pl.Trainer:
+        '''PytorchlightningTrainer for MagicBathyNet'''
         logger = TensorBoardLogger("results/inference", name="finetuning_logs")
 
         trainer = Trainer(
@@ -114,6 +119,7 @@ class BathymetryPredictor:
 
 
 def main():
+    '''Arguments for Finetuning MagicBathyNet'''
     parser = argparse.ArgumentParser(description="Bathymetry Prediction Pipeline")
     parser.add_argument("--accelerator", type=str, default="gpu", help="Type of accelerator")
     parser.add_argument("--devices", type=int, default=1, help="Number of devices")

@@ -1,25 +1,60 @@
 import torch
 import numpy as np
-# Normalization Parameters
+
+# Function to retrieve normalization tensors Hydro
+def get_Hydro_means_and_stds():
+    means = torch.tensor([
+        340.76769064, 429.9430203, 614.21682446, 590.23569706,
+        950.68368468, 1792.46290469, 2075.46795189, 2218.94553375,
+        2266.46036911, 2246.0605464, 1594.42694882, 1009.32729131
+    ], dtype=torch.float)
+
+    stds = torch.tensor([
+        554.81258967, 572.41639287, 582.87945694, 675.88746967,
+        729.89827633, 1096.01480586, 1273.45393088, 1365.45589904,
+        1356.13789355, 1302.3292881, 1079.19066363, 818.86747235
+    ], dtype=torch.float)
+    
+    return means, stds
+
+# Normalization Parameters for Depth MagicBathyNet
 NORM_PARAM_DEPTH = {
     "agia_napa": -30.443,
     "puck_lagoon": -11.0
 }
 
-# Paths
+# Normalization File Paths MagicBathyNet
 NORM_PARAM_PATHS = {
     "agia_napa": "/mnt/storagecube/joanna/MagicBathyNet/agia_napa/norm_param_s2_an.npy",
     "puck_lagoon": "/mnt/storagecube/joanna/MagicBathyNet/puck_lagoon/norm_param_s2_pl.npy"
 }
 
-# Common Model Parameters
+# Common Model Parameters MagicBathyNet
 MODEL_CONFIG = {
     "crop_size": 256,
     "window_size": (18, 18),
     "stride": 2
 }
 
-###MARIDA DATASET MAPPING
+# Train and Test indices MagicBathyNet
+train_images = ['409', '418', '350', '399', '361', '430', '380', '359', '371', '377', '379', '360', '368', '419', '389', '420', '401', '408', '352', '388', '362', '421', '412', '351', '349', '390', '400', '378']
+test_images = ['411', '387', '410', '398', '370', '369', '397']
+
+#MARIDA Normalization Parameter
+def get_marida_means_and_stds():
+    # Pixel-level number of negative/number of positive per class
+    pos_weight = torch.Tensor([ 2.65263158, 27.91666667, 11.39285714, 18.82857143,  6.79775281,
+            6.46236559,  0.60648148, 27.91666667, 22.13333333,  5.03478261,
+        17.26315789, 29.17391304, 16.79487179, 12.88      ,  9.05797101])
+
+    bands_mean = np.array([0.05197577, 0.04783991, 0.04056812, 0.03163572, 0.02972606, 0.03457443,
+    0.03875053, 0.03436435, 0.0392113,  0.02358126, 0.01588816]).astype('float32')
+
+    bands_std = np.array([0.04725893, 0.04743808, 0.04699043, 0.04967381, 0.04946782, 0.06458357,
+    0.07594915, 0.07120246, 0.08251058, 0.05111466, 0.03524419]).astype('float32')
+    return bands_mean, bands_std, pos_weight
+
+#MARIDA Dataset Mapping
 cat_mapping_marida = { 'Marine Debris': 1,
                 'Dense Sargassum': 2,
                 'Sparse Sargassum': 3,
@@ -120,35 +155,3 @@ report_mapping_marida  = {'Very close': 1,
 rf_features_marida  = ['nm440','nm490','nm560','nm665','nm705','nm740','nm783','nm842',
               'nm865','nm1600','nm2200','NDVI','FAI','FDI','SI','NDWI','NRD',
               'NDMI','BSI','CON','DIS','HOMO','ENER','COR','ASM']
-
-# Function to retrieve normalization tensors
-def get_means_and_stds():
-    means = torch.tensor([
-        340.76769064, 429.9430203, 614.21682446, 590.23569706,
-        950.68368468, 1792.46290469, 2075.46795189, 2218.94553375,
-        2266.46036911, 2246.0605464, 1594.42694882, 1009.32729131
-    ], dtype=torch.float)
-
-    stds = torch.tensor([
-        554.81258967, 572.41639287, 582.87945694, 675.88746967,
-        729.89827633, 1096.01480586, 1273.45393088, 1365.45589904,
-        1356.13789355, 1302.3292881, 1079.19066363, 818.86747235
-    ], dtype=torch.float)
-    
-    return means, stds
-
-train_images = ['409', '418', '350', '399', '361', '430', '380', '359', '371', '377', '379', '360', '368', '419', '389', '420', '401', '408', '352', '388', '362', '421', '412', '351', '349', '390', '400', '378']
-test_images = ['411', '387', '410', '398', '370', '369', '397']
-    
-def get_marida_means_and_stds():
-    # Pixel-level number of negative/number of positive per class
-    pos_weight = torch.Tensor([ 2.65263158, 27.91666667, 11.39285714, 18.82857143,  6.79775281,
-            6.46236559,  0.60648148, 27.91666667, 22.13333333,  5.03478261,
-        17.26315789, 29.17391304, 16.79487179, 12.88      ,  9.05797101])
-
-    bands_mean = np.array([0.05197577, 0.04783991, 0.04056812, 0.03163572, 0.02972606, 0.03457443,
-    0.03875053, 0.03436435, 0.0392113,  0.02358126, 0.01588816]).astype('float32')
-
-    bands_std = np.array([0.04725893, 0.04743808, 0.04699043, 0.04967381, 0.04946782, 0.06458357,
-    0.07594915, 0.07120246, 0.08251058, 0.05111466, 0.03524419]).astype('float32')
-    return bands_mean, bands_std, pos_weight

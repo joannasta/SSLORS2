@@ -20,7 +20,8 @@ def collate_fn(batch):
     return (img1_batch, img2_batch) 
 
 
-class HydroMoCoDataModule(LightningDataModule): 
+class HydroMoCoDataModule(LightningDataModule):
+     """LightningDataModule for MoCo-style SSL on Hydro data."""
     def __init__( 
         self, 
         data_dir: str, 
@@ -41,6 +42,7 @@ class HydroMoCoDataModule(LightningDataModule):
         self.ocean_flag=ocean_flag
 
     def setup(self, stage=None): 
+        """Instantiate train/val/test/predict datasets depending on stage."""
         if stage == 'fit' or stage is None: 
             self.train_dataset = HydroMoCoDataset( 
                 path_dataset=self.data_dir, 

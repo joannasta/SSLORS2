@@ -1,26 +1,21 @@
-# Third-party libraries
+
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import matplotlib.colors as mcolors
 import scipy
-
-# PyTorch and related libraries
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
 import pytorch_lightning as pl
-
-# Libraries for models and utilities
 import timm
+import torchvision.transforms.functional as F
+
+from torch.utils.tensorboard import SummaryWriter
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
-import torchvision.transforms.functional as F
-import matplotlib.patches as mpatches
 
-# Project-specific imports
 from .marida_unet  import UNet_Marida
 from src.data.marida.marida_dataset import gen_weights
 from src.utils.finetuning_utils import calculate_metrics
@@ -33,6 +28,7 @@ from src.data.hydro.hydro_dataset import HydroDataset
 
 
 class InputChannelAdapter(nn.Module):
+     """1x1 conv to adapt input channels to expected model channels."""
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)
@@ -41,6 +37,7 @@ class InputChannelAdapter(nn.Module):
         return self.conv(x)
     
 class FineTuningMARIDA(pl.LightningModule):
+    """Fine-tune UNet_Marida on MARIDA segmentation with optional SSL embeddings."""
     def __init__(self, src_channels=11, mask_ratio=0.5, learning_rate=1e-4,pretrained_weights=None,pretrained_model=None,model_type="mae",full_finetune=True,location="agia_napa"):
         super().__init__()
         self.writer = SummaryWriter()
@@ -49,9 +46,13 @@ class FineTuningMARIDA(pl.LightningModule):
         self.train_batch_count = 0
         self._device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.save_hyperparameters()
+        
+        # Run/output dirs
         self.run_dir = None 
         self.location = location 
         self.base_dir = "marine_debris_results"
+        
+        # SSL model setup
         self.pretrained_model=pretrained_model
         self.model_type = model_type
         self.full_finetune = full_finetune
@@ -60,7 +61,7 @@ class FineTuningMARIDA(pl.LightningModule):
             for param in self.parameters():
                 param.requires_grad = True
 
-
+        # Data normalization and learning params
         self.src_channels = src_channels  
         print("number of source channels:",self.src_channels)
         if self.pretrained_model is not None:
@@ -73,14 +74,18 @@ class FineTuningMARIDA(pl.LightningModule):
 
         self.test_image_count = 0
 
+        # Adapter from current input channels to SSL/pretrained expected channels
         self.input_adapter = InputChannelAdapter(self.src_channels, self.pretrained_in_channels)
+        
+        # UNet head outputs 11 classes
         self.projection_head = UNet_Marida(input_channels=self.pretrained_in_channels, 
                                            out_channels=11,model_type=self.model_type)
         
-        self.test_step_outputs = []#
+        self.test_step_outputs = []
 
         global class_distr
 
+         # Class distribution for weightin
         self.agg_to_water = True
         self.weight_param = 1.03
         self.class_distr = torch.Tensor([0.00452, 0.00203, 0.00254, 0.00168, 0.00766, 0.15206, 0.20232,
@@ -93,7 +98,7 @@ class FineTuningMARIDA(pl.LightningModule):
         self.weight =  gen_weights(self.class_distr, c = self.weight_param)
         self.criterion = nn.CrossEntropyLoss(ignore_index=-1, reduction= 'mean', weight=self.weight)
 
-
+        # Tracking for losses
         self.total_train_loss = 0.0
         self.total_test_loss = 0.0
         self.train_batch_count = 0
@@ -101,25 +106,13 @@ class FineTuningMARIDA(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
-    def preprocess_hydro(self, data):
-        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
-        self.embeddings = []
-
-        for idx in range(len(hydro_dataset)):
-            img = hydro_dataset[idx].to(self.device)
-            img = img.unsqueeze(0).to(self.pretrained_model.device)
-            if not self.fully_finetuning:
-                with torch.no_grad():
-                    embedding = self.pretrained_model.forward_encoder(img)
-                self.embeddings.append(embedding.cpu())
-
-        self.embeddings = torch.stack(self.embeddings).cpu()
-
     def forward(self, images, embedding):
+        """Forward pass, optionally encode embedding with SSL backbone, then UNet head."""
         processed_embedding = None
 
         if self.full_finetune:
             if self.model_type == "mae" or self.model_type == "mae_ocean":
+                # Expect ViT-like token embeddings
                 embedding = embedding.squeeze(1)
                 processed_embedding = self.pretrained_model.forward_encoder(embedding)
                 processed_embedding = processed_embedding.unsqueeze(0)
@@ -138,6 +131,7 @@ class FineTuningMARIDA(pl.LightningModule):
         return self.projection_head(images, processed_embedding)
     
     def training_step(self, batch, batch_idx):
+        """Compute CE loss and log images periodically."""
         train_dir = "train_results"
         data, target,embedding = batch
         images = data
@@ -168,6 +162,7 @@ class FineTuningMARIDA(pl.LightningModule):
 
 
     def validation_step(self, batch, batch_idx):
+        """Validation step: CE loss + optional visualization."""
         val_dir="val_results"
         data, target,embedding = batch
         images = data
@@ -199,6 +194,7 @@ class FineTuningMARIDA(pl.LightningModule):
     
     
     def test_step(self, batch, batch_idx):
+        """Test step: compute CE loss, collect predictions for metrics, and save visualization."""
         test_dir = "test_results"
         data, target, embedding = batch
         batch_size = data.shape[0]
@@ -254,6 +250,7 @@ class FineTuningMARIDA(pl.LightningModule):
             col = pixel_locations[1][i]
             visual_target_image[row, col] = target_labels[i]
 
+        # Denormalize and prepare RGB image for plotting
         img = data[0].clone().cpu()
         img = (img *self.stds[:,None, None]) + ( self.means[:,None, None]) 
         img = img[1:4, :, :]  
@@ -302,9 +299,11 @@ class FineTuningMARIDA(pl.LightningModule):
 
 
     def on_train_start(self):
+        """Create run directory."""
         self.log_results()
 
     def on_test_epoch_end(self):
+        """Aggregate test predictions and report MARIDA metrics + confusion matrix."""
         all_predictions = []
         all_targets = []
         for output in self.test_step_outputs:
@@ -328,11 +327,13 @@ class FineTuningMARIDA(pl.LightningModule):
         
 
     def on_train_epoch_start(self):
+        """Log current LR at epoch start."""
         current_lr = self.trainer.optimizers[0].param_groups[0]['lr']
         self.log('learning_rate', current_lr)
         print(f"Starting epoch - Current learning rate: {current_lr}")
     
     def on_validation_epoch_end(self):
+        """Log average validation loss for the epoch."""
         avg_val_loss = self.total_val_loss / self.val_batch_count
         self.log('val_loss', avg_val_loss, on_epoch=True)
         self.total_val_loss = 0.0
@@ -340,6 +341,7 @@ class FineTuningMARIDA(pl.LightningModule):
         print(f"Validation Loss (Epoch {self.current_epoch}): {avg_val_loss}")
 
     def on_train_epoch_end(self):
+        """Log average training loss for the epoch."""
         avg_train_loss = self.total_train_loss / self.train_batch_count
         self.log('train_loss', avg_train_loss)
         self.total_train_loss = 0.0
@@ -347,9 +349,11 @@ class FineTuningMARIDA(pl.LightningModule):
         print(f"Train Loss (Epoch {self.current_epoch}): {avg_train_loss}")
 
     def on_train_end(self):
+        """Close TensorBoard writer."""
         self.writer.close()
     
     def log_images(self, original_images: torch.Tensor, prediction: torch.Tensor, target: torch.Tensor,log_dir) -> None:
+        """Save side-by-side RGB, GT segmentation, and predicted segmentation."""
         self.log_results()
         img= original_images.cpu().numpy()
         target = target.detach().cpu().numpy()
@@ -391,6 +395,7 @@ class FineTuningMARIDA(pl.LightningModule):
         plt.close()
 
     def log_results(self):
+        """Create unique run directory under base_dir."""
         if self.run_dir is None:  
             run_index = 0
             while os.path.exists(os.path.join(self.base_dir, f"run_{run_index}")):
@@ -399,6 +404,7 @@ class FineTuningMARIDA(pl.LightningModule):
             os.makedirs(self.run_dir, exist_ok=True)
                 
     def configure_optimizers(self):
+        """Adam optimizer with MultiStep LR scheduler."""
         optimizer = torch.optim.Adam(self.parameters(), lr=2e-4, weight_decay=0)
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, [40], gamma=0.1)
         return [optimizer], [scheduler]

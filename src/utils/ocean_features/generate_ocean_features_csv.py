@@ -1,17 +1,19 @@
-import rasterio
-from rasterio.warp import reproject, Resampling
-import xarray as xr
-import rioxarray # Important: This enables the .rio accessor for xarray datasets
-import pandas as pd
-import numpy as np
-from rasterio.transform import xy
-from rasterio.merge import merge
-from tqdm import tqdm
 import os
 import glob
 import warnings
+import rasterio
+import xarray as xr
+import rioxarray 
+import pandas as pd
+import numpy as np
 
-# --- Directories ---
+from rasterio.warp import reproject, Resampling
+from rasterio.transform import xy
+from rasterio.merge import merge
+from tqdm import tqdm
+
+
+# Directories
 base = os.getcwd()
 bathy_path = os.path.join(base,  "bathy","sub_ice")
 secchi_path = os.path.join(base,  "secchi", "cmems_obs-oc_glo_bgc-transp_my_l4-gapfree-multi-4km_P1D_1747905614912.nc")
@@ -27,17 +29,18 @@ tiff_files = [
 ]
 TARGET_CRS = "EPSG:4326"
 
-# --- Check Bathymetry CRS ---
+# Check Bathymetry CRS
 bathy_tif_files = sorted(glob.glob(os.path.join(bathy_path, "*.tif")))
 if bathy_tif_files:
     with rasterio.open(bathy_tif_files[0]) as src:
         bathy_crs = src.crs
 
-# --- Check Secchi CRS ---
+# Check Secchi CRS 
 secchi_ds_global = None 
 if os.path.exists(secchi_path):
     try:
-        secchi_ds_global = xr.open_dataset(secchi_path)     
+        secchi_ds_global = xr.open_dataset(secchi_path)
+        # Ensure CRS is set and if not reproject     
         if not secchi_ds_global.rio.crs:
             secchi_ds_global = secchi_ds_global.rio.write_crs(TARGET_CRS, inplace=False) 
     
@@ -52,25 +55,26 @@ else:
     print("ERROR: Secchi file not found.")
 
 
-# --- Check Chlorophyll CRS ---
+# Check Chlorophyll CRS
 if tiff_files:
     with rasterio.open(tiff_files[0]) as src:
         chl_crs = src.crs
 else:
     print("\nERROR: No chlorophyll TIFF files found. Please check 'geotiff_dir' and file names. Exiting.")
 
-# --- 1. Load and mosaic Bathymetry Tiles ---
+# Load and mosaic Bathymetry Tiles
 
 src_files_to_mosaic = [rasterio.open(fp) for fp in bathy_tif_files]
 
 mosaic_full, out_transform_full = merge(src_files_to_mosaic)
+# mosaic shape (bands,H,W)
 mosaic_full = mosaic_full[0] 
 
-height_full, width_full = mosaic_full.shape
-
+# close sources
 for src in src_files_to_mosaic:
     src.close()
 
+# Reproject mosaic to target CRS
 with rasterio.open(bathy_tif_files[0]) as first_src: 
     if first_src.crs != TARGET_CRS:
         reprojected_mosaic = np.empty_like(mosaic_full, dtype=mosaic_full.dtype)
@@ -86,7 +90,11 @@ with rasterio.open(bathy_tif_files[0]) as first_src:
         )
         mosaic_full = reprojected_mosaic
     mosaic_final_crs = TARGET_CRS
+    
+# Updated mosaic size after potential reproject
+height_full, width_full = mosaic_full.shape
 
+# Tile parameters & output CSV setup
 tile_size_rows = 500
 tile_size_cols = 500
 
@@ -99,12 +107,15 @@ if not file_exists or os.stat(output_path).st_size == 0:
 else:
     pass
 
+# Process tiles
 for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows"):
     r_end = min(r_start + tile_size_rows, height_full)
 
     for c_start in tqdm(range(0, width_full, tile_size_cols), desc=f"  Processing Cols (Row {r_start}-{r_end})", leave=False):
         c_end = min(c_start + tile_size_cols, width_full)
+        # Extract bathy tile
         mosaic_tile = mosaic_full[r_start:r_end, c_start:c_end]
+        # Compute per-pixel lat/lon for the tile
         lats_tile, lons_tile = [], []
         for r_offset in range(r_end - r_start):
             for c_offset in range(c_end - c_start):
@@ -115,9 +126,11 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
                 lons_tile.append(lon)
 
         chl_arrays_tile = []
+        # Expected tile dimensions
         expected_tile_height = r_end - r_start
         expected_tile_width = c_end - c_start
         
+        # Compute bounds for the tile using corner pixel centers
         min_lon_tile, max_lat_tile = xy(out_transform_full, r_start, c_start)
         max_lon_tile, min_lat_tile = xy(out_transform_full, r_end, c_end)
 
@@ -126,6 +139,7 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
             width=expected_tile_width, height=expected_tile_height
         )
 
+        # Reproject chlorophyll TIFFs to the tile grid and average across months
         for tiff_path in tiff_files:
             with rasterio.open(tiff_path) as src_chl:
                 reprojected_chl_data = np.full(
@@ -144,6 +158,7 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
                         num_threads=os.cpu_count()
                     )
 
+                    # Replace nodata with NaN
                     if src_chl.nodata is not None:
                         reprojected_chl_data[reprojected_chl_data == src_chl.nodata] = np.nan
                     chl_arrays_tile.append(reprojected_chl_data)
@@ -153,6 +168,7 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
                           f"R{r_start}-{r_end}, C{c_start}-{c_end}: {e}")
                     chl_arrays_tile.append(np.full((expected_tile_height, expected_tile_width), np.nan, dtype="float32"))
 
+        # Compute mean chlorophyll over months
         if chl_arrays_tile:
             chl_stack_tile = np.stack(chl_arrays_tile, axis=0)
             chl_mean_tile = np.nanmean(chl_stack_tile, axis=0)
@@ -160,6 +176,7 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
         else:
             chl_interp_tile = np.full(expected_tile_height * expected_tile_width, np.nan, dtype="float32")
 
+        # Interpolate Secchi to pixel coordinates
         secchi_interp_tile = secchi_ds_global[secchi_var].interp(
             latitude=("points", lats_tile), longitude=("points", lons_tile), method="linear",
             kwargs={"fill_value": np.nan} 
@@ -170,6 +187,7 @@ for r_start in tqdm(range(0, height_full, tile_size_rows), desc="Processing Rows
             f"Array lengths do not match! Lats: {len(lats_tile)}, Lons: {len(lons_tile)}, " \
             f"Bathy: {len(mosaic_tile.flatten())}, Chl: {len(chl_interp_tile)}, Secchi: {len(secchi_interp_tile)}"
 
+        # Build and append tile DataFrame
         df_tile = pd.DataFrame({
             "lat": lats_tile,
             "lon": lons_tile,

@@ -8,6 +8,7 @@ import numpy as np
 from config import train_images, test_images 
 
 class MagicBathyNetDataModule(pl.LightningDataModule):
+    """LightningDataModule for MagicBathyNet, creates train/val/test datasets and dataloaders."""
     def __init__(self, root_dir, batch_size=1, transform=None, cache=True, pretrained_model=None, location="agia_napa",
                  full_finetune=False, random=False, ssl=True):
         super().__init__()
@@ -23,6 +24,7 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
         print("Dataloader location:",location)
 
     def setup(self, stage=None):
+        """Instantiate datasets for train/val/test splits."""
         if stage == 'fit' or stage is None:
             self.train_dataset = MagicBathyNetDataset(
                 root_dir=self.root_dir,

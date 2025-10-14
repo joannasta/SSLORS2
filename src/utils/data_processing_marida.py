@@ -3,13 +3,16 @@ import os
 import re
 
 from pathlib import Path
-from config import train_images, test_images
 from tqdm import tqdm
 
 class DatasetProcessor:
+    '''Process MARIDA dataset by building (image, class-mask) pairs from ROI names,
+       copying them to an output folder, and optionally creating image-only or target-only folders.'''
     def __init__(self,mode="train",ROIs=None ,output_dir=None,img_only_dir=None,depth_only_dir=None,split_type="train"):
+        # Basic settings
         self.mode=mode
         self.ROIs = ROIs
+        # Output dirs 
         self.output_dir = Path(output_dir)
         self.img_only_dir = Path(img_only_dir)
         self.target_only_dir = Path(depth_only_dir)
@@ -17,6 +20,7 @@ class DatasetProcessor:
 
         self.all_img_files = self.collect_files(self.img_dir)
         self.all_target_files = self.collect_files(self.depth_dir)
+        # Build pairs from ROI names
         self.paired_files = self.match_files()
 
         # Check if the output directory already exists. 
@@ -26,6 +30,7 @@ class DatasetProcessor:
         else:
             self.copy_files = False
 
+        # Copy and optionally create split folders
         if self.copy_files:  
             self.copy_paired_files()
 
@@ -55,9 +60,6 @@ class DatasetProcessor:
             roi_name = '_'.join(['S2'] + roi.split('_'))
             roi_file = os.path.join(path, 'patches', roi_folder, roi_name + '.tif')
             roi_file_cl = os.path.join(path, 'patches', roi_folder,roi_name + '_cl.tif') # Get Class Mask
-            
-
-
 
     def copy_paired_files(self):
         """Copies matched image-depth pairs to the output directory."""

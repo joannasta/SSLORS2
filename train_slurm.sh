@@ -1,34 +1,31 @@
 #!/bin/bash
-#SBATCH --job-name=OA_Train              # Job name
-#SBATCH --nodes=1                         # Number of nodes
-#SBATCH --gres=gpu:1                      # Number of GPUs
-#SBATCH --cpus-per-task=8                 # Number of CPU cores per task
-#SBATCH --time=1-00:00:00                   # Time limit (Corrected format for 4 days)
+#SBATCH --job-name=OA_Train                           # Job name
+#SBATCH --nodes=1                                     # Number of nodes
+#SBATCH --gres=gpu:1                                  # Number of GPUs
+#SBATCH --cpus-per-task=8                             # Number of CPU cores per task
+#SBATCH --time=1-00:00:00                             # Time limit (Corrected format for 4 days)
 #SBATCH --output=logs/train_slurm_ocean_aware.out     # Standard output log
 #SBATCH --error=logs/train_slurm_ocean_aware.err      # Error log
 #SBATCH --partition=small_job
+
 # Set up the environment
-#source activate ssl_new                   # Activate your conda environment
-export CUDA_VISIBLE_DEVICES=0             # Only requesting 1 GPU with --gres=gpu:1
+#source activate ssl_new                              # Activate your conda environment
+export CUDA_VISIBLE_DEVICES=0                         # Only requesting 1 GPU with --gres=gpu:1
 export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 
-
-#MoCo, Geography_aware, Ocean_aware
 
 #EPOCHS=200
 #LEARNING_RATE=3e-3 
 
-
-# MAE, OceanMAE
-DEVICES=1                                 # Number of devices for training
-NUM_WORKERS=8                             # Number of data loader workers
-MODEL=mae                         # Model name
-TRAIN_BATCH_SIZE=64                       # Training batch size
-VAL_BATCH_SIZE=64                         # Validation batch size
-LEARNING_RATE=1e-4                        # Learning rate
-EPOCHS=100                                # Number of epochs Hydro uses 800
+DEVICES=1                                      # Number of devices for training
+NUM_WORKERS=8                                  # Number of data loader workers
+MODEL=mae                                      # Model name
+TRAIN_BATCH_SIZE=64                            # Training batch size
+VAL_BATCH_SIZE=64                              # Validation batch size
+LEARNING_RATE=1e-4                             # Learning rate
+EPOCHS=100                                     # Number of epochs Hydro uses 800
 DATASET_PATH="/mnt/storagecube/joanna/Hydro/"  # Dataset path
-SEED=42                                   # Fixed assignment (removed spaces)
+SEED=42                                        # Fixed assignment (removed spaces)
 OCEAN=True
 
 # Run the training script

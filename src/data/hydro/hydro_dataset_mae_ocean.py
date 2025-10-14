@@ -2,15 +2,17 @@ import torch
 import numpy as np
 import rasterio
 import pandas as pd
-from pathlib import Path
 
+
+from pathlib import Path
 from typing import Optional, List, Callable, Tuple
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 
-from config import get_means_and_stds
+from config import get_Hydro_means_and_stds_Hydro
 
 class HydroMaeOceanFeaturesDataset(Dataset):
+    '''Dataset for MAE with ocean features, returns normalized S2 tensor and regarding ocean features.'''
     def __init__(
         self,
         path_dataset: Path,
@@ -34,12 +36,14 @@ class HydroMaeOceanFeaturesDataset(Dataset):
         self._load_ocean_features_and_map()
 
     def _load_normalization_params(self) -> Tuple[torch.Tensor, torch.Tensor]:  
-        means_np, stds_np = get_means_and_stds()
+        '''Load per-band Hydro means/stds and return as (C,1,1) tensors.'''
+        means_np, stds_np = get_Hydro_means_and_stds_Hydro()
         means_tensor = torch.tensor(means_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
         stds_tensor = torch.tensor(stds_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
         return means_tensor, stds_tensor
 
     def _load_ocean_features_and_map(self):
+        '''Build list of TIFF files and map each to its CSV row if ocean_flag is True.'''
         csv_df = pd.read_csv(self.csv_features_path)
         csv_file_dir_map = {Path(p).resolve(): row for p, row in csv_df.set_index('file_dir').iterrows()}
         
@@ -55,6 +59,7 @@ class HydroMaeOceanFeaturesDataset(Dataset):
         return len(self.file_paths)
 
     def _read_and_process_image(self, file_path: Path) -> torch.Tensor:
+        '''Read requested bands from a TIFF file and return as (C,H,W) float tensor.'''
         with rasterio.open(file_path) as src:
             band_indices = list(range(1, len(self.bands) + 1))
             sample_data = src.read(band_indices)
@@ -62,9 +67,11 @@ class HydroMaeOceanFeaturesDataset(Dataset):
             return sample
 
     def _normalize_tensor(self, img_tensor: torch.Tensor) -> torch.Tensor:
+        '''Normalize image tensor per band using preloaded means/stds.'''
         return (img_tensor - self.means_tensor) / self.stds_tensor
                     
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        '''Return normalized_image, ocean_features.'''
         file_path = self.file_paths[idx]
         sample = self._read_and_process_image(file_path)
         sample = self._normalize_tensor(sample)

@@ -12,10 +12,16 @@ from tqdm import tqdm
 from rasterio.warp import transform_bounds
 from shapely.geometry import box, Point
 
+''' Generate Plot to visualize the matching between ocean features and Hydro'''
+
+
+#Paths
 OCEAN_FEATURES_PATH = '/mnt/storagecube/joanna/ocean_features_combined.csv'
 TIF_DIRECTORY = '/mnt/storagecube/joanna/Hydro_new/Hydro'
-OUTPUT_PLOT_PATH = 'world_distribution_hydro_ocean_plot_proj.png'
+OUTPUT_PLOT_PATH = 'world_distribution_hydro_ocean_combined_match.png'
 
+
+# Read ocean features geolocations
 df = pd.read_csv(OCEAN_FEATURES_PATH)
 lat_cols = ['latitude', 'lat', 'Latitude', 'Lat']
 lon_cols = ['longitude', 'lon', 'Longitude', 'Lon']
@@ -31,30 +37,41 @@ for col in lon_cols:
     if col in df.columns:
         found_lon_col = col
         break
-
+    
 ocean_features = gpd.GeoDataFrame(
     df,
     geometry=gpd.points_from_xy(df[found_lon_col], df[found_lat_col]),
     crs="EPSG:4326"
 )
 
+
+# Check if crs match for further processing if not reproject
 if ocean_features.crs != 'EPSG:4326':
     ocean_features = ocean_features.to_crs(epsg=4326)
-
+    
+# Generate list with Hydro TIFF files
 tif_data = []
 tif_files_list = [os.path.join(TIF_DIRECTORY, f) for f in os.listdir(TIF_DIRECTORY) if f.endswith('.tif')]
 
+
+# For each Hydro TIFF File read the source coordinate reference system (CRS) and bounding box in that CRS
 for tif_path in tqdm(tif_files_list, desc="Processing TIFs"):
     with rasterio.open(tif_path) as src:
         src_crs = src.crs
         src_bounds = src.bounds
+        # If not in WGS84 (EPSG:4326), transform the bounds to lon/lat
         if src_crs != 'EPSG:4326':
             lon_min, lat_min, lon_max, lat_max = transform_bounds(src_crs, 'EPSG:4326', *src_bounds)
         else:
             lon_min, lat_min, lon_max, lat_max = src_bounds.left, src_bounds.bottom, src_bounds.right, src_bounds.top
 
+        # Compute the geographic center of the bounding box
         center_lon = (lon_min + lon_max) / 2
         center_lat = (lat_min + lat_max) / 2
+        
+        # Create geometries:
+        # - bbox as a polygon (shapely.box)
+        # - center point as a Point
         tif_bbox_geom = box(lon_min, lat_min, lon_max, lat_max)
         tif_data.append({
             'filepath': tif_path,
@@ -69,11 +86,15 @@ tif_df = pd.DataFrame(tif_data)
 tif_geometry = tif_df['geometry']
 tif_gdf = gpd.GeoDataFrame(tif_df.drop(columns=['geometry']), geometry=tif_geometry, crs="EPSG:4326")
 
+# Build index to speed up query
 ocean_features_sindex = ocean_features.sindex
 tif_gdf['matched'] = False
+
 for i, tif_row in tqdm(tif_gdf.iterrows(), total=len(tif_gdf), desc="Checking matches"):
+    # check for candidates which bounding box intesect with TiFF File
     possible_matches_index = list(ocean_features_sindex.intersection(tif_row['bbox_geometry'].bounds))
     possible_matches = ocean_features.iloc[possible_matches_index]
+    # If precise geometry match mark as matched
     if not possible_matches.empty and possible_matches.intersects(tif_row['bbox_geometry']).any():
         tif_gdf.at[i, 'matched'] = True
 
@@ -92,6 +113,8 @@ print(f"Total TIF files: {total_tifs}")
 print(f"Matched TIF files: {matched_tifs} ({percentage_matched:.2f}%)")
 print(f"Unmatched TIF files: {unmatched_tifs} ({percentage_unmatched:.2f}%)")
 
+
+# Plot Cartopy Plot of matched and unmatched Geolocations
 ax.add_feature(cartopy.feature.LAND, edgecolor='black', facecolor='lightgray', zorder=1)
 ax.add_feature(cartopy.feature.OCEAN, facecolor='lightblue', zorder=0)
 ax.add_feature(cartopy.feature.COASTLINE, zorder=2)

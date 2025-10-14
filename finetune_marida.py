@@ -17,7 +17,8 @@ from scipy import ndimage
 from src.models.mae import MAE
 from src.models.mae_ocean import MAE_Ocean
 from src.models.moco import MoCo
-from src.models.moco_geo import MoCoGeo
+from src.models.geography_aware import GeographyAware
+from src.models.ocean_aware import OceanAware
 
 from src.models.finetuning.marida.finetuning_marida import FineTuningMARIDA
 from src.data.marida import marida_dataloader
@@ -33,49 +34,46 @@ class MarineDebrisPredictor:
         resize_to: Tuple[int, int] = (3, 256, 256),
         model_type: str = "mae"
     ):
-        self.model_type = model_type
+        # Initialization strategies
         self.full_finetune = False
         self.random = True
         self.ssl = False
-        
-        self._validate_paths(pretrained_weights_path, data_dir)
-        
+        self.model_type = model_type
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         
-        if self.full_finetune or self.random or self.ssl:
-            print(f"Loading pretrained model of type: {self.model_type} from {pretrained_weights_path}")
+        print(f"Loading pretrained model of type: {self.model_type} from {pretrained_weights_path}")
             
-            if self.model_type.lower() == "mae":
-                self.pretrained_model = MAE.load_from_checkpoint(
+        if self.model_type.lower() == "mae":
+            self.pretrained_model = MAE.load_from_checkpoint(
+                pretrained_weights_path,
+                strict=False 
+            )
+        if self.model_type.lower() == "mae_ocean":
+            self.pretrained_model = MAE_Ocean.load_from_checkpoint(
                     pretrained_weights_path,
                     strict=False 
-                )
-            if self.model_type.lower() == "mae_ocean":
-                self.pretrained_model = MAE_Ocean.load_from_checkpoint(
-                    pretrained_weights_path,
-                    strict=False 
-                )
-            elif self.model_type.lower() == "moco":
-                self.pretrained_model = MoCo.load_from_checkpoint(
-                    pretrained_weights_path,
-                    strict=False
-                )
+            )
+        elif self.model_type.lower() == "moco":
+            self.pretrained_model = MoCo.load_from_checkpoint(
+                pretrained_weights_path,
+                strict=False
+            )
 
-            elif self.model_type.lower() == "geo_aware":
-                self.pretrained_model = MoCoGeo.load_from_checkpoint(
-                    pretrained_weights_path,
-                    strict=False
-                )
-            elif self.model_type.lower() == "ocean_aware":
-                self.pretrained_model = MoCoGeo.load_from_checkpoint(
-                    pretrained_weights_path,
-                    strict=False
-                )
-            else:
-                raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'mocogeo','ocean_aware'.")
+        elif self.model_type.lower() == "geo_aware":
+            self.pretrained_model = GeographyAware.load_from_checkpoint(
+                pretrained_weights_path,
+                strict=False
+            )
+        elif self.model_type.lower() == "ocean_aware":
+            self.pretrained_model = OceanAware.load_from_checkpoint(
+                pretrained_weights_path,
+                strict=False
+            )
+        else:
+            raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'mocogeo','ocean_aware'.")
 
 
-        # Initialize data module with transformations
+        # Setup MagicBathyNet Datamodule and Model
         self.data_module = marida_dataloader.MaridaDataModule(
             root_dir=data_dir,
             batch_size=batch_size,
@@ -85,6 +83,7 @@ class MarineDebrisPredictor:
             ssl=self.ssl,
             model_type=self.model_type,
         )
+        
         self.model = FineTuningMARIDA(
             full_finetune=self.full_finetune,
             model_type=self.model_type,
@@ -93,15 +92,9 @@ class MarineDebrisPredictor:
         
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-        
-        
-    def _validate_paths(self, weights_path: str, data_dir: str):
-        if not os.path.exists(weights_path):
-            raise FileNotFoundError(f"Model weights not found at {weights_path}")
-        if not os.path.exists(data_dir):
-            raise FileNotFoundError(f"Data directory not found at {data_dir}")
-        
+          
     def train(self, max_epochs: int = 50) -> pl.Trainer:
+        '''PytorchlightningTrainer for MARIDA'''
         logger = TensorBoardLogger("results/inference/marine_debris", name="finetuning_logs")
 
         trainer = Trainer(
@@ -120,6 +113,7 @@ class MarineDebrisPredictor:
     
 
 def main():
+    '''Arguments for Finetuning MARIDA'''
     parser = argparse.ArgumentParser(description="Bathymetry Prediction Pipeline")
     parser.add_argument("--accelerator", type=str, default="gpu", help="Type of accelerator")
     parser.add_argument("--devices", type=int, default=1, help="Number of devices")

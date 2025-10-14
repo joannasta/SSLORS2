@@ -46,6 +46,7 @@ def main(args):
     print("Using Ocean dataset:", ocean_flag)
     
     # Initialize Model and Define Transform Pipeline based on selected model 
+    
     if args.model == "mae":
         transform = transforms.Compose([
             transforms.RandomResizedCrop(224), 
@@ -142,6 +143,8 @@ def main(args):
     
     else:
         raise ValueError(f"Unknown model: {args.model}. Choose from {list(models.keys())}")
+    
+    # Setup Dataloader and Trainer
 
     datamodule.setup("fit") 
     train_dataloader = datamodule.train_dataloader()
@@ -162,6 +165,7 @@ def main(args):
     trainer.fit(model, train_dataloader, val_dataloaders=val_dataloader)
 
 def parse_args():
+    ''' Training setup and arguments'''
     parser = argparse.ArgumentParser(description="Train script for SSL models.")
     
     parser.add_argument("--accelerator", default="cpu", type=str, help="Training accelerator: 'cpu' or 'gpu'")

@@ -8,6 +8,7 @@ from src.data.hydro.hydro_moco_geo_ocean_dataset import HydroOceanAwareDataset
 from pytorch_lightning import LightningDataModule
 
 class HydroOceanAwareDataModule(LightningDataModule): 
+    """LightningDataModule for ocean-aware Hydro datasets: prepares train/val/test loaders."""
     def __init__(
             self, 
             data_dir: str, 
@@ -20,6 +21,7 @@ class HydroOceanAwareDataModule(LightningDataModule):
             ocean_flag = True
             
         ):
+        """Store configuration and paths for datasets and dataloaders."""
         super().__init__()
         self.data_dir = Path(data_dir)
         self.batch_size = batch_size
@@ -31,6 +33,7 @@ class HydroOceanAwareDataModule(LightningDataModule):
         self.ocean_flag=ocean_flag
         
     def custom_collate_fn(self, batch: List[Any]): 
+        """Filter out None samples and collate, raise error if batch ends up empty."""
         batch = [item for item in batch if item is not None]
         if not batch: 
             return None 
@@ -38,6 +41,7 @@ class HydroOceanAwareDataModule(LightningDataModule):
 
 
     def setup(self, stage: Optional[str] = None):
+        """Instantiate datasets for train/val/test/predict depending on stage."""
         if stage == 'fit' or stage is None:
             self.train_dataset = HydroMocoGeoOceanFeaturesDataset(
                 path_dataset=self.data_dir,

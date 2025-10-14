@@ -8,9 +8,10 @@ from typing import Tuple, Optional, List, Callable
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 
-from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, get_means_and_stds, get_marida_means_and_stds
+from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, get_Hydro_means_and_stds, get_marida_means_and_stds
 
 class HydroGeographyAwareDataset(Dataset):
+    """Geography-aware SSL dataset: returns two normalized views (q, k) and a pseudo geo label."""
     def __init__(
             self,
             path_dataset: Path,
@@ -42,6 +43,7 @@ class HydroGeographyAwareDataset(Dataset):
         
         self.file_path_to_csv_row_map = {}
         
+        # Map TIFFs to CSV rows
         initial_file_paths = [] 
         if self.ocean_flag:
             csv_df = pd.read_csv(self.csv_features_path)
@@ -55,6 +57,7 @@ class HydroGeographyAwareDataset(Dataset):
         else:
             initial_file_paths = all_file_paths
 
+        # Filter by availability of geo labels 
         if self.model_name == "geo_aware":
             self._load_geo_labels()
             self.file_paths = [
@@ -64,6 +67,7 @@ class HydroGeographyAwareDataset(Dataset):
             self.file_paths = initial_file_paths
 
     def _load_normalization_params(self):
+        """Load per-band mean/std for normalization."""
         if len(self.bands) == 11:
             means_np, stds_np, _ = get_marida_means_and_stds()
             self.means_tensor = torch.tensor(means_np[:11], dtype=torch.float32).unsqueeze(-1).unsqueeze(-1).clone().detach()
@@ -73,11 +77,12 @@ class HydroGeographyAwareDataset(Dataset):
             self.means_tensor = torch.tensor(means_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1).clone().detach()
             self.stds_tensor = torch.tensor(stds_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1).clone().detach()
         else:
-            means_np, stds_np = get_means_and_stds()
+            means_np, stds_np = get_Hydro_means_and_stds()
             self.means_tensor = torch.tensor(means_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1).clone().detach()
             self.stds_tensor = torch.tensor(stds_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1).clone().detach()
 
     def _load_geo_labels(self):
+        """Load pseudo geo labels from CSV."""
         df = pd.read_csv(self.csv_features_path)
         self.geo_to_label = {Path(row['file_dir']).resolve(): row['label'] for _, row in df.iterrows()}
             
@@ -85,6 +90,7 @@ class HydroGeographyAwareDataset(Dataset):
         return len(self.file_paths)
 
     def _read_and_process_image(self, file_path: Path) -> torch.Tensor:
+        """Read TIFF bands and impute NaNs."""
         with rasterio.open(file_path) as src:
             band_indices = list(range(1, len(self.bands) + 1))
             sample_data = src.read(band_indices)
@@ -99,13 +105,16 @@ class HydroGeographyAwareDataset(Dataset):
             return sample
 
     def _normalize_tensor(self, img_tensor: torch.Tensor) -> torch.Tensor:
+        """Per-band normalization; return RGB (B02,B03,B04) if available, else all bands."""
         normalized_tensor = (img_tensor - self.means_tensor) / self.stds_tensor
         return normalized_tensor[1:4, :, :]
 
     def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return two normalized views and a pseudo label."""
         file_path = self.file_paths[idx]
         sample = self._read_and_process_image(file_path)
 
+        # Make two views
         if self.transforms is not None:
             sample = self.transforms(sample)
 
@@ -114,6 +123,7 @@ class HydroGeographyAwareDataset(Dataset):
         q_normalized = self._normalize_tensor(q_raw)
         k_normalized = self._normalize_tensor(k_raw)
         
+        # Geo label
         resolved_file_path = file_path.resolve()
         
         pseudo_label = self.geo_to_label.get(resolved_file_path) 

@@ -7,12 +7,15 @@ import pandas as pd
 from sklearn.cluster import KMeans
 from pathlib import Path
 
-base_tif_directory = Path("/data/joanna/Hydro/")
-input_csv = Path("/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv")
+'''Generate Geo Clusters and visualize'''
+
 n_clusters = 10
-output_csv_path = Path(f"train_goe_labels{n_clusters}_matched.csv")
 
+# Matched and clustered ocean features CSV
+input_csv = Path("/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv")
+output_csv_path = Path(f"train_geo_labels{n_clusters}_matched.csv")
 
+# Read Ocean features and Hydro files
 df = pd.read_csv(input_csv)
 file_paths_to_process = [Path(p) for p in df['file_dir'].tolist()]
 
@@ -22,9 +25,10 @@ longitudes = []
 latitudes = []
 original_file_paths = []
 
-#Extracting geo-coordinates from TIFF files
+# For each TIFF file, extract the geographic coordinates of its center pixel
 for file_path in file_paths:
     with rasterio.open(file_path) as src:
+        # Compute the center pixel indices
         row, col = src.height // 2, src.width // 2
         lon, lat = src.transform * (col, row)
         longitudes.append(lon)
@@ -32,8 +36,11 @@ for file_path in file_paths:
         original_file_paths.append(str(file_path))
 
 geo_coords = np.array(list(zip(longitudes, latitudes)))
+
+# Ensure we don't request more clusters than points
 actual_n_clusters = min(n_clusters, len(geo_coords))
 
+# Run KMeans clustering on the coordinates
 kmeans = KMeans(n_clusters=actual_n_clusters, random_state=42, n_init=10)
 cluster_assignments = kmeans.fit_predict(geo_coords)
 

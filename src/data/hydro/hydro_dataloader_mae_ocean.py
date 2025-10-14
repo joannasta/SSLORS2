@@ -8,6 +8,7 @@ from src.data.hydro.hydro_dataset_mae_ocean import HydroMaeOceanFeaturesDataset
 from pytorch_lightning import LightningDataModule
 
 class HydroMaeOceanFeaturesDataModule(LightningDataModule): 
+    """LightningDataModule for MAE + ocean features: builds train/val/test dataloaders."""
     def __init__(
             self, 
             data_dir: str, 
@@ -29,6 +30,7 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
         self.ocean_flag=ocean_flag
         
     def custom_collate_fn(self, batch: List[Any]): 
+        """Collate function that filters out None samples"""
         batch = [item for item in batch if item is not None]
         if not batch: 
             print("Warning: Batch is empty after filtering None values. This batch will be skipped.")
@@ -37,6 +39,7 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
 
 
     def setup(self, stage: Optional[str] = None):
+        """Instantiate datasets for the given stage."""
         if stage == 'fit' or stage is None:
             self.train_dataset = HydroMaeOceanFeaturesDataset(
                 path_dataset=self.data_dir,
