@@ -44,31 +44,31 @@ class BathymetryPredictor:
         if self.model_type.lower() == "mae":
             self.pretrained_model = MAE.load_from_checkpoint(
                 pretrained_weights_path,
-                strict=False 
+                strict=False,src_channels=3 
             )
         elif self.model_type.lower() == "mae_ocean":
             self.pretrained_model = MAE_Ocean.load_from_checkpoint(
                 pretrained_weights_path,
-                strict=False
+                strict=False,src_channels=3 
             )
         elif self.model_type.lower() == "moco":
             self.pretrained_model = MoCo.load_from_checkpoint(
                 pretrained_weights_path,
-                strict=False
+                strict=False,src_channels=3 
             )
 
         elif self.model_type.lower() == "geo_aware":
             self.pretrained_model = GeographyAware.load_from_checkpoint(
                 pretrained_weights_path,
-                strict=False
+                strict=False,src_channels=3 
             )
         elif self.model_type.lower() == "ocean_aware":
             self.pretrained_model = OceanAware.load_from_checkpoint(
                 pretrained_weights_path,
-                strict=False
+                strict=False,src_channels=3 
             )
         else:
-            raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'mocogeo','ocean_aware'.")
+            raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'geo_aware','ocean_aware'.")
 
         
         # Setup MagicBathyNet Datamodule and Model
@@ -78,6 +78,7 @@ class BathymetryPredictor:
             transform=transforms.Compose([
                 transforms.ToTensor(),
             ]),
+            model_name=self.model_type,
             pretrained_model=self.pretrained_model,
             location=location,
             full_finetune=self.full_finetune,

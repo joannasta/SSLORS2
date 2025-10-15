@@ -5,8 +5,8 @@
 #SBATCH --gres=gpu:1                      # Number of GPUs
 #SBATCH --cpus-per-task=8                 # Number of CPU cores per task
 #SBATCH --time=1-00:00:00              # Time limit
-#SBATCH --output=logs/finetune_slurm_marida_mae_ocean.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_marida_mae_ocean.err   # Error log
+#SBATCH --output=logs/finetune_slurm_marida.out  # Standard output log
+#SBATCH --error=logs/finetune_slurm_marida.err   # Error log
 
 # --- Setup Environment ---
 #source activate ssl_new
@@ -18,12 +18,12 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 # --- Define Training Parameters ---
 DEVICES=1                                 # Number of devices for training
 NUM_WORKERS=32                             # Number of data loader workers
-MODEL=mae_ocean                       # Model name
+MODEL=ocean_aware                       # Model name
 TRAIN_BATCH_SIZE=16                     # Training batch size
 VAL_BATCH_SIZE=16                     # Validation batch size
 LEARNING_RATE=1e-5                  # Learning rate
 EPOCHS=50                              # Number of epochs
-PRETRAINED_MODEL="./results/trains/mae_ocean/version_9/checkpoints/epoch=99-step=2900.ckpt"
+PRETRAINED_MODEL="./results/trains/ocean_aware/version_12/checkpoints/epoch=99-step=9800.ckpt"
 #"./results/trains/ocean_aware/version_12/checkpoints/epoch=99-step=9800.ckpt"
 #"./results/trains/geo_aware/version_14/checkpoints/epoch=99-step=9900.ckpt"
 #"./results/trains/mae_ocean/version_9/checkpoints/epoch=99-step=2900.ckpt"

@@ -4,7 +4,7 @@ import torch.nn as nn
 import timm
 import numpy as np
 
-from config import _Hydro
+from config import get_Hydro_means_and_stds
 from lightly.models import utils
 from lightly.models.modules import MAEDecoderTIMM
 
@@ -64,8 +64,9 @@ class MAE_Ocean(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
-    def load_pretrained_weights(self, pretrained_weights):
-         """Load pretrained weights."""
+    def load_pretrained_weights(self, pretrained_weights,src_channels=3):
+        """Load pretrained weights into the model."""
+        self.src_channels=src_channels
         checkpoint = torch.load(pretrained_weights)
         model_state_dict = self.state_dict()
         pretrained_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model_state_dict}

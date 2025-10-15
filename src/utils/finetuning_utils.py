@@ -8,15 +8,10 @@ import matplotlib.pyplot as plt
 
 from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG
 from sklearn.metrics import f1_score, precision_score, recall_score, accuracy_score, jaccard_score, hamming_loss, label_ranking_loss, coverage_error
-from ..finetune_mbn import location
-
 
 '''Utils for MagicBathyNet'''
 
-
 # Normaliazation and model Parameter
-norm_param_depth = NORM_PARAM_DEPTH[location]
-norm_param = np.load(NORM_PARAM_PATHS[location])
 crop_size = MODEL_CONFIG["crop_size"]
 window_size = MODEL_CONFIG["window_size"]
 stride = MODEL_CONFIG["stride"]
@@ -62,8 +57,12 @@ def grouper(n, iterable):
             return
         yield chunk
 
-def calculate_metrics_mbn(predictions, gts):
+def calculate_metrics_mbn(predictions, gts,location):
     '''Calculate MagicBathyNet metrics'''
+    
+    norm_param_depth = NORM_PARAM_DEPTH[location]
+    norm_param = np.load(NORM_PARAM_PATHS[location])
+
     non_zero_mask = predictions != 0
     
     rmse = np.sqrt(np.mean(((predictions - gts) ** 2)[non_zero_mask]))
@@ -79,27 +78,27 @@ def calculate_metrics_mbn(predictions, gts):
 
 def data_augmentation(cls, *arrays, flip=True, mirror=True):
     '''Applies random vertical flips and horizontal mirrors'''
-        will_flip, will_mirror = False, False
-        if flip and random.random() < 0.5:
-            will_flip = True
-        if mirror and random.random() < 0.5:
-            will_mirror = True
+    will_flip, will_mirror = False, False
+    if flip and random.random() < 0.5:
+        will_flip = True
+    if mirror and random.random() < 0.5:
+        will_mirror = True
         
-        results = []
-        for array in arrays:
-            if will_flip:
-                if len(array.shape) == 2:
-                    array = array[::-1, :]
-                else:
-                    array = array[:, ::-1, :]
-            if will_mirror:
-                if len(array.shape) == 2:
-                    array = array[:, ::-1]
-                else:
-                    array = array[:, :, ::-1]
-            results.append(np.copy(array))
+    results = []
+    for array in arrays:
+        if will_flip:
+            if len(array.shape) == 2:
+                array = array[::-1, :]
+            else:
+                array = array[:, ::-1, :]
+        if will_mirror:
+            if len(array.shape) == 2:
+                array = array[:, ::-1]
+            else:
+                array = array[:, :, ::-1]
+        results.append(np.copy(array))
         
-        return tuple(results)
+    return tuple(results)
     
     
     
@@ -214,7 +213,7 @@ def confusion_matrix(y_gt, y_pred, labels):
     return df
 
 def print_confusion_matrix_ML(confusion_matrix, class_label, ind_names, col_names):
-     """Pretty-print a confusion matrix with index/column labels."""
+    """Pretty-print a confusion matrix with index/column labels."""
     df_cm = pd.DataFrame(confusion_matrix, index=ind_names, columns=col_names)
     
     df_cm.index.name = class_label

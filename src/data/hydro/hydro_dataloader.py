@@ -25,7 +25,8 @@ class HydroDataModule(LightningDataModule):
         model_name="mae",
         num_workers: int = 8, 
         batch_size = 64,
-        ocean_flag=True
+        csv_file_path="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
+        limit_files=False
     ):
         '''Store configuration for datasets and loaders.'''
         super().__init__()
@@ -35,7 +36,8 @@ class HydroDataModule(LightningDataModule):
         self.model_name=model_name
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.ocean_flag=ocean_flag
+        self.csv_file_path=csv_file_path
+        self.limit_files=limit_files
 
     def setup(self, stage=None):
         '''Instantiate HydroDataset objects for train/val/test/predict depending on stage.'''
@@ -45,7 +47,8 @@ class HydroDataModule(LightningDataModule):
                 bands=self.bands,
                 compute_stats=False,
                 transforms=self.transform,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
             
             self.val_dataset = HydroDataset(
@@ -53,7 +56,8 @@ class HydroDataModule(LightningDataModule):
                 bands=self.bands,
                 compute_stats=False,
                 transforms=self.transform,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
         if stage == 'test' or stage is None:
@@ -62,7 +66,8 @@ class HydroDataModule(LightningDataModule):
                 bands=self.bands,
                 compute_stats=False,
                 transforms=self.transform,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
         if stage == 'predict':
@@ -71,7 +76,8 @@ class HydroDataModule(LightningDataModule):
                 bands=self.bands,
                 compute_stats=False,
                 transforms=self.transform,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
     def train_dataloader(self):

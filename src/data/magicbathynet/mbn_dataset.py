@@ -17,7 +17,7 @@ random.seed(1)
 
 class MagicBathyNetDataset(Dataset):
     """Dataset for MagicBathyNet, loads paired S2 images/depth, applies random crops, and provides SSL embeddings."""
-    def __init__(self, root_dir, transform=None, split_type='train', cache=True, augmentation=True, pretrained_model=None, location="agia_napa",
+    def __init__(self, root_dir, transform=None, split_type='train', cache=True, augmentation=True,model_name="mae", pretrained_model=None, location="agia_napa",
                  full_finetune=False, random_init=False, ssl=True, image_ids_for_this_split=None):
         self.root_dir = root_dir
         self.split_type = split_type
@@ -25,6 +25,7 @@ class MagicBathyNetDataset(Dataset):
         self.cache = cache
         self.augmentation = augmentation
         
+        self.model_name=model_name
         self.pretrained_model = pretrained_model
         self.train_images = train_images
         self.test_images = test_images
@@ -84,7 +85,7 @@ class MagicBathyNetDataset(Dataset):
 
     def _create_embeddings(self):
         """Build embeddings from RGB bands using the pretrained model."""
-        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"], location=self.location, ocean_flag=False)
+        hydro_dataset = HydroDataset(path_dataset=self.processor.img_only_dir, bands=["B02", "B03", "B04"], location=self.location)
         self.embeddings = []
         def weights_init(m):
             if isinstance(m, nn.Conv2d) or isinstance(m, nn.Linear):
@@ -113,9 +114,9 @@ class MagicBathyNetDataset(Dataset):
                     img = img.unsqueeze(0)
                     img = F.interpolate(img, size=(224,224), mode='nearest')
                     self.pretrained_model.to(img.device)
-                    if self.pretrained_model.__class__.__name__ == "MAE" or self.pretrained_model.__class__.__name__  == 'MAE_Ocean':
+                    if self.model_name == "mae" or self.model_name == 'mae_ocean':
                         embedding = self.pretrained_model.forward_encoder(img)
-                    elif self.pretrained_model.__class__.__name__ in ["MoCo", "MoCoGeo"]:
+                    elif self.model_name in ["moco", "geo_aware","ocean_aware"]:
                         embedding = self.pretrained_model.backbone(img).flatten(start_dim=1)
   
                 self.embeddings.append(embedding.cpu())

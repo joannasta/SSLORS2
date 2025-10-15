@@ -9,13 +9,14 @@ from config import train_images, test_images
 
 class MagicBathyNetDataModule(pl.LightningDataModule):
     """LightningDataModule for MagicBathyNet, creates train/val/test datasets and dataloaders."""
-    def __init__(self, root_dir, batch_size=1, transform=None, cache=True, pretrained_model=None, location="agia_napa",
+    def __init__(self, root_dir, batch_size=1, transform=None, cache=True,model_name="mae", pretrained_model=None, location="agia_napa",
                  full_finetune=False, random=False, ssl=True):
         super().__init__()
         self.root_dir = root_dir
         self.batch_size = batch_size
         self.transform = transform
         self.cache = cache
+        self.model_name=model_name
         self.pretrained_model = pretrained_model
         self.location = location
         self.full_finetune = full_finetune
@@ -31,6 +32,7 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='train',
                 cache=self.cache,
+                model_name=self.model_name,
                 pretrained_model=self.pretrained_model,
                 location=self.location
             )
@@ -40,6 +42,7 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='val',
                 cache=self.cache,
+                model_name=self.model_name,
                 pretrained_model=self.pretrained_model,
                 location=self.location
             )
@@ -50,6 +53,7 @@ class MagicBathyNetDataModule(pl.LightningDataModule):
                 transform=self.transform,
                 split_type='test',
                 cache=self.cache,
+                model_name=self.model_name,
                 pretrained_model=self.pretrained_model,
                 location=self.location
             )

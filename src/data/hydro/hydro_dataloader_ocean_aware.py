@@ -4,7 +4,7 @@ from torchvision import transforms as T
 from pathlib import Path
 from typing import Optional, List, Callable, Dict, Any
 
-from src.data.hydro.hydro_moco_geo_ocean_dataset import HydroOceanAwareDataset 
+from src.data.hydro.hydro_ocean_aware_dataset import HydroOceanAwareDataset 
 from pytorch_lightning import LightningDataModule
 
 class HydroOceanAwareDataModule(LightningDataModule): 
@@ -16,9 +16,9 @@ class HydroOceanAwareDataModule(LightningDataModule):
             num_workers: int = 4, 
             transform: Optional[Callable] = None, 
             model_name: str = "ocean_aware", 
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv",
             num_geo_clusters=3,
-            ocean_flag = True
+            csv_file_path="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
+            limit_files=False
             
         ):
         """Store configuration and paths for datasets and dataloaders."""
@@ -29,8 +29,8 @@ class HydroOceanAwareDataModule(LightningDataModule):
         self.transform = transform
         self.model_name = model_name
         self.num_geo_clusters = num_geo_clusters
-        self.csv_features_path = csv_features_path
-        self.ocean_flag=ocean_flag
+        self.csv_file_path=csv_file_path
+        self.limit_files=False
         
     def custom_collate_fn(self, batch: List[Any]): 
         """Filter out None samples and collate, raise error if batch ends up empty."""
@@ -43,42 +43,42 @@ class HydroOceanAwareDataModule(LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         """Instantiate datasets for train/val/test/predict depending on stage."""
         if stage == 'fit' or stage is None:
-            self.train_dataset = HydroMocoGeoOceanFeaturesDataset(
+            self.train_dataset = HydroOceanAwareDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
                 num_geo_clusters=self.num_geo_clusters,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
-            self.val_dataset = HydroMocoGeoOceanFeaturesDataset(
+            self.val_dataset = HydroOceanAwareDataset(
                 path_dataset=self.data_dir, 
                 transforms=self.transform,
                 model_name=self.model_name,
                 num_geo_clusters=self.num_geo_clusters,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
         if stage == 'test' or stage is None:
-            self.test_dataset = HydroMocoGeoOceanFeaturesDataset(
+            self.test_dataset = HydroOceanAwareDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
                 num_geo_clusters=self.num_geo_clusters,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
         if stage == 'predict':
-            self.predict_dataset = HydroMocoGeoOceanFeaturesDataset(
+            self.predict_dataset = HydroOceanAwareDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
                 num_geo_clusters=self.num_geo_clusters,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
     def train_dataloader(self):

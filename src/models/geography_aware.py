@@ -29,7 +29,7 @@ class GeoClassifier(nn.Module):
 
 
 class GeographyAware(pl.LightningModule):
-     """Contrastive pretraining with momentum encoder + additional geography classifier."""
+    """Contrastive pretraining with momentum encoder + additional geography classifier."""
     def __init__(
         self,
         base_encoder: Callable = torchvision.models.resnet18,

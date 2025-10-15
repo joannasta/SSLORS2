@@ -22,8 +22,8 @@ class HydroDataset(Dataset):
                  transforms=None,
                  compute_stats: bool = False,
                  location="agia_napa",
-                 ocean_flag=True,
-                 csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv"):
+                 limit_files=False,
+                 csv_file_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv"):
         self.path_dataset = Path(path_dataset)
         all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))
         #self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
@@ -31,20 +31,20 @@ class HydroDataset(Dataset):
         self.location = location
         if self.bands == None:
             self.bands = ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"]
-        self.band_means, self.band_stds = config._Hydro()
-        self.band_means, self.band_stds,_ = config.get_marida_means_and_stds()
+        self.band_means, self.band_stds   = get_Hydro_means_and_stds()
+        self.band_means_marida, self.band_stds_marida,_ = get_marida_means_and_stds()
         self.transforms = transforms
-        self.impute_nan = np.tile(self.band_means, (256,256,1))
-        self.ocean_flag=ocean_flag
+        self.impute_nan = np.tile(self.band_means_marida, (256,256,1))
+        self.limit_files=limit_files
         
         # Normalization params MagicBathyNet
         self.norm_param_depth = NORM_PARAM_DEPTH[self.location] 
         self.norm_param = np.load(NORM_PARAM_PATHS[self.location]) 
         
-        self.csv_features_path = Path(csv_features_path)
+        self.csv_file_path = Path(csv_file_path)
         
         # Use Ocean Features and Cluster Label
-        if self.ocean_flag:
+        if self.limit_files:
             self.file_path_to_csv_row_map = {}
             self.file_paths = []
 
@@ -58,7 +58,7 @@ class HydroDataset(Dataset):
         
     def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
         """Keep only datasets TIFFs listed in  ocean CSV."""
-        self.csv_df = pd.read_csv(self.csv_features_path)
+        self.csv_df = pd.read_csv(self.csv_file_path)
         csv_file_dir_map = {Path(p).resolve(): row for p, row in self.csv_df.set_index('file_dir').iterrows()}
         successful_matches = []
 
@@ -101,5 +101,10 @@ class HydroDataset(Dataset):
             if self.transforms is not None:
                 sample = self.transforms(sample)
                 
-            sample = sample[0:11,:,:]
+            if len(self.bands)==12:
+                sample = sample[0:12,:,:]
+            elif len(self.bands)==11:
+                sample = sample[0:11,:,:]
+            else:
+                sample = sample
             return sample.float()

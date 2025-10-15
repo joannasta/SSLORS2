@@ -8,13 +8,15 @@ from typing import Optional, List, Callable, Tuple
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 
-from config import _Hydro, get_marida_means_and_stds, NORM_PARAM_DEPTH, NORM_PARAM_PATHS
+from config import get_Hydro_means_and_stds, get_marida_means_and_stds, NORM_PARAM_DEPTH, NORM_PARAM_PATHS
 
 class HydroMoCoDataset(Dataset):
     def __init__(
             self, path_dataset: Path, bands: List[str] = None,
             location="agia_napa", transform: Optional[Callable] = None,
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters_correct.csv"):
+            csv_file_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
+            limit_files=False
+            ):
         self.path_dataset = Path(path_dataset)
         all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))
         self.bands = bands
@@ -28,22 +30,40 @@ class HydroMoCoDataset(Dataset):
 
         self.transform = transform
         
-        self.csv_features_path = Path(csv_features_path)
+        self.csv_file_path = Path(csv_file_path)
         
         self.file_path_to_csv_row_map = {}
         self.file_paths = []
-        self._load_ocean_features_and_map(all_file_paths)
+        self.limit_files=limit_files
+        
+        # Use Ocean Features and Cluster Label
+        if self.limit_files:
+            self.file_path_to_csv_row_map = {}
+            self.file_paths = []
+
+            self.csv_df = None
+            
+            self._load_ocean_features_and_map(all_file_paths)
+        else:
+            self.file_paths = sorted(list(self.path_dataset.glob("*.tif")))
+            
+        print("len self.file_paths",len(self.file_paths))
             
     def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
-        """Map existing TIFFs to CSV entries by absolute path."""
-        csv_df = pd.read_csv(self.csv_features_path)
-        csv_file_dir_map = {Path(p).resolve(): row for p, row in csv_df.set_index('file_dir').iterrows()}
-        
-        for file_path in all_file_paths:
+        """Keep only datasets TIFFs listed in  ocean CSV."""
+        self.csv_df = pd.read_csv(self.csv_file_path)
+        csv_file_dir_map = {Path(p).resolve(): row for p, row in self.csv_df.set_index('file_dir').iterrows()}
+        successful_matches = []
+
+        for i, file_path in enumerate(all_file_paths):
             resolved_file_path = file_path.resolve()
             if resolved_file_path in csv_file_dir_map:
-                self.file_path_to_csv_row_map[file_path] = csv_file_dir_map[resolved_file_path]
-                self.file_paths.append(file_path)
+                matched_row = csv_file_dir_map[resolved_file_path]
+                self.file_path_to_csv_row_map[file_path] = matched_row
+                successful_matches.append(file_path)
+            
+        self.file_paths = successful_matches
+        print(f"Finished direct mapping. Successfully matched {len(self.file_paths)} TIF files.")
 
     def __len__(self):
         return len(self.file_paths)

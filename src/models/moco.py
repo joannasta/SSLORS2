@@ -150,7 +150,7 @@ class MoCo(pl.LightningModule):
         for name, params in self.named_parameters():
             self.logger.experiment.add_histogram(name, params, self.current_epoch)
 
-    def configure_optimizers(self)
+    def configure_optimizers(self):
         """SGD optimizer with cosine annealing scheduler."""
         optim = torch.optim.SGD(
             self.parameters(),

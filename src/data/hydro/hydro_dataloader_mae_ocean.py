@@ -16,8 +16,8 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
             num_workers: int = 4, 
             transform: Optional[Callable] = None, 
             model_name: str = "mae_ocean", 
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv",
-            ocean_flag = True
+            csv_file_path="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
+            limit_files=False
             
         ):
         super().__init__()
@@ -26,8 +26,8 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.transform = transform
         self.model_name = model_name
-        self.csv_features_path = csv_features_path
-        self.ocean_flag=ocean_flag
+        self.csv_file_path=csv_file_path
+        self.limit_files=limit_files
         
     def custom_collate_fn(self, batch: List[Any]): 
         """Collate function that filters out None samples"""
@@ -45,16 +45,16 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
             self.val_dataset = HydroMaeOceanFeaturesDataset(
                 path_dataset=self.data_dir, 
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
         if stage == 'test' or stage is None:
@@ -62,8 +62,8 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
         if stage == 'predict':
@@ -71,8 +71,8 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
-                csv_features_path=self.csv_features_path,
-                ocean_flag=self.ocean_flag
+                csv_file_path=self.csv_file_path,
+                limit_files=self.limit_files
             )
 
     def train_dataloader(self):

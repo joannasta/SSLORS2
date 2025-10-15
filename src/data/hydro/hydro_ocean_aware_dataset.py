@@ -23,14 +23,12 @@ class HydroOceanAwareDataset(Dataset):
         transforms: Optional[Callable] = None,
         location: str = "agia_napa",
         model_name: str = "ocean_aware",
-        csv_features_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/train_ocean_labels_3_clusters.csv",
-        num_geo_clusters: int = 3,
-        ocean_flag=True
+        csv_file_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
+        num_geo_clusters: int = 3
     ):
         self.path_dataset = Path(path_dataset)
         all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))
         self.num_geo_clusters = num_geo_clusters
-        self.ocean_flag = ocean_flag
         
         # Default to 12 Sentinel-2 bands
         self.bands = bands if bands is not None else [
@@ -39,7 +37,7 @@ class HydroOceanAwareDataset(Dataset):
         self.transforms = transforms
         self.model_name = model_name
         self.location = location
-        self.csv_features_path = Path(csv_features_path)
+        self.csv_file_path = Path(csv_file_path)
 
         # Per-band normalization stats 
         self._load_normalization_params()
@@ -48,11 +46,8 @@ class HydroOceanAwareDataset(Dataset):
         self.file_path_to_csv_row_map = {}
         self.file_paths = []
 
-        
-        # If ocean_flag is False, use all files
-        if self.ocean_flag:
-            self._load_ocean_features_and_map(all_file_paths)
-            print(f"Mapped {len(self.file_paths)} TIF files to CSV entries after initial filtering.")
+        self._load_ocean_features_and_map(all_file_paths)
+        print(f"Mapped {len(self.file_paths)} TIF files to CSV entries after initial filtering.")
 
     def _load_normalization_params(self):
         """Load means/stds tensors depending on band count."""
@@ -73,9 +68,9 @@ class HydroOceanAwareDataset(Dataset):
 
     def _load_ocean_features_and_map(self, all_file_paths: List[Path]):
         """Load CSV with ocean features and map by absolute file path."""
-        print(f"Starting data mapping. CSV path: {self.csv_features_path}")
+        print(f"Starting data mapping. CSV path: {self.csv_file_path}")
 
-        self.csv_df = pd.read_csv(self.csv_features_path)
+        self.csv_df = pd.read_csv(self.csv_file_path)
         print(f"Loaded CSV with {len(self.csv_df)} rows.")
 
         # Map absolute paths to row for fast lookup

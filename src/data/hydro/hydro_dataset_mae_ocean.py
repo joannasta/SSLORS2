@@ -9,7 +9,7 @@ from typing import Optional, List, Callable, Tuple
 from torch.utils.data import Dataset
 from torchvision import transforms as T
 
-from config import get_Hydro_means_and_stds_Hydro
+from config import get_Hydro_means_and_stds
 
 class HydroMaeOceanFeaturesDataset(Dataset):
     '''Dataset for MAE with ocean features, returns normalized S2 tensor and regarding ocean features.'''
@@ -19,32 +19,32 @@ class HydroMaeOceanFeaturesDataset(Dataset):
         bands: Optional[List[str]] = None,
         model_name = "mae_ocean",
         transforms: Optional[Callable] = None,
-        csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_ocean_labels_3_clusters.csv",
-        ocean_flag=True
+        csv_file_path: str = "/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
+        limit_files=False
     ):
         self.path_dataset = Path(path_dataset)
         self.bands = bands if bands is not None else [
             "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"
         ]
         self.transforms = transforms
-        self.csv_features_path = Path(csv_features_path)
+        self.csv_file_path = Path(csv_file_path)
         self.model_name=model_name
         self.means_tensor, self.stds_tensor = self._load_normalization_params()
-        self.ocean_flag=ocean_flag
+        self.limit_files=limit_files
         self.file_path_to_csv_row_map = {}
         self.file_paths = []
         self._load_ocean_features_and_map()
 
     def _load_normalization_params(self) -> Tuple[torch.Tensor, torch.Tensor]:  
         '''Load per-band Hydro means/stds and return as (C,1,1) tensors.'''
-        means_np, stds_np = get_Hydro_means_and_stds_Hydro()
+        means_np, stds_np = get_Hydro_means_and_stds()
         means_tensor = torch.tensor(means_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
         stds_tensor = torch.tensor(stds_np, dtype=torch.float32).unsqueeze(-1).unsqueeze(-1)
         return means_tensor, stds_tensor
 
     def _load_ocean_features_and_map(self):
         '''Build list of TIFF files and map each to its CSV row if ocean_flag is True.'''
-        csv_df = pd.read_csv(self.csv_features_path)
+        csv_df = pd.read_csv(self.csv_file_path)
         csv_file_dir_map = {Path(p).resolve(): row for p, row in csv_df.set_index('file_dir').iterrows()}
         
         all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))
@@ -87,6 +87,10 @@ class HydroMaeOceanFeaturesDataset(Dataset):
             
         ocean_features = torch.tensor([secchi, bathy, chlorophyll], dtype=torch.float32)
         
-        sample = sample[0:11,:,:]
-
-        return sample, ocean_features
+        if len(self.bands)==12:
+            sample = sample[0:12,:,:]
+        elif len(self.bands)==11:
+            sample = sample[0:11,:,:]
+        else:
+            sample = sample[1:4,:,:]
+        return sample.float(), ocean_features

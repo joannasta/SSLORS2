@@ -4,8 +4,8 @@
 #SBATCH --gres=gpu:1                                  # Number of GPUs
 #SBATCH --cpus-per-task=8                             # Number of CPU cores per task
 #SBATCH --time=1-00:00:00                             # Time limit (Corrected format for 4 days)
-#SBATCH --output=logs/train_slurm_ocean_aware.out     # Standard output log
-#SBATCH --error=logs/train_slurm_ocean_aware.err      # Error log
+#SBATCH --output=logs/train_slurm_mae.out     # Standard output log
+#SBATCH --error=logs/train_slurm_mae.err      # Error log
 #SBATCH --partition=small_job
 
 # Set up the environment
@@ -19,14 +19,17 @@ export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
 
 DEVICES=1                                      # Number of devices for training
 NUM_WORKERS=8                                  # Number of data loader workers
-MODEL=mae                                      # Model name
+MODEL=geo_aware                                     # Model name
 TRAIN_BATCH_SIZE=64                            # Training batch size
 VAL_BATCH_SIZE=64                              # Validation batch size
 LEARNING_RATE=1e-4                             # Learning rate
 EPOCHS=100                                     # Number of epochs Hydro uses 800
 DATASET_PATH="/mnt/storagecube/joanna/Hydro/"  # Dataset path
 SEED=42                                        # Fixed assignment (removed spaces)
-OCEAN=True
+# For geo labels: "/home/joanna/SSLORS2/src/utils/train_geo_labels10.csv"
+CSV_FILE="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv"
+LIMIT_FILES=True
+
 
 # Run the training script
 srun python -u train.py \
@@ -40,6 +43,8 @@ srun python -u train.py \
   --model ${MODEL} \
   --epochs ${EPOCHS} \
   --seed ${SEED} \
+  --limit_files ${LIMIT_FILES}\
+  --csv_file ${CSV_FILE} 
 
 # Optional: Launch TensorBoard
 #tensorboard --logdir ./results/trains --port 8009 &

@@ -165,7 +165,7 @@ class FineTuningMBN(pl.LightningModule):
             )
 
         # Per-image metrics (denormalized)
-        rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt.ravel())
+        rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt.ravel(),self.location)
 
         self.log('train_rmse_step', (rmse * -self.norm_param_depth), on_step=True)
         self.log('train_mae_step', (mae * -self.norm_param_depth), on_step=True)
@@ -248,7 +248,7 @@ class FineTuningMBN(pl.LightningModule):
             )
 
         # Metrics
-        rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt.ravel())
+        rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt.ravel(),self.location)
 
         self.log('val_rmse', (rmse * -self.norm_param_depth), on_step=True)
         self.log('val_mae', (mae * -self.norm_param_depth), on_step=True)
@@ -327,7 +327,7 @@ class FineTuningMBN(pl.LightningModule):
             self.test_image_count += 1
 
             # Per-image metrics
-            rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt_e.numpy().ravel())
+            rmse, mae, std_dev = calculate_metrics_mbn(masked_pred.ravel(), masked_gt_e.numpy().ravel(),self.location)
 
             self.log(f'test_rmse_step_image_{self.test_image_count}', (rmse * -self.norm_param_depth), on_step=True)
             self.log(f'test_mae_step_image_{self.test_image_count}', (mae * -self.norm_param_depth), on_step=True)

@@ -5,7 +5,6 @@ from pathlib import Path
 from config import train_images, test_images
 
 class DatasetProcessor:
-    :
     '''Process dataset by pairing image/depth TIFFs, copying them, and optionally
        creating split folders containing only images or only depths.'''
     def __init__(self, img_dir, depth_dir, output_dir,img_only_dir=None,depth_only_dir=None,split_type="train"):

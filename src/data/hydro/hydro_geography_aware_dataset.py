@@ -18,24 +18,22 @@ class HydroGeographyAwareDataset(Dataset):
             bands: Optional[List[str]] = None,
             transforms: Optional[Callable] = None,
             location: str = "agia_napa",
-            model_name: str = "geo_aware",
-            csv_features_path: str = "/home/joanna/SSLORS2/src/utils/train_geo_labels10.csv",
+            csv_file_path: str = "/home/joanna/SSLORS2/src/utils/train_geo_labels10.csv",
             num_geo_clusters: int = 10,
-            ocean_flag = True
+            limit_files=False
     ):
         self.path_dataset = Path(path_dataset)
         all_file_paths = sorted(list(self.path_dataset.glob("*.tif")))
         self.num_geo_clusters = num_geo_clusters
-        self.ocean_flag = ocean_flag
+        self.limit_files=limit_files
         
         self.bands = bands if bands is not None else [
             "B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11", "B12"
         ]
         
         self.transforms = transforms
-        self.model_name = model_name
         self.location = location 
-        self.csv_features_path = Path(csv_features_path)
+        self.csv_file_path = Path(csv_file_path)
 
         self._load_normalization_params()
         self.geo_to_label = {}
@@ -45,8 +43,8 @@ class HydroGeographyAwareDataset(Dataset):
         
         # Map TIFFs to CSV rows
         initial_file_paths = [] 
-        if self.ocean_flag:
-            csv_df = pd.read_csv(self.csv_features_path)
+        if self.limit_files:
+            csv_df = pd.read_csv(self.csv_file_path)
             csv_file_dir_map = {Path(p).resolve(): row for p, row in csv_df.set_index('file_dir').iterrows()}
             
             for file_path in all_file_paths:
@@ -58,13 +56,10 @@ class HydroGeographyAwareDataset(Dataset):
             initial_file_paths = all_file_paths
 
         # Filter by availability of geo labels 
-        if self.model_name == "geo_aware":
-            self._load_geo_labels()
-            self.file_paths = [
+        self._load_geo_labels()
+        self.file_paths = [
                 fp for fp in initial_file_paths if fp.resolve() in self.geo_to_label
             ]
-        else:
-            self.file_paths = initial_file_paths
 
     def _load_normalization_params(self):
         """Load per-band mean/std for normalization."""
@@ -83,7 +78,7 @@ class HydroGeographyAwareDataset(Dataset):
 
     def _load_geo_labels(self):
         """Load pseudo geo labels from CSV."""
-        df = pd.read_csv(self.csv_features_path)
+        df = pd.read_csv(self.csv_file_path)
         self.geo_to_label = {Path(row['file_dir']).resolve(): row['label'] for _, row in df.iterrows()}
             
     def __len__(self) -> int:

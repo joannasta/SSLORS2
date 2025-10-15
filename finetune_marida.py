@@ -43,34 +43,36 @@ class MarineDebrisPredictor:
         
         print(f"Loading pretrained model of type: {self.model_type} from {pretrained_weights_path}")
             
-        if self.model_type.lower() == "mae":
+        if self.model_type == "mae":
             self.pretrained_model = MAE.load_from_checkpoint(
                 pretrained_weights_path,
-                strict=False 
+                strict=False,
+                src_channels=11 
             )
-        if self.model_type.lower() == "mae_ocean":
+        elif self.model_type == "mae_ocean":
             self.pretrained_model = MAE_Ocean.load_from_checkpoint(
                     pretrained_weights_path,
-                    strict=False 
+                    strict=False,
+                src_channels=11 
             )
-        elif self.model_type.lower() == "moco":
+        elif self.model_type == "moco":
             self.pretrained_model = MoCo.load_from_checkpoint(
                 pretrained_weights_path,
                 strict=False
             )
 
-        elif self.model_type.lower() == "geo_aware":
+        elif self.model_type == "geo_aware":
             self.pretrained_model = GeographyAware.load_from_checkpoint(
                 pretrained_weights_path,
                 strict=False
             )
-        elif self.model_type.lower() == "ocean_aware":
+        elif self.model_type == "ocean_aware":
             self.pretrained_model = OceanAware.load_from_checkpoint(
                 pretrained_weights_path,
                 strict=False
             )
         else:
-            raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'mocogeo','ocean_aware'.")
+            raise ValueError(f"Unsupported model type: {model_type}. Choose from 'mae','mae_ocean', 'moco', 'geography_aware','ocean_aware'.")
 
 
         # Setup MagicBathyNet Datamodule and Model

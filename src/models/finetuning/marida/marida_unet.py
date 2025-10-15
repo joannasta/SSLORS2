@@ -148,25 +148,28 @@ class UNet_Marida(nn.Module):
             fused_features = processed_linear_output.reshape(batch_size_c, self.feature_fusion_proj.out_features, height_c, width_c)
 
         elif self.model_type in ["moco", "geo_aware", "ocean_aware"]:
-            # Handle various embedding shapes, reduce to a vector per sample
+            # Normalize shape to [B, D]
             if x_embedding.dim() == 4 and x_embedding.shape[1] == 1:
                 x_embedding = x_embedding.squeeze(1)
-            if x_embedding.dim() == 3 and x_embedding.shape[2] == 512:
-                x_embedding = torch.mean(x_embedding, dim=1) 
+            if x_embedding.dim() == 3:
+                x_embedding = torch.mean(x_embedding, dim=1)  # [B, D]
 
-            spatial_proj_flat = self.moco_spatial_proj(x_embedding)
-            
-            embedding_spatial = spatial_proj_flat.view(x5.shape[0], self.embedding_dim, x5.shape[2], x5.shape[3])
-            
+            # Ensure feature dim matches embedding_dim
+            if x_embedding.size(-1) == 512:
+                x_embedding = self.moco_pre_proj(x_embedding)  # [B, embedding_dim]
+            elif x_embedding.size(-1) != self.embedding_dim:
+                raise ValueError(f"Unexpected embedding dim {x_embedding.size(-1)}; expected 512 or {self.embedding_dim}")
+
+            # Spatial projection and fusion
+            spatial_proj_flat = self.moco_spatial_proj(x_embedding)  # [B, embedding_dim*16*16]
+            B, _, H_x5, W_x5 = x5.shape
+            embedding_spatial = spatial_proj_flat.view(B, self.embedding_dim, H_x5, W_x5)
+
             combined = torch.cat([embedding_spatial, x5], dim=1)
-
-            batch_size_c, channels_c, height_c, width_c = combined.shape
-            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(-1, channels_c)
-            
+            Bc, Cc, Hc, Wc = combined.shape
+            combined_reshaped = combined.permute(0, 2, 3, 1).reshape(-1, Cc)
             processed_linear_output = self.feature_fusion_proj(combined_reshaped)
-            fused_features = processed_linear_output.reshape(batch_size_c, self.feature_fusion_proj.out_features, height_c, width_c)
-        else:
-            fused_features = x5 
+            fused_features = processed_linear_output.reshape(Bc, self.feature_fusion_proj.out_features, Hc, Wc)
 
         # Decoder with skip connections
         x6 = self.up1(fused_features, x4)

@@ -18,17 +18,17 @@ from lightly.models.modules import MAEDecoderTIMM, MaskedVisionTransformerTIMM
 
 from .marida_unet  import UNet_Marida
 from src.data.marida.marida_dataset import gen_weights
-from src.utils.finetuning_utils import calculate_metrics
 from config import get_marida_means_and_stds, labels_marida,cat_mapping_marida
 from src.utils.finetuning_utils import metrics_marida,confusion_matrix 
 from src.models.mae import MAE
 from src.models.moco import MoCo
-from src.models.moco_geo import MoCoGeo
+from src.models.geography_aware import GeographyAware
+from src.models.ocean_aware import OceanAware
 from src.data.hydro.hydro_dataset import HydroDataset
 
 
 class InputChannelAdapter(nn.Module):
-     """1x1 conv to adapt input channels to expected model channels."""
+    """1x1 conv to adapt input channels to expected model channels."""
     def __init__(self, in_channels, out_channels):
         super().__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=1)

@@ -41,9 +41,11 @@ def main(args):
     datamodule = None
     transform = None 
 
-    ocean_flag = args.ocean 
+    csv_file_path = args.csv_file
+    limit_files=args.limit_files
+    
     print("Training model:",args.model)
-    print("Using Ocean dataset:", ocean_flag)
+    print("Limit Files to Train on same Subset as Ocean Features:", limit_files)
     
     # Initialize Model and Define Transform Pipeline based on selected model 
     
@@ -63,7 +65,7 @@ def main(args):
             transform=transform,
             model_name = args.model,
             num_workers=args.num_workers,
-            ocean_flag=ocean_flag
+            limit_files=limit_files
         )
         
     elif args.model == "mae_ocean":
@@ -82,7 +84,8 @@ def main(args):
             transform=transform,
             model_name = args.model,
             num_workers=args.num_workers,
-            ocean_flag=ocean_flag
+            csv_file_path=csv_file_path,
+            limit_files=limit_files
         )
         
     elif args.model == "geo_aware":
@@ -99,9 +102,9 @@ def main(args):
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
-            model_name = args.model,
             num_workers=args.num_workers,
-            ocean_flag=ocean_flag
+            csv_file_path=csv_file_path,
+            limit_files=limit_files
         )
     elif args.model == "ocean_aware":
         augmentations = [
@@ -119,7 +122,8 @@ def main(args):
             transform=transform,
             model_name = args.model,
             num_workers=args.num_workers,
-            ocean_flag=ocean_flag
+            csv_file_path=csv_file_path,
+            limit_files=limit_files
         )
 
     elif args.model == "moco":
@@ -136,9 +140,8 @@ def main(args):
             data_dir=args.dataset,
             batch_size=args.train_batch_size,
             transform=transform,
-            model_name = args.model,
             num_workers=args.num_workers,
-            ocean_flag=ocean_flag
+            limit_files=limit_files
         )
     
     else:
@@ -177,8 +180,8 @@ def parse_args():
     parser.add_argument("--dataset", default="/data/joanna/Hydro", type=str, help="Path to dataset")
     parser.add_argument("--model", type=str, choices=models.keys(), default="mae", help="Model architecture")
     parser.add_argument("--epochs", default=100, type=int, help="Number of epochs")
-    parser.add_argument("--ocean", default=True, type=bool, help="Flag to indicate ocean dataset")
-
+    parser.add_argument("--csv_file", default="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv", type=str, help="Path to ocean features csv")
+    parser.add_argument("--limit_files", default=False, type=bool, help="Bool to limit files to train on same subset as ocean features")
     parser.add_argument("--mask-ratio", default=0.90, type=float, help="Masking ratio for MAE")
     parser.add_argument("--decoder-dim", default=512, type=int, help="Dimension of the MAE decoder")
 

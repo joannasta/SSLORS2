@@ -16,6 +16,8 @@ class MAE(pl.LightningModule):
         self.save_hyperparameters()
         self.mask_ratio = mask_ratio
         self.pretrained_weights = pretrained_weights
+        
+        print("src_channels: ",self.src_channels)
 
         # Backbone ViT (base, 224x224, patch 16x16) adapted to src_channels
         vit = timm.create_model(
@@ -60,8 +62,9 @@ class MAE(pl.LightningModule):
         self.total_val_loss = 0.0
         self.val_batch_count = 0
 
-    def load_pretrained_weights(self, pretrained_weights):
+    def load_pretrained_weights(self, pretrained_weights,src_channels=3):
         """Load pretrained weights into the model."""
+        self.src_channels=src_channels
         checkpoint = torch.load(pretrained_weights)
         model_state_dict = self.state_dict()
         pretrained_dict = {k: v for k, v in checkpoint['state_dict'].items() if k in model_state_dict}

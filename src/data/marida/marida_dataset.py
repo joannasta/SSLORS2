@@ -151,7 +151,7 @@ class MaridaDataset(Dataset):
 
     def _create_embeddings(self):
         """Build per-ROI embeddings from HydroDataset and a pretrained model."""
-        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"],ocean_flag=False)
+        hydro_dataset = HydroDataset(path_dataset=self.path / "roi_data" / self.mode / "_images", bands=["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B8A", "B09", "B11"])
         self.embeddings = []
 
         # Optional random init
