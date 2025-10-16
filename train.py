@@ -10,11 +10,11 @@ from src.models.moco import MoCo
 from src.models.mae import MAE
 from src.models.mae_ocean import MAE_Ocean
 from src.models.ocean_aware import OceanAware
-from src.data.hydro.hydro_dataloader_geography_aware import HydroGeographyAwareDataModule
-from src.data.hydro.hydro_dataloader_ocean_aware import HydroOceanAwareDataModule
-from src.data.hydro.hydro_dataloader_moco import HydroMoCoDataModule
-from src.data.hydro.hydro_dataloader_mae_ocean import HydroMaeOceanFeaturesDataModule
-from src.data.hydro.hydro_dataloader import HydroDataModule
+from src.data.hydro.geography_aware.hydro_dataloader_geography_aware import HydroGeographyAwareDataModule
+from src.data.hydro.ocean_aware.hydro_dataloader_ocean_aware import HydroOceanAwareDataModule
+from src.data.hydro.moco.hydro_dataloader_moco import HydroMoCoDataModule
+from src.data.hydro.mae_ocean.hydro_dataloader_mae_ocean import HydroMaeOceanFeaturesDataModule
+from src.data.hydro.mae.hydro_dataloader import HydroDataModule
 from torchvision import transforms
 from src.utils.two_crop_transformations import GaussianBlur, TwoCropsTransform
 

@@ -12,7 +12,7 @@ from tqdm import tqdm
 from torch.utils.data import Dataset
 from pathlib import Path
 
-from src.data.hydro.hydro_dataset import HydroDataset
+from src.data.hydro.mae.hydro_dataset import HydroDataset
 from src.utils.data_processing_marida import DatasetProcessor
 from config import get_marida_means_and_stds
 

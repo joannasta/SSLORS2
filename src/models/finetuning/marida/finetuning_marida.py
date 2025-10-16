@@ -24,7 +24,7 @@ from src.models.mae import MAE
 from src.models.moco import MoCo
 from src.models.geography_aware import GeographyAware
 from src.models.ocean_aware import OceanAware
-from src.data.hydro.hydro_dataset import HydroDataset
+from src.data.hydro.mae.hydro_dataset import HydroDataset
 
 
 class InputChannelAdapter(nn.Module):

@@ -3,74 +3,71 @@ from torch.utils.data import Dataset, DataLoader, default_collate # Import defau
 from torchvision import transforms as T
 from pathlib import Path
 from typing import Optional, List, Callable, Dict, Any
-
-from src.data.hydro.hydro_dataset_mae_ocean import HydroMaeOceanFeaturesDataset
+from src.data.hydro.geography_aware.hydro_geography_aware_dataset import HydroGeographyAwareDataset
 from pytorch_lightning import LightningDataModule
 
-class HydroMaeOceanFeaturesDataModule(LightningDataModule): 
-    """LightningDataModule for MAE + ocean features: builds train/val/test dataloaders."""
+class HydroGeographyAwareDataModule(LightningDataModule):
+    """LightningDataModule for geography-aware SSL on Hydro data."""
     def __init__(
-            self, 
-            data_dir: str, 
-            batch_size: int = 32, 
-            num_workers: int = 4, 
-            transform: Optional[Callable] = None, 
-            model_name: str = "mae_ocean", 
-            csv_file_path="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
-            limit_files=False
-            
+        self, data_dir: str,
+        batch_size: int = 32,
+        num_workers: int = 4,
+        transform: Optional[Callable] = None,
+        num_geo_clusters=10,
+        csv_file_path="/home/joanna/SSLORS2/src/utils/train_geo_labels10.csv",
+        limit_files=False
+        
         ):
         super().__init__()
         self.data_dir = Path(data_dir)
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.transform = transform
-        self.model_name = model_name
+        self.num_geo_clusters = num_geo_clusters
         self.csv_file_path=csv_file_path
         self.limit_files=limit_files
         
-    def custom_collate_fn(self, batch: List[Any]): 
-        """Collate function that filters out None samples"""
+
+    def custom_collate_fn(self, batch):
+        """Filter out None samples and use default_collate; returns None if batch is empty."""
         batch = [item for item in batch if item is not None]
-        if not batch: 
-            print("Warning: Batch is empty after filtering None values. This batch will be skipped.")
+        if not batch:
             return None 
         return default_collate(batch)
 
 
     def setup(self, stage: Optional[str] = None):
-        """Instantiate datasets for the given stage."""
+        """Instantiate datasets for train/val/test/predict depending on stage."""
         if stage == 'fit' or stage is None:
-            self.train_dataset = HydroMaeOceanFeaturesDataset(
+            self.train_dataset = HydroGeographyAwareDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
-                model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_file_path=self.csv_file_path,
                 limit_files=self.limit_files
             )
-
-            self.val_dataset = HydroMaeOceanFeaturesDataset(
-                path_dataset=self.data_dir, 
+            self.val_dataset = HydroGeographyAwareDataset(
+                path_dataset=self.data_dir,
                 transforms=self.transform,
-                model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_file_path=self.csv_file_path,
                 limit_files=self.limit_files
             )
 
         if stage == 'test' or stage is None:
-            self.test_dataset = HydroMaeOceanFeaturesDataset(
+            self.test_dataset = HydroGeographyAwareDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
-                model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_file_path=self.csv_file_path,
                 limit_files=self.limit_files
             )
 
         if stage == 'predict':
-            self.predict_dataset = HydroMaeOceanFeaturesDataset(
+            self.predict_dataset = HydroGeographyAwareDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
-                model_name=self.model_name,
+                num_geo_clusters=self.num_geo_clusters,
                 csv_file_path=self.csv_file_path,
                 limit_files=self.limit_files
             )
@@ -97,9 +94,6 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
                 drop_last=False,
                 collate_fn=self.custom_collate_fn 
             )
-        else:
-            print("WARNING: Validation dataloader requested but val_dataset not initialized or is None. Returning None.")
-            return None 
 
     def test_dataloader(self):
         if hasattr(self, 'test_dataset') and self.test_dataset is not None:
@@ -112,6 +106,3 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
                 drop_last=False,
                 collate_fn=self.custom_collate_fn 
             )
-        else:
-            print("WARNING: Test dataloader requested but test_dataset not initialized or is None. Returning None.")
-            return None
