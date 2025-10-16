@@ -1,28 +1,31 @@
 #!/bin/bash
 #SBATCH --job-name=Marida_ocean_FineTune           # Job name
-#SBATCH --partition=small_job      # Partition name
-#SBATCH --nodes=1                         # Number of nodes
-#SBATCH --gres=gpu:1                      # Number of GPUs
-#SBATCH --cpus-per-task=8                 # Number of CPU cores per task
-#SBATCH --time=1-00:00:00              # Time limit
-#SBATCH --output=logs/finetune_slurm_marida.out  # Standard output log
-#SBATCH --error=logs/finetune_slurm_marida.err   # Error log
+#SBATCH --partition=small_job                      # Partition name
+#SBATCH --nodes=1                                   # Number of nodes
+#SBATCH --gres=gpu:1                                # Number of GPUs
+#SBATCH --cpus-per-task=8                           # Number of CPU cores per task
+#SBATCH --time=1-00:00:00                           # Time limit
+#SBATCH --output=logs/finetune_slurm_marida.out     # Standard output log
+#SBATCH --error=logs/finetune_slurm_marida.err      # Error log
 
 # --- Setup Environment ---
-#source activate ssl_new
+# Make the env's python available without conda activate
+export PATH="/home/joanna/miniforge3/envs/ocean-ssl/bin:$PATH"
 
 # Set GPU visibility
-export CUDA_VISIBLE_DEVICES=0             # Adjust for the GPUs you want to use
-export PYTHONPATH="/home/joanna/SSLORS/src:$PYTHONPATH"
+export CUDA_VISIBLE_DEVICES=0
+
+# Ensure repo src is importable
+export PYTHONPATH="$HOME/SSLORS2/src:$PYTHONPATH"
 
 # --- Define Training Parameters ---
-DEVICES=1                                 # Number of devices for training
+DEVICES=1                                  # Number of devices for training
 NUM_WORKERS=32                             # Number of data loader workers
-MODEL=ocean_aware                       # Model name
-TRAIN_BATCH_SIZE=16                     # Training batch size
-VAL_BATCH_SIZE=16                     # Validation batch size
-LEARNING_RATE=1e-5                  # Learning rate
-EPOCHS=50                              # Number of epochs
+MODEL=ocean_aware                          # Model name
+TRAIN_BATCH_SIZE=16                        # Training batch size
+VAL_BATCH_SIZE=16                          # Validation batch size
+LEARNING_RATE=1e-5                         # Learning rate
+EPOCHS=50                                  # Number of epochs
 PRETRAINED_MODEL="./results/trains/ocean_aware/version_12/checkpoints/epoch=99-step=9800.ckpt"
 #"./results/trains/ocean_aware/version_12/checkpoints/epoch=99-step=9800.ckpt"
 #"./results/trains/geo_aware/version_14/checkpoints/epoch=99-step=9900.ckpt"
@@ -31,8 +34,8 @@ PRETRAINED_MODEL="./results/trains/ocean_aware/version_12/checkpoints/epoch=99-s
 #"./results/trains/geo_aware/version_9/checkpoints/epoch=199-step=19800.ckpt"
 #"./results/trains/moco/version_55/checkpoints/epoch=99-step=9900.ckpt"
 
-DATASET_PATH="/mnt/storagecube/joanna/MARIDA/" # Dataset path
-SEED=42                                   # Seed for reproducibility
+DATASET_PATH="/mnt/storagecube/joanna/MARIDA/"     # Dataset path
+SEED=42                                            # Seed for reproducibility
 
 # --- Run Training ---
 srun python -u finetune_marida.py \

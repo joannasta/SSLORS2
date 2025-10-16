@@ -35,32 +35,16 @@ The project addresses the scarcity of labeled data in marine remote sensing by l
 | Finetuning (Labeled)     | MARIDA [3]       | Marine Debris Detection| Marine debris–oriented dataset on Sentinel‑2 images, including various co‑existing sea features. |
 
 ## Installation and Setup
-Environment: Python (PyTorch ecosystem)
 
-```bash
-# Clone the repository
-git clone https://github.com/Viola-Joanna-Stamer/Ocean-Foundation-Models.git
-cd Ocean-Foundation-Models
-
-# Create and activate a conda environment (recommended)
-conda create -n ocean-ssl python=3.9 -y
-conda activate ocean-ssl
-
-# Install dependencies
-pip install -r requirements.txt
-```
+- Clone the repository: `git clone https://github.com/joannasta/SSLORS2` then `cd SSLORS2`
+- Create and activate env: `conda create -n ocean-ssl python=3.10 -y` then `conda activate ocean-ssl`
+- Install dependencies: `pip install --upgrade pip`, `pip install -r requirements.txt`
 
 ### Finetuning Example
-```bash
-# Example: Finetune the 'mae_ocean' backbone for Marine Debris Detection (MARIDA)
-bash finetune_slurm_marida.sh \
-  --model mae_ocean \
-  --pretrained_model results/trains/mae_ocean/version_9/checkpoints/epoch=99-step=2900.ckpt \
-  --dataset_path /path/to/marida \
-  --learning_rate 1e-5 \
-  --gpus 1
-```
 
+- Prepare output dirs: `mkdir -p logs results/inference`
+- Submit the Slurm job: `sbatch finetune_slurm_marida.sh`
+- Monitor (optional): `squeue`
 ## Quantitative Results
 
 ### Domain-specific Best Models (Overview)
