@@ -3,7 +3,6 @@ import json
 import os
 import rasterio
 import numpy as np
-import config
 import pandas as pd
 
 from torch.utils.data import Dataset, DataLoader

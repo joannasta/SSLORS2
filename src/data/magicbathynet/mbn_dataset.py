@@ -8,7 +8,7 @@ import torch.nn as nn
 from skimage import io
 from torch.utils.data import Dataset
 from src.utils.finetuning_utils import get_random_pos
-from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG, train_images, test_images
+from config import NORM_PARAM_DEPTH, NORM_PARAM_PATHS, MODEL_CONFIG, train_images, test_images, val_images
 from src.data.hydro.mae.hydro_dataset import HydroDataset
 from src.utils.data_processing_mbn import DatasetProcessor
 from pathlib import Path
@@ -28,6 +28,7 @@ class MagicBathyNetDataset(Dataset):
         self.model_name=model_name
         self.pretrained_model = pretrained_model
         self.train_images = train_images
+        self.val_images = val_images
         self.test_images = test_images
         self.location = location
              
@@ -49,7 +50,12 @@ class MagicBathyNetDataset(Dataset):
         self.label_files = [pair[1] for pair in self.paired_files]
 
         # Filter by split indices from config
-        indices_to_use = self.train_images if split_type == 'train' else self.test_images
+        if split_type == 'train':
+            indices_to_use = self.train_images 
+        elif split_type == 'val':
+            indices_to_use = self.val_images 
+        else:
+            indices_to_use = self.test_images
 
         filtered_data_files = []
         filtered_label_files = []

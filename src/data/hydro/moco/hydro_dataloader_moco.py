@@ -31,7 +31,8 @@ class HydroMoCoDataModule(LightningDataModule):
         model_name = "moco",
         num_workers: int = 8, 
         csv_file_path="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
-        limit_files=False
+        limit_files=False,
+        seed: int = 42,
     ): 
         super().__init__() 
         self.data_dir = Path(data_dir) 
@@ -42,42 +43,26 @@ class HydroMoCoDataModule(LightningDataModule):
         self.num_workers = num_workers
         self.csv_file_path=csv_file_path
         self.limit_files=limit_files
+        self.seed=seed
 
     def setup(self, stage=None): 
         """Instantiate train/val/test/predict datasets depending on stage."""
         if stage == 'fit' or stage is None: 
-            self.train_dataset = HydroMoCoDataset( 
+            base = HydroMoCoDataset( 
                 path_dataset=self.data_dir, 
                 bands=self.bands, 
                 transform=self.transform, 
                 csv_file_path=self.csv_file_path,
                 limit_files=self.limit_files
             ) 
-            self.val_dataset = HydroMoCoDataset( 
-                path_dataset=self.data_dir, 
-                bands=self.bands, 
-                transform=self.transform, 
-                csv_file_path=self.csv_file_path,
-                limit_files=self.limit_files
-            ) 
+            n = len(base)
+            n_train = int(0.8 * n)
+            n_val = n - n_train
+            gen = torch.Generator()
+            self.train_dataset, self.val_dataset = random_split(base, [n_train, n_val], generator=gen)
 
-        if stage == 'test' or stage is None: 
-            self.test_dataset = HydroMoCoDataset( 
-                path_dataset=self.data_dir, 
-                bands=self.bands, 
-                transform=self.transform, 
-                csv_file_path=self.csv_file_path,
-                limit_files=self.limit_files
-            ) 
-
-        if stage == 'predict': 
-            self.predict_dataset = HydroMoCoDataset( 
-                path_dataset=self.data_dir, 
-                bands=self.bands, 
-                transform=self.transform, 
-                csv_file_path=self.csv_file_path,
-                limit_files=self.limit_files
-            ) 
+            print("train dataset len",len(self.train_dataset))
+            print("val dataset len",len(self.val_dataset))
 
     def train_dataloader(self): 
         return DataLoader( 
@@ -98,12 +83,3 @@ class HydroMoCoDataModule(LightningDataModule):
                 collate_fn=collate_fn, 
                 pin_memory=True, drop_last=False
             ) 
-
-    def test_dataloader(self): 
-            return DataLoader( 
-                self.test_dataset, 
-                batch_size=self.batch_size, 
-                shuffle=False, 
-                num_workers=self.num_workers, 
-                collate_fn=collate_fn, 
-                pin_memory=True, drop_last=False) 

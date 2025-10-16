@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader, default_collate # Import default_collate
+from torch.utils.data import Dataset, DataLoader, default_collate, random_split # Import default_collate
 from torchvision import transforms as T
 from pathlib import Path
 from typing import Optional, List, Callable, Dict, Any
@@ -17,7 +17,8 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
             transform: Optional[Callable] = None, 
             model_name: str = "mae_ocean", 
             csv_file_path="/home/joanna/SSLORS2/src/utils/ocean_features/csv_files/ocean_clusters.csv",
-            limit_files=False
+            limit_files=False,
+            seed=42
             
         ):
         super().__init__()
@@ -28,6 +29,7 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
         self.model_name = model_name
         self.csv_file_path=csv_file_path
         self.limit_files=limit_files
+        self.seed=seed
         
     def custom_collate_fn(self, batch: List[Any]): 
         """Collate function that filters out None samples"""
@@ -40,40 +42,28 @@ class HydroMaeOceanFeaturesDataModule(LightningDataModule):
 
     def setup(self, stage: Optional[str] = None):
         """Instantiate datasets for the given stage."""
-        if stage == 'fit' or stage is None:
-            self.train_dataset = HydroMaeOceanFeaturesDataset(
+        base = HydroMaeOceanFeaturesDataset(
                 path_dataset=self.data_dir,
                 transforms=self.transform,
                 model_name=self.model_name,
                 csv_file_path=self.csv_file_path,
                 limit_files=self.limit_files
             )
+            # Create 80/20 split for fit
+        if stage == "fit":
+            n = len(base)
+            if n < 2:
+                raise ValueError(f"Not enough samples to split: {n}")
+            n_train = int(0.8 * n)
+            n_val = n - n_train
+            gen = torch.Generator()
+            self.train_dataset, self.val_dataset = random_split(base, [n_train, n_val], generator=gen)
+            
+            print("train dataset len",len(self.train_dataset))
+            print("val dataset len",len(self.val_dataset))
 
-            self.val_dataset = HydroMaeOceanFeaturesDataset(
-                path_dataset=self.data_dir, 
-                transforms=self.transform,
-                model_name=self.model_name,
-                csv_file_path=self.csv_file_path,
-                limit_files=self.limit_files
-            )
 
-        if stage == 'test' or stage is None:
-            self.test_dataset = HydroMaeOceanFeaturesDataset(
-                path_dataset=self.data_dir,
-                transforms=self.transform,
-                model_name=self.model_name,
-                csv_file_path=self.csv_file_path,
-                limit_files=self.limit_files
-            )
-
-        if stage == 'predict':
-            self.predict_dataset = HydroMaeOceanFeaturesDataset(
-                path_dataset=self.data_dir,
-                transforms=self.transform,
-                model_name=self.model_name,
-                csv_file_path=self.csv_file_path,
-                limit_files=self.limit_files
-            )
+            
 
     def train_dataloader(self):
         return DataLoader(

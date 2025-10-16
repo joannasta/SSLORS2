@@ -5,7 +5,6 @@ import os
 import random
 import torch
 import numpy as np
-from config import train_images, test_images 
 
 class MagicBathyNetDataModule(pl.LightningDataModule):
     """LightningDataModule for MagicBathyNet, creates train/val/test datasets and dataloaders."""
